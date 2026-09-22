@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="description" content="Track each disciple's stage, milestones, and mentoring sessions." />
+<meta name="theme-color" content="#23211D" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Discipleship" />
+<title>Discipleship Journey</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; overflow-x: clip; background: #F6F1E4; }
+  input, button, select, textarea, a { touch-action: manipulation; }
+  input:focus, textarea:focus, select:focus { border-color: #1F3864 !important; box-shadow: 0 0 0 3px rgba(31,56,100,0.15) !important; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: #D8CFB0; border-radius: 8px; }
+
+  @keyframes popIn { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .nav-item:hover { background: rgba(239,231,211,0.08) !important; }
+  .card-row:hover { background: rgba(31,56,100,0.035) !important; }
+  .milestone-row:active { background: rgba(31,56,100,0.05); }
+
+  @media (max-width: 640px) {
+    .hide-mobile { display: none !important; }
+    .stack-mobile { flex-direction: column !important; align-items: stretch !important; }
+  }
+</style>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useCallback, useMemo, useRef } = React;
+
+// ============================================================
+// Discipleship Journey — standalone installable web app,
+// synced live across everyone using it via Firebase Firestore.
+// Same idea as the Victory Alfonso scheduler, but with Firestore
+// instead of Realtime Database, and an explicit leader/viewer
+// permission model.
+// ============================================================
+
+// ---- 1) PASTE YOUR FIREBASE CONFIG HERE ----
+const firebaseConfig = {
+  apiKey: "AIzaSyD-cz-NFG35omoPBN4cG1gM-w8kLjS8G8s",
+  authDomain: "discipleship-journey-cc60b.firebaseapp.com",
+  projectId: "discipleship-journey-cc60b",
+  storageBucket: "discipleship-journey-cc60b.firebasestorage.app",
+  messagingSenderId: "942058852250",
+  appId: "1:942058852250:web:7ae5092a3efbe146283423",
+};
+
+const FIREBASE_CONFIGURED = !Object.values(firebaseConfig).some(
+  (v) => typeof v === "string" && v.startsWith("PASTE_YOUR")
+);
+
+let db = null;
+let auth = null;
+if (FIREBASE_CONFIGURED) {
+  firebase.initializeApp(firebaseConfig);
+  db = firebase.firestore();
+  auth = firebase.auth();
+}
+
+function normEmail(e) { return (e || "").trim().toLowerCase(); }
+
+function fmtDate(d) {
+  if (!d) return "";
+  const dt = d.toDate ? d.toDate() : new Date(d);
+  if (isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+const DEFAULT_STAGES = [
+  { name: "New Believer", order: 1 },
+  { name: "Foundation", order: 2 },
+  { name: "Growing", order: 3 },
+  { name: "Serving", order: 4 },
+  { name: "Leading", order: 5 },
+];
+
+// ============================================================
+// FIRESTORE HOOKS — live-sync collections into React state
+// ============================================================
+
+function useCollection(path, orderField) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    if (!db) { setLoading(false); return; }
+    let ref = db.collection(path);
+    const unsub = ref.onSnapshot((snap) => {
+      let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (orderField) rows.sort((a, b) => (a[orderField] || 0) - (b[orderField] || 0));
+      setData(rows);
+      setLoading(false);
+    }, (err) => { console.error(path, err); setLoading(false); });
+    return unsub;
+  }, [path, orderField]);
+  return [data, loading];
+}
+
+// ============================================================
+// AUTH SCREEN — email/password sign in, sign up, reset
+// ============================================================
+
+function AuthScreen() {
+  const [mode, setMode] = useState("login"); // login | signup | reset
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(""); setNotice(""); setBusy(true);
+    const cleanEmail = normEmail(email);
+    try {
+      if (mode === "reset") {
+        await auth.sendPasswordResetEmail(cleanEmail);
+        setNotice("Password reset email sent. Check your inbox.");
+      } else if (mode === "signup") {
+        const cred = await auth.createUserWithEmailAndPassword(cleanEmail, password);
+        if (name.trim()) await cred.user.updateProfile({ displayName: name.trim() });
+      } else {
+        await auth.signInWithEmailAndPassword(cleanEmail, password);
+      }
+    } catch (err) {
+      setError(err.message || "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!FIREBASE_CONFIGURED) {
+    return (
+      <div style={styles.authWrap}>
+        <div style={styles.authCard}>
+          <h1 style={styles.authTitle}>Discipleship Journey</h1>
+          <p style={styles.authBody}>
+            This app isn't connected to Firebase yet. Paste your project's{" "}
+            <code style={styles.code}>firebaseConfig</code> near the top of{" "}
+            <code style={styles.code}>index.html</code>, then reload.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.authWrap}>
+      <form style={styles.authCard} onSubmit={submit}>
+        <h1 style={styles.authTitle}>Discipleship Journey</h1>
+        <p style={styles.authSubtitle}>
+          {mode === "login" && "Sign in to continue."}
+          {mode === "signup" && "Create an account."}
+          {mode === "reset" && "We'll email you a reset link."}
+        </p>
+
+        {mode === "signup" && (
+          <input style={styles.authInput} placeholder="Your name" value={name} onChange={(e) => setName(e.target.value)} />
+        )}
+        <input style={styles.authInput} type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        {mode !== "reset" && (
+          <input style={styles.authInput} type="password" placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+        )}
+
+        {error && <div style={styles.authError}>{error}</div>}
+        {notice && <div style={styles.authNotice}>{notice}</div>}
+
+        <button style={styles.authSubmit} disabled={busy} type="submit">
+          {busy ? "Please wait…" : mode === "login" ? "Sign In" : mode === "signup" ? "Sign Up" : "Send Reset Link"}
+        </button>
+
+        <div style={styles.authLinks}>
+          {mode !== "login" && <a style={styles.authLink} onClick={() => setMode("login")}>Sign in</a>}
+          {mode !== "signup" && <a style={styles.authLink} onClick={() => setMode("signup")}>Create account</a>}
+          {mode !== "reset" && <a style={styles.authLink} onClick={() => setMode("reset")}>Forgot password?</a>}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================
+// PROGRESS BAR
+// ============================================================
+
+function ProgressBar({ pct }) {
+  return (
+    <div style={styles.progressTrack}>
+      <div style={{ ...styles.progressFill, width: `${Math.max(0, Math.min(100, pct))}%` }} />
+    </div>
+  );
+}
+
+function stageProgressPct(disciple, stages, milestones, progressByDisciple) {
+  const stageMilestones = milestones.filter((m) => m.stage === disciple.currentStage);
+  if (stageMilestones.length === 0) return 0;
+  const done = stageMilestones.filter((m) => {
+    const p = (progressByDisciple[disciple.id] || {})[m.id];
+    return p && p.completed;
+  }).length;
+  return Math.round((done / stageMilestones.length) * 100);
+}
+
+// ============================================================
+// ROSTER — list of disciples
+// ============================================================
+
+function Roster({ disciples, stages, milestones, progressByDisciple, isLeader, onOpen, onAdd }) {
+  const [query, setQuery] = useState("");
+  const filtered = disciples.filter((d) => (d.name || "").toLowerCase().includes(query.toLowerCase()));
+
+  return (
+    <div>
+      <div style={{ ...styles.toolbar, ...styles.stackMobileFlex }}>
+        <input style={styles.toolbarInput} placeholder="Search name…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        {isLeader && <button style={styles.primaryBtn} onClick={onAdd}>+ Add Disciple</button>}
+      </div>
+
+      {filtered.length === 0 && <div style={styles.emptyNote}>No disciples yet.</div>}
+
+      <div style={styles.rosterList}>
+        {filtered.map((d) => {
+          const pct = stageProgressPct(d, stages, milestones, progressByDisciple);
+          return (
+            <div key={d.id} className="card-row" style={styles.rosterCard} onClick={() => onOpen(d)}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={styles.rosterName}>{d.name}</div>
+                <div style={styles.rosterMeta}>
+                  {d.currentStage || "No stage set"}{d.mentor ? ` · Mentor: ${d.mentor}` : ""}
+                </div>
+                <ProgressBar pct={pct} />
+              </div>
+              <div style={styles.rosterPct}>{pct}%</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// DISCIPLE PROFILE — stage, milestones, session history
+// ============================================================
+
+function DiscipleProfile({ disciple, stages, milestones, progressByDisciple, sessions, isLeader, onBack, onUpdateStage, onToggleMilestone, onAddSession, onDeleteDisciple }) {
+  const [logOpen, setLogOpen] = useState(false);
+  const [logNotes, setLogNotes] = useState("");
+  const [logMentor, setLogMentor] = useState(disciple.mentor || "");
+
+  const stageMilestones = milestones.filter((m) => m.stage === disciple.currentStage);
+  const progress = progressByDisciple[disciple.id] || {};
+  const pct = stageProgressPct(disciple, stages, milestones, progressByDisciple);
+  const mySessions = sessions.filter((s) => s.discipleId === disciple.id);
+
+  const submitSession = (e) => {
+    e.preventDefault();
+    if (!logNotes.trim()) return;
+    onAddSession({ discipleId: disciple.id, mentor: logMentor, notes: logNotes.trim(), date: new Date() });
+    setLogNotes(""); setLogOpen(false);
+  };
+
+  return (
+    <div>
+      <a style={styles.backLink} onClick={onBack}>&larr; Back to roster</a>
+
+      <div style={styles.profileHeader}>
+        <div>
+          <h2 style={styles.profileName}>{disciple.name}</h2>
+          <div style={styles.rosterMeta}>{disciple.mentor ? `Mentor: ${disciple.mentor}` : "No mentor assigned"}{disciple.startDate ? ` · Started ${fmtDate(disciple.startDate)}` : ""}</div>
+        </div>
+        {isLeader && (
+          <button style={styles.dangerLink} onClick={() => { if (confirm(`Remove ${disciple.name}?`)) onDeleteDisciple(disciple.id); }}>Remove</button>
+        )}
+      </div>
+
+      <div style={styles.lightCard}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, flexWrap: "wrap", gap: 8 }}>
+          <div style={styles.sectionLabel}>Current Stage</div>
+          {isLeader ? (
+            <select style={styles.stageSelect} value={disciple.currentStage || ""} onChange={(e) => onUpdateStage(disciple.id, e.target.value)}>
+              <option value="">— Select stage —</option>
+              {stages.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+            </select>
+          ) : (
+            <div style={styles.stageBadge}>{disciple.currentStage || "Not set"}</div>
+          )}
+        </div>
+        <ProgressBar pct={pct} />
+        <div style={styles.pctLabel}>{pct}% of milestones complete for this stage</div>
+      </div>
+
+      <div style={styles.sectionLabel}>Milestones</div>
+      {stageMilestones.length === 0 && <div style={styles.emptyNote}>No milestones defined for this stage yet.</div>}
+      <div style={styles.milestoneList}>
+        {stageMilestones.map((m) => {
+          const done = !!(progress[m.id] && progress[m.id].completed);
+          return (
+            <label key={m.id} className="milestone-row" style={styles.milestoneRow}>
+              <input
+                type="checkbox"
+                checked={done}
+                disabled={!isLeader}
+                onChange={(e) => onToggleMilestone(disciple.id, m.id, e.target.checked)}
+                style={{ width: 18, height: 18 }}
+              />
+              <span style={{ ...styles.milestoneText, ...(done ? styles.milestoneDone : {}) }}>{m.name}</span>
+              {done && progress[m.id].dateCompleted && <span style={styles.milestoneDate}>{fmtDate(progress[m.id].dateCompleted)}</span>}
+            </label>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 26, marginBottom: 8 }}>
+        <div style={styles.sectionLabel}>Session Log</div>
+        {isLeader && <button style={styles.ghostBtn} onClick={() => setLogOpen((v) => !v)}>{logOpen ? "Cancel" : "+ Log Session"}</button>}
+      </div>
+
+      {logOpen && (
+        <form style={styles.lightCard} onSubmit={submitSession}>
+          <input style={{ ...styles.toolbarInput, width: "100%", marginBottom: 8 }} placeholder="Mentor name" value={logMentor} onChange={(e) => setLogMentor(e.target.value)} />
+          <textarea style={styles.textarea} placeholder="What did you cover? Any notes…" value={logNotes} onChange={(e) => setLogNotes(e.target.value)} rows={3} />
+          <button style={{ ...styles.primaryBtn, marginTop: 8 }} type="submit">Save Session</button>
+        </form>
+      )}
+
+      {mySessions.length === 0 ? (
+        <div style={styles.emptyNote}>No sessions logged yet.</div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {mySessions.map((s) => (
+            <div key={s.id} style={styles.sessionCard}>
+              <div style={styles.sessionDate}>{fmtDate(s.date)}{s.mentor ? ` · ${s.mentor}` : ""}</div>
+              <div style={styles.sessionNotes}>{s.notes}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// ADD DISCIPLE MODAL
+// ============================================================
+
+function AddDiscipleModal({ stages, onClose, onSave }) {
+  const [name, setName] = useState("");
+  const [mentor, setMentor] = useState("");
+  const [stage, setStage] = useState(stages[0] ? stages[0].name : "");
+
+  const submit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSave({ name: name.trim(), mentor: mentor.trim(), currentStage: stage, startDate: new Date() });
+  };
+
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <form style={styles.modalCard} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <div style={styles.modalTitle}>Add Disciple</div>
+        <input style={styles.modalInput} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+        <input style={styles.modalInput} placeholder="Mentor (optional)" value={mentor} onChange={(e) => setMentor(e.target.value)} />
+        <select style={styles.modalInput} value={stage} onChange={(e) => setStage(e.target.value)}>
+          <option value="">— Select stage —</option>
+          {stages.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+        </select>
+        <div style={styles.modalActions}>
+          <button type="button" style={styles.modalCancelBtn} onClick={onClose}>Cancel</button>
+          <button type="submit" style={styles.modalConfirmBtn}>Add</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+// ============================================================
+// SETTINGS — manage stages, milestones, leaders (leader-only)
+// ============================================================
+
+function Settings({ stages, milestones, leaders, currentEmail, onAddStage, onDeleteStage, onAddMilestone, onDeleteMilestone, onAddLeader, onRemoveLeader }) {
+  const [newStage, setNewStage] = useState("");
+  const [milestoneStage, setMilestoneStage] = useState(stages[0] ? stages[0].name : "");
+  const [newMilestone, setNewMilestone] = useState("");
+  const [newLeaderEmail, setNewLeaderEmail] = useState("");
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div style={styles.settingsSection}>
+        <div style={styles.sectionLabel}>Stages</div>
+        <div style={styles.pairGrid}>
+          {stages.map((s) => (
+            <div key={s.id} style={styles.pairItem}>
+              <span style={{ flex: 1 }}>{s.name}</span>
+              <button style={styles.iconDanger} onClick={() => onDeleteStage(s.id, s.name)}>×</button>
+            </div>
+          ))}
+        </div>
+        <div style={styles.addRoleRow}>
+          <input style={styles.roleEditInput} placeholder="New stage name" value={newStage} onChange={(e) => setNewStage(e.target.value)} />
+          <button style={styles.smallBtn} onClick={() => { if (newStage.trim()) { onAddStage(newStage.trim(), stages.length + 1); setNewStage(""); } }}>Add</button>
+        </div>
+      </div>
+
+      <div style={styles.settingsSection}>
+        <div style={styles.sectionLabel}>Milestones</div>
+        <div style={styles.restrictAddRow}>
+          <select style={styles.restrictSelect} value={milestoneStage} onChange={(e) => setMilestoneStage(e.target.value)}>
+            {stages.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+          </select>
+          <input style={styles.roleEditInput} placeholder="Milestone name" value={newMilestone} onChange={(e) => setNewMilestone(e.target.value)} />
+          <button style={styles.smallBtn} onClick={() => { if (newMilestone.trim() && milestoneStage) { onAddMilestone(milestoneStage, newMilestone.trim(), milestones.length + 1); setNewMilestone(""); } }}>Add</button>
+        </div>
+        <div style={styles.restrictList}>
+          {stages.map((s) => {
+            const ms = milestones.filter((m) => m.stage === s.name);
+            if (ms.length === 0) return null;
+            return (
+              <div key={s.id} style={{ marginTop: 6 }}>
+                <div style={styles.milestoneGroupLabel}>{s.name}</div>
+                {ms.map((m) => (
+                  <div key={m.id} style={styles.restrictRow}>
+                    <span style={styles.restrictName}>{m.name}</span>
+                    <button style={styles.iconDanger} onClick={() => onDeleteMilestone(m.id, m.name)}>×</button>
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div style={styles.settingsSection}>
+        <div style={styles.sectionLabel}>Leaders / Mentors (can edit)</div>
+        <div style={styles.pairNote}>Anyone whose email is listed here can update stages, milestones, and sessions. Everyone else who signs in gets a read-only view.</div>
+        <div style={styles.restrictList}>
+          {leaders.map((l) => (
+            <div key={l.id} style={styles.restrictRow}>
+              <span style={styles.restrictName}>{l.id}{l.id === currentEmail ? " (you)" : ""}</span>
+              <button style={styles.iconDanger} onClick={() => onRemoveLeader(l.id)}>×</button>
+            </div>
+          ))}
+        </div>
+        <div style={styles.addRoleRow}>
+          <input style={styles.roleEditInput} type="email" placeholder="email@example.com" value={newLeaderEmail} onChange={(e) => setNewLeaderEmail(e.target.value)} />
+          <button style={styles.smallBtn} onClick={() => { if (newLeaderEmail.trim()) { onAddLeader(newLeaderEmail.trim()); setNewLeaderEmail(""); } }}>Add</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// MAIN APP
+// ============================================================
+
+function App() {
+  const [authUser, setAuthUser] = useState(undefined); // undefined = loading, null = signed out
+  const [tab, setTab] = useState("roster");
+  const [openDisciple, setOpenDisciple] = useState(null);
+  const [addOpen, setAddOpen] = useState(false);
+
+  useEffect(() => {
+    if (!auth) { setAuthUser(null); return; }
+    return auth.onAuthStateChanged((u) => setAuthUser(u));
+  }, []);
+
+  const currentEmail = normEmail(authUser && authUser.email);
+
+  const [disciplesRaw, discLoading] = useCollection("disciples");
+  const [stages] = useCollection("stages", "order");
+  const [milestones] = useCollection("milestones", "order");
+  const [sessions] = useCollection("sessions");
+  const [leaders] = useCollection("leaders");
+  const [progressDocs] = useCollection("progress");
+
+  const isLeader = leaders.some((l) => l.id === currentEmail);
+
+  // One-time seed of default stages if the collection is empty and this user is a leader.
+  useEffect(() => {
+    if (!db || !isLeader) return;
+    if (stages.length === 0) {
+      DEFAULT_STAGES.forEach((s) => db.collection("stages").add(s));
+    }
+  }, [db, isLeader, stages.length]);
+
+  const disciples = useMemo(() => disciplesRaw.map((d) => ({ ...d, name: d.name || "(no name)" })), [disciplesRaw]);
+
+  const progressByDisciple = useMemo(() => {
+    const map = {};
+    progressDocs.forEach((p) => {
+      if (!map[p.discipleId]) map[p.discipleId] = {};
+      map[p.discipleId][p.milestoneId] = p;
+    });
+    return map;
+  }, [progressDocs]);
+
+  // Keep openDisciple in sync with live data.
+  const liveOpenDisciple = openDisciple ? disciples.find((d) => d.id === openDisciple.id) || openDisciple : null;
+
+  const addDisciple = (data) => { db.collection("disciples").add(data); setAddOpen(false); };
+  const deleteDisciple = (id) => { db.collection("disciples").doc(id).delete(); setOpenDisciple(null); };
+  const updateStage = (id, stage) => db.collection("disciples").doc(id).update({ currentStage: stage });
+  const toggleMilestone = (discId, msId, completed) => {
+    const docId = `${discId}_${msId}`;
+    db.collection("progress").doc(docId).set({ discipleId: discId, milestoneId: msId, completed, dateCompleted: completed ? new Date() : null }, { merge: true });
+  };
+  const addSession = (data) => db.collection("sessions").add(data);
+  const addStage = (name, order) => db.collection("stages").add({ name, order });
+  const deleteStage = (id) => db.collection("stages").doc(id).delete();
+  const addMilestone = (stage, name, order) => db.collection("milestones").add({ stage, name, order });
+  const deleteMilestone = (id) => db.collection("milestones").doc(id).delete();
+  const addLeader = (email) => db.collection("leaders").doc(normEmail(email)).set({ addedAt: new Date() });
+  const removeLeader = (email) => db.collection("leaders").doc(email).delete();
+
+  if (authUser === undefined) {
+    return <div style={styles.loadingScreen}>Loading…</div>;
+  }
+  if (!authUser) {
+    return <AuthScreen />;
+  }
+
+  return (
+    <div style={styles.appWrap}>
+      <header style={styles.header}>
+        <div style={styles.headerTitle}>Discipleship Journey</div>
+        <div style={styles.headerRight}>
+          <span style={styles.headerUser} className="hide-mobile">
+            {authUser.displayName || authUser.email} {isLeader ? "· Leader" : "· Viewer"}
+          </span>
+          <button style={styles.signOutBtn} onClick={() => auth.signOut()}>Sign out</button>
+        </div>
+      </header>
+
+      <nav style={styles.nav}>
+        <button className="nav-item" style={{ ...styles.navItem, ...(tab === "roster" ? styles.navItemActive : {}) }} onClick={() => { setTab("roster"); setOpenDisciple(null); }}>Roster</button>
+        {isLeader && (
+          <button className="nav-item" style={{ ...styles.navItem, ...(tab === "settings" ? styles.navItemActive : {}) }} onClick={() => { setTab("settings"); setOpenDisciple(null); }}>Settings</button>
+        )}
+      </nav>
+
+      <main style={styles.main}>
+        {tab === "roster" && !liveOpenDisciple && (
+          <Roster
+            disciples={disciples}
+            stages={stages}
+            milestones={milestones}
+            progressByDisciple={progressByDisciple}
+            isLeader={isLeader}
+            onOpen={setOpenDisciple}
+            onAdd={() => setAddOpen(true)}
+          />
+        )}
+
+        {tab === "roster" && liveOpenDisciple && (
+          <DiscipleProfile
+            disciple={liveOpenDisciple}
+            stages={stages}
+            milestones={milestones}
+            progressByDisciple={progressByDisciple}
+            sessions={sessions}
+            isLeader={isLeader}
+            onBack={() => setOpenDisciple(null)}
+            onUpdateStage={updateStage}
+            onToggleMilestone={toggleMilestone}
+            onAddSession={addSession}
+            onDeleteDisciple={deleteDisciple}
+          />
+        )}
+
+        {tab === "settings" && isLeader && (
+          <Settings
+            stages={stages}
+            milestones={milestones}
+            leaders={leaders}
+            currentEmail={currentEmail}
+            onAddStage={addStage}
+            onDeleteStage={deleteStage}
+            onAddMilestone={addMilestone}
+            onDeleteMilestone={deleteMilestone}
+            onAddLeader={addLeader}
+            onRemoveLeader={removeLeader}
+          />
+        )}
+      </main>
+
+      {addOpen && <AddDiscipleModal stages={stages} onClose={() => setAddOpen(false)} onSave={addDisciple} />}
+    </div>
+  );
+}
+
+// ============================================================
+// STYLES — same palette as the Victory Alfonso scheduler
+// ============================================================
+
+const styles = {
+  loadingScreen: { display: "flex", alignItems: "center", justifyContent: "center", height: "100vh", fontFamily: "system-ui, sans-serif", color: "#7A6E4E" },
+
+  authWrap: { minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#23211D", padding: 20 },
+  authCard: { background: "#FFFFFF", borderRadius: 16, padding: "32px 28px", maxWidth: 380, width: "100%", boxShadow: "0 25px 50px -12px rgba(0,0,0,0.4)", fontFamily: "system-ui, sans-serif", animation: "popIn 0.15s ease-out" },
+  authTitle: { fontFamily: "Georgia, serif", fontSize: 24, color: "#1F3864", margin: "0 0 4px" },
+  authSubtitle: { fontSize: 13.5, color: "#7A6E4E", margin: "0 0 18px" },
+  authBody: { fontSize: 13.5, color: "#5C5230", lineHeight: 1.6 },
+  authInput: { width: "100%", padding: "11px 13px", borderRadius: 8, border: "1px solid #D8CFB0", fontSize: 14, marginBottom: 10, outline: "none", fontFamily: "system-ui, sans-serif" },
+  authSubmit: { width: "100%", padding: "12px", borderRadius: 8, border: "none", background: "#1F3864", color: "#EFE7D3", fontSize: 14.5, fontWeight: 700, cursor: "pointer", marginTop: 4 },
+  authError: { background: "#F3E4DF", color: "#A6402F", padding: "8px 12px", borderRadius: 8, fontSize: 12.5, marginBottom: 10 },
+  authNotice: { background: "#DCE7D4", color: "#385026", padding: "8px 12px", borderRadius: 8, fontSize: 12.5, marginBottom: 10 },
+  authLinks: { display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginTop: 16 },
+  authLink: { fontSize: 12.5, color: "#1F3864", cursor: "pointer", textDecoration: "underline" },
+  code: { background: "#F6F1E4", padding: "1px 5px", borderRadius: 4, fontSize: 12.5 },
+
+  appWrap: { minHeight: "100vh", fontFamily: "system-ui, sans-serif", background: "#F6F1E4" },
+  header: { background: "#23211D", color: "#EFE7D3", padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 },
+  headerTitle: { fontFamily: "Georgia, serif", fontSize: 19, fontWeight: 700 },
+  headerRight: { display: "flex", alignItems: "center", gap: 14 },
+  headerUser: { fontSize: 12.5, color: "#C9BF9E" },
+  signOutBtn: { background: "none", border: "1px solid rgba(239,231,211,0.3)", color: "#EFE7D3", borderRadius: 8, padding: "6px 12px", fontSize: 12.5, cursor: "pointer" },
+
+  nav: { display: "flex", gap: 4, background: "#1F3864", padding: "0 16px" },
+  navItem: { background: "none", border: "none", color: "#B4C6E7", padding: "12px 16px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", borderBottom: "3px solid transparent" },
+  navItemActive: { color: "#FFFFFF", borderBottom: "3px solid #E5A430" },
+
+  main: { maxWidth: 760, margin: "0 auto", padding: "22px 18px 60px" },
+
+  toolbar: { display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 18, flexWrap: "wrap" },
+  stackMobileFlex: {},
+  toolbarInput: { padding: "9px 13px", borderRadius: 8, border: "1px solid #D8CFB0", fontSize: 14, outline: "none", flex: 1, minWidth: 160, background: "#FFFFFF" },
+  primaryBtn: { padding: "9px 16px", borderRadius: 8, border: "none", background: "#1F3864", color: "#EFE7D3", fontWeight: 700, fontSize: 13.5, cursor: "pointer", whiteSpace: "nowrap" },
+  ghostBtn: { padding: "8px 14px", borderRadius: 8, border: "1px solid #D8CFB0", background: "#FFFFFF", color: "#6B5E3E", fontSize: 13, cursor: "pointer" },
+  smallBtn: { padding: "8px 14px", borderRadius: 6, border: "none", background: "#1F3864", color: "#EFE7D3", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" },
+  dangerLink: { background: "none", border: "none", color: "#A6402F", fontSize: 12.5, cursor: "pointer", textDecoration: "underline" },
+
+  emptyNote: { color: "#B0A582", fontStyle: "italic", fontSize: 13.5, padding: "14px 0" },
+
+  rosterList: { display: "flex", flexDirection: "column", gap: 10 },
+  rosterCard: { display: "flex", alignItems: "center", gap: 14, background: "#FFFFFF", border: "1px solid #E4DCC6", borderRadius: 12, padding: "14px 16px", cursor: "pointer", boxShadow: "0 8px 20px -14px rgba(35,33,29,0.3)" },
+  rosterName: { fontSize: 15, fontWeight: 700, color: "#23211D" },
+  rosterMeta: { fontSize: 12.5, color: "#7A6E4E", margin: "2px 0 8px" },
+  rosterPct: { fontFamily: "Georgia, serif", fontSize: 17, color: "#1F3864", fontWeight: 700, flexShrink: 0 },
+
+  progressTrack: { height: 6, borderRadius: 20, background: "#EFE7D3", overflow: "hidden" },
+  progressFill: { height: "100%", borderRadius: 20, background: "linear-gradient(90deg, #A9782F 0%, #1F3864 100%)", transition: "width 0.3s ease" },
+
+  backLink: { fontSize: 13, color: "#1F3864", cursor: "pointer", display: "inline-block", marginBottom: 16 },
+  profileHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 16, flexWrap: "wrap" },
+  profileName: { fontFamily: "Georgia, serif", fontSize: 22, color: "#23211D", margin: 0 },
+
+  lightCard: { background: "#FFFFFF", border: "1px solid #E4DCC6", borderRadius: 12, padding: "16px 18px", marginBottom: 20 },
+  sectionLabel: { fontSize: 12, fontWeight: 700, color: "#7A6E4E", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 8 },
+  stageSelect: { padding: "7px 10px", borderRadius: 6, border: "1px solid #D8CFB0", fontSize: 13.5, background: "#FFFFFF" },
+  stageBadge: { display: "inline-block", background: "#EFE7D3", color: "#1F3864", padding: "4px 12px", borderRadius: 20, fontSize: 13, fontWeight: 700 },
+  pctLabel: { fontSize: 12, color: "#7A6E4E", marginTop: 8 },
+
+  milestoneList: { display: "flex", flexDirection: "column", gap: 2, marginBottom: 8 },
+  milestoneRow: { display: "flex", alignItems: "center", gap: 10, padding: "10px 4px", borderBottom: "1px solid #EFE7D3", cursor: "pointer" },
+  milestoneText: { flex: 1, fontSize: 14, color: "#2A2620" },
+  milestoneDone: { color: "#7A6E4E", textDecoration: "line-through" },
+  milestoneDate: { fontSize: 11.5, color: "#B0A582" },
+  milestoneGroupLabel: { fontSize: 12, fontWeight: 700, color: "#1F3864", margin: "10px 0 4px" },
+
+  textarea: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #D8CFB0", fontSize: 14, fontFamily: "system-ui, sans-serif", outline: "none", resize: "vertical" },
+
+  sessionCard: { background: "#FFFFFF", border: "1px solid #E4DCC6", borderRadius: 10, padding: "12px 14px" },
+  sessionDate: { fontSize: 11.5, color: "#7A6E4E", fontWeight: 700, marginBottom: 4 },
+  sessionNotes: { fontSize: 13.5, color: "#2A2620", lineHeight: 1.5 },
+
+  settingsSection: { background: "#FFFFFF", border: "1px solid #E4DCC6", borderRadius: 12, padding: "16px 18px" },
+  pairNote: { fontSize: 12.5, color: "#7A6E4E", marginBottom: 10, maxWidth: 560 },
+  pairGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: 8, marginBottom: 12 },
+  pairItem: { display: "flex", alignItems: "center", gap: 8, background: "#F6F1E4", border: "1px solid #E4DCC6", borderRadius: 8, padding: "8px 10px", fontSize: 13.5 },
+  addRoleRow: { display: "flex", gap: 6 },
+  roleEditInput: { flex: 1, minWidth: 0, padding: "8px 10px", borderRadius: 6, border: "1px solid #D8CFB0", fontSize: 13.5, outline: "none" },
+  iconDanger: { background: "#F3E4DF", color: "#A6402F", border: "none", borderRadius: 6, width: 26, height: 26, cursor: "pointer", fontSize: 16, lineHeight: 1, flexShrink: 0 },
+  restrictAddRow: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 },
+  restrictSelect: { padding: "8px 10px", borderRadius: 6, border: "1px solid #D8CFB0", fontSize: 13.5, background: "#FFFFFF" },
+  restrictList: { display: "flex", flexDirection: "column", gap: 6 },
+  restrictRow: { display: "flex", alignItems: "center", gap: 12, background: "#F6F1E4", border: "1px solid #E4DCC6", borderRadius: 8, padding: "8px 12px", fontSize: 13 },
+  restrictName: { flex: 1, fontWeight: 600 },
+
+  modalOverlay: { position: "fixed", inset: 0, background: "rgba(20,18,14,0.55)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 20 },
+  modalCard: { background: "#FFFFFF", borderRadius: 16, maxWidth: 400, width: "100%", padding: "24px 24px 20px", boxShadow: "0 25px 50px -12px rgba(20,18,14,0.5)", animation: "popIn 0.14s ease-out" },
+  modalTitle: { fontSize: 18, fontWeight: 700, color: "#23211D", fontFamily: "Georgia, serif", marginBottom: 14 },
+  modalInput: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid #D8CFB0", fontSize: 14, marginBottom: 10, outline: "none" },
+  modalActions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 6 },
+  modalCancelBtn: { padding: "9px 16px", borderRadius: 8, border: "1px solid #D8CFB0", background: "#FFFFFF", color: "#4A4230", cursor: "pointer", fontSize: 13.5, fontWeight: 600 },
+  modalConfirmBtn: { padding: "9px 18px", borderRadius: 8, border: "none", background: "#1F3864", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 },
+};
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<App />);
+</script>
+</body>
+</html>
