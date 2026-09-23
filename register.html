@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="description" content="Register yourself for a Disciples Journey class at Victory Church." />
+<meta name="theme-color" content="#23211D" />
+<title>Register — Disciples Journey</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: #F6F1E4; font-family: system-ui, sans-serif; color: #2A2620; }
+  input, button, select, textarea { touch-action: manipulation; font-family: inherit; }
+  input:focus, select:focus, textarea:focus { border-color: #1F3864 !important; box-shadow: 0 0 0 3px rgba(31,56,100,0.15) !important; outline: none; }
+
+  .wrap { max-width: 480px; margin: 0 auto; padding: 22px 18px 60px; }
+  .header { background: #23211D; color: #EFE7D3; padding: 18px 20px; text-align: center; }
+  .headerTitle { font-family: Georgia, serif; font-size: 19px; font-weight: 700; }
+  .headerSub { font-size: 12.5px; color: #C9BF9E; margin-top: 2px; }
+
+  .card { background: #FFFFFF; border: 1px solid #E4DCC6; border-radius: 12px; padding: 20px; margin-top: 18px; box-shadow: 0 8px 20px -14px rgba(35,33,29,0.3); }
+  .className { font-family: Georgia, serif; font-size: 21px; color: #1F3864; margin: 0 0 4px; }
+  .classSub { font-size: 13px; color: #7A6E4E; margin-bottom: 14px; }
+
+  label.field { display: block; margin-bottom: 12px; }
+  label.field span { display: block; font-size: 12.5px; font-weight: 700; color: #7A6E4E; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 5px; }
+  .input { width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #D8CFB0; font-size: 14.5px; background: #FFFFFF; }
+  .ageHint { font-size: 12px; color: #7A6E4E; margin-top: 5px; }
+
+  .row2 { display: flex; gap: 10px; }
+  .row2 > label { flex: 1; min-width: 0; }
+
+  .submitBtn { width: 100%; padding: 13px; border-radius: 8px; border: none; background: #1F3864; color: #EFE7D3; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 6px; }
+  .submitBtn:disabled { opacity: 0.6; cursor: default; }
+
+  .errorBox { background: #F3E4DF; color: #A6402F; padding: 10px 13px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .noteBox { background: #FBF8F0; border: 1px solid #EFE7D3; color: #6B5E3E; padding: 12px 14px; border-radius: 10px; font-size: 12.5px; margin-top: 16px; }
+
+  .loadingScreen, .msgScreen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; text-align: center; padding: 20px; color: #7A6E4E; }
+  .msgScreen .big { font-family: Georgia, serif; font-size: 22px; color: #23211D; margin-bottom: 8px; }
+  .msgScreen .sub { font-size: 14px; color: #5C5230; max-width: 340px; line-height: 1.6; }
+  .checkCircle { width: 56px; height: 56px; border-radius: 50%; background: #385026; color: #EFE7D3; display: flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 14px; }
+
+  .againBtn { margin-top: 18px; padding: 10px 18px; border-radius: 8px; border: 1px solid #D8CFB0; background: #FFFFFF; color: #4A4230; cursor: pointer; font-size: 13.5px; font-weight: 600; }
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+</head>
+<body>
+<div class="header">
+  <div class="headerTitle">Disciples Journey</div>
+  <div class="headerSub">Class Registration</div>
+</div>
+<div class="wrap" id="app">
+  <div class="loadingScreen">Loading…</div>
+</div>
+
+<script>
+// ---- PASTE YOUR FIREBASE CONFIG HERE (same as index.html) ----
+const firebaseConfig = {
+  apiKey: "AIzaSyD-cz-NFG35omoPBN4cG1gM-w8kLjS8G8s",
+  authDomain: "discipleship-journey-cc60b.firebaseapp.com",
+  projectId: "discipleship-journey-cc60b",
+  storageBucket: "discipleship-journey-cc60b.firebasestorage.app",
+  messagingSenderId: "942058852250",
+  appId: "1:942058852250:web:7ae5092a3efbe146283423",
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const auth = firebase.auth();
+
+const GENDERS = ["Male", "Female"];
+const LIFE_STAGES = ["Single", "Married", "ENC"];
+
+const app = document.getElementById("app");
+
+function qs(name) {
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+function statusLinkForReg(regId) {
+  const base = window.location.href.replace(/[^/]*$/, "");
+  return `${base}status.html?regId=${regId}`;
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML;
+}
+
+// Computes age in whole years from a "YYYY-MM-DD" birthdate string.
+// Display-only here — the stored field is the birthdate itself, matching
+// how index.html derives age for regular members via ageFromBirthdate().
+function computeAge(birthdateStr) {
+  if (!birthdateStr) return null;
+  const today = new Date();
+  const dob = new Date(birthdateStr + "T00:00:00");
+  if (isNaN(dob.getTime())) return null;
+  let age = today.getFullYear() - dob.getFullYear();
+  const hasHadBirthdayThisYear =
+    today.getMonth() > dob.getMonth() ||
+    (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+  if (!hasHadBirthdayThisYear) age--;
+  return age;
+}
+
+function renderMissingClass() {
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="big">Link not set up</div>
+      <div class="sub">This registration link is missing a class. Please ask your leader for the correct link, or scan the QR code they shared for your class.</div>
+    </div>
+  `;
+}
+
+function renderError(message) {
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="big">Something went wrong</div>
+      <div class="sub">${esc(message)}</div>
+    </div>
+  `;
+}
+
+function renderSuccess(className, classId, regId) {
+  const statusLink = statusLinkForReg(regId);
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="checkCircle">✓</div>
+      <div class="big">Thanks — almost done!</div>
+      <div class="sub">Your registration for <strong>${esc(className)}</strong> has been submitted. A class leader will review it and add you to the roster shortly.</div>
+      <div class="noteBox" style="text-align:left; margin-top:18px;">
+        <strong>Save this link</strong> — it's your personal status page. It'll automatically show your attendance QR code the moment a leader approves you, no need to come back and check manually.
+      </div>
+      <button class="submitBtn" id="viewStatusBtn" style="margin-top:14px;">View My Status &amp; QR Code</button>
+      <button class="againBtn" id="copyLinkBtn" style="margin-top:10px;">Copy My Link</button>
+      <button class="againBtn" id="againBtn" style="margin-top:10px;">Register another person</button>
+    </div>
+  `;
+  document.getElementById("viewStatusBtn").onclick = () => { window.location.href = statusLink; };
+  document.getElementById("copyLinkBtn").onclick = async () => {
+    const btn = document.getElementById("copyLinkBtn");
+    try {
+      await navigator.clipboard.writeText(statusLink);
+      btn.textContent = "Copied!";
+    } catch (err) {
+      window.prompt("Copy this link:", statusLink);
+    }
+    setTimeout(() => { if (btn) btn.textContent = "Copy My Link"; }, 2000);
+  };
+  document.getElementById("againBtn").onclick = () => renderForm(className, classId);
+}
+
+function renderForm(className, classId, errorMessage) {
+  app.innerHTML = `
+    <div class="card">
+      <div class="className">${esc(className)}</div>
+      <div class="classSub">Fill in your details to register for this class.</div>
+      ${errorMessage ? `<div class="errorBox">${esc(errorMessage)}</div>` : ""}
+      <form id="regForm">
+        <label class="field">
+          <span>Full name *</span>
+          <input class="input" name="name" required autofocus />
+        </label>
+        <div class="row2">
+          <label class="field">
+            <span>Birthdate *</span>
+            <input class="input" name="birthdate" type="date" required max="${new Date().toISOString().slice(0,10)}" />
+            <div class="ageHint" id="ageHint"></div>
+          </label>
+          <label class="field">
+            <span>Gender *</span>
+            <select class="input" name="gender" required>
+              <option value="" disabled selected>—</option>
+              ${GENDERS.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Life stage *</span>
+          <select class="input" name="lifeStage" required>
+            <option value="" disabled selected>—</option>
+            ${LIFE_STAGES.map((ls) => `<option value="${esc(ls)}">${esc(ls)}</option>`).join("")}
+          </select>
+        </label>
+        <label class="field">
+          <span>Contact number *</span>
+          <input class="input" name="contactNumber" type="tel" required />
+        </label>
+        <label class="field">
+          <span>Address *</span>
+          <input class="input" name="address" required />
+        </label>
+        <label class="field">
+          <span>Notes (optional)</span>
+          <input class="input" name="notes" />
+        </label>
+        <button class="submitBtn" type="submit" id="submitBtn">Submit Registration</button>
+      </form>
+      <div class="noteBox">Your registration is reviewed by a class leader before it appears on the roster — this helps keep the list accurate and prevents mistaken or fake sign-ups. If you've registered before, ask a leader to add this class to your existing profile instead so you don't end up with two entries.</div>
+    </div>
+  `;
+
+  const birthdateInput = document.querySelector('input[name="birthdate"]');
+  const ageHint = document.getElementById("ageHint");
+  birthdateInput.addEventListener("input", () => {
+    const age = computeAge(birthdateInput.value);
+    ageHint.textContent = age !== null && age >= 0 ? `Age: ${age}` : "";
+  });
+
+  document.getElementById("regForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = document.getElementById("submitBtn");
+    const name = form.name.value.trim();
+    const birthdate = form.birthdate.value;
+    if (!name || !birthdate) return;
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Submitting…";
+
+    const data = {
+      name,
+      photoUrl: null,
+      birthdate,
+      gender: form.gender.value,
+      lifeStage: form.lifeStage.value,
+      contactNumber: form.contactNumber.value.trim(),
+      address: form.address.value.trim(),
+      notes: form.notes.value.trim(),
+      classIds: [classId],
+      dateAdded: new Date(),
+      selfRegistered: true,
+      status: "pending",
+    };
+
+    // Create the doc with a known ID up front (rather than .add()) so
+    // that ID can double as the "regId" in the personal status link
+    // we hand back immediately — no separate lookup step needed.
+    const regRef = db.collection("pendingRegistrations").doc();
+
+    try {
+      await ensureSignedIn();
+      await regRef.set(data);
+      renderSuccess(className, classId, regRef.id);
+    } catch (err) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Submit Registration";
+      renderForm(className, classId, "Couldn't submit your registration. " + (err && err.message ? err.message : "Please try again."));
+    }
+  });
+}
+
+function ensureSignedIn() {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+  return auth.signInAnonymously().then((cred) => cred.user);
+}
+
+async function init() {
+  const classId = qs("classId");
+  if (!classId) { renderMissingClass(); return; }
+  try {
+    await ensureSignedIn();
+    const doc = await db.collection("classes").doc(classId).get();
+    if (!doc.exists) { renderMissingClass(); return; }
+    const classItem = doc.data();
+    renderForm(classItem.name || "Class", classId);
+  } catch (err) {
+    renderError(err && err.message ? err.message : "Couldn't load this class. Please check your connection and try again.");
+  }
+}
+
+init();
+</script>
+</body>
+</html>
