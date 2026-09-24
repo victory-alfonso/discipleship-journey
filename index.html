@@ -153,6 +153,10 @@ if (FIREBASE_CONFIGURED) {
 
 function normEmail(e) { return (e || "").trim().toLowerCase(); }
 function isValidEmail(e) { return /^[^\s@()]+@[^\s@()]+\.[^\s@()]+$/.test(normEmail(e)); }
+// Small local ID generator for items that live inside an array field on
+// a Firestore doc (e.g. a ONE2ONE person's sessions), where each entry
+// needs its own stable id but doesn't warrant its own subcollection.
+function genLocalId() { return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`; }
 
 // ============================================================
 // CONFIRM DIALOG — replaces native confirm(). Usage:
@@ -3705,11 +3709,126 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
 }
 
 // ============================================================
-// PENDING REGISTRATIONS — self-registrations from register.html
-// sit here until a leader approves (creates/merges the member)
-// or rejects (deletes) them. This is what keeps a fake or
-// mistaken public submission from landing straight in the roster.
+// ONE2ONE — a personal discipleship tracker. Unlike the shared
+// Classes/Members roster, this list is scoped to whoever is
+// signed in: everyone (leader or not) can conduct a ONE2ONE and
+// keep their own list of people and sessions here, and only sees
+// the people they themselves added.
 // ============================================================
+
+function OneOnOneRow({ person, onOpen, onDelete }) {
+  const sessions = person.sessions || [];
+  const done = sessions.filter((s) => s.conducted).length;
+  const pct = sessions.length ? Math.round((done / sessions.length) * 100) : 0;
+  return (
+    <div className="card-row" style={styles.rosterCard} onClick={() => onOpen(person)}>
+      <Avatar name={person.name} size={44} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={styles.rosterName}>{person.name}</div>
+        <div style={styles.rosterMeta}>{done} of {sessions.length} session{sessions.length === 1 ? "" : "s"} done</div>
+        <div style={styles.progressTrack}><div style={{ ...styles.progressFill, width: `${pct}%` }} /></div>
+      </div>
+      <span style={styles.rosterPct}>{pct}%</span>
+      <button
+        style={{ ...styles.iconDanger, flexShrink: 0 }}
+        onClick={(e) => { e.stopPropagation(); onDelete(person.id, person.name); }}
+        title="Remove"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function OneOnOne({ people, onAdd, onOpen, onDelete }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="stack-mobile" style={styles.toolbar}>
+        <div style={{ flex: 1, fontSize: 13, color: "#7A6E4E", alignSelf: "center" }}>
+          Your own ONE2ONE tracker — only people you've added show up here.
+        </div>
+        <button style={styles.primaryBtn} onClick={onAdd}>+ Add Member</button>
+      </div>
+
+      {people.length === 0 ? (
+        <div style={styles.emptyNote}>You haven't added anyone to ONE2ONE yet.</div>
+      ) : (
+        <div style={styles.rosterList}>
+          {people.map((p) => (
+            <OneOnOneRow
+              key={p.id}
+              person={p}
+              onOpen={onOpen}
+              onDelete={(id, name) => onDelete(id, name)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OneOnOneDetailModal({ person, onClose, onAddSession, onDeleteSession, onToggleSession }) {
+  const [newSession, setNewSession] = useState("");
+  const sessions = person.sessions || [];
+  const done = sessions.filter((s) => s.conducted).length;
+  const pct = sessions.length ? Math.round((done / sessions.length) * 100) : 0;
+
+  const addSession = () => {
+    if (!newSession.trim()) return;
+    onAddSession(person.id, newSession.trim());
+    setNewSession("");
+  };
+
+  const roundBtn = { position: "absolute", top: 12, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 32, height: 32, color: "#F5F2E4", fontSize: 18, cursor: "pointer", lineHeight: 1, zIndex: 3 };
+
+  return (
+    <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
+      <div
+        style={{ position: "relative", width: "100%", maxWidth: 480, maxHeight: "88vh", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" onClick={onClose} style={{ ...roundBtn, right: 12 }} aria-label="Close">×</button>
+        <div style={{ overflowY: "auto", flex: 1, padding: "22px 22px 20px", color: "#F5F2E4" }}>
+          <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700 }}>{person.name}</div>
+          <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.75)", marginTop: 4 }}>{done} of {sessions.length} session{sessions.length === 1 ? "" : "s"} done · {pct}%</div>
+          <DetailBar pct={pct} />
+
+          <div style={{ ...detailLabel, marginTop: 22 }}>Sessions</div>
+          {sessions.length === 0 ? (
+            <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 6 }}>No sessions yet.</div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {sessions.map((s) => (
+                <div key={s.id} style={{ ...detailRow, cursor: "default" }}>
+                  <input
+                    type="checkbox"
+                    style={styles.sessionCheckbox}
+                    checked={!!s.conducted}
+                    onChange={(e) => onToggleSession(person.id, s.id, e.target.checked)}
+                  />
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 600, textDecoration: s.conducted ? "line-through" : "none", opacity: s.conducted ? 0.7 : 1 }}>{s.name}</span>
+                  <button style={styles.iconDanger} onClick={() => onDeleteSession(person.id, s.id)} title="Delete session">×</button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <input
+              style={{ flex: 1, minWidth: 0, padding: "9px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4", fontSize: 13.5, outline: "none" }}
+              placeholder="New session name"
+              value={newSession}
+              onChange={(e) => setNewSession(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addSession(); } }}
+            />
+            <button style={{ padding: "9px 16px", borderRadius: 8, border: "none", background: "#E5A430", color: "#23211D", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }} onClick={addSession}>Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 function PendingRegistrationRow({ pending, classes, members, onApprove, onReject }) {
   const [expanded, setExpanded] = useState(false);
@@ -3880,6 +3999,8 @@ function App() {
   const [renamingClass, setRenamingClass] = useState(null);
   const [renamingTopic, setRenamingTopic] = useState(null);
   const [renamingBatch, setRenamingBatch] = useState(null); // { classId, oldName }
+  const [openOneOnOne, setOpenOneOnOne] = useState(null);
+  const [addOneOnOneOpen, setAddOneOnOneOpen] = useState(false);
 
   useEffect(() => {
     if (!auth) { setAuthUser(null); return; }
@@ -3904,6 +4025,11 @@ function App() {
   const [attendanceDocs] = useCollection("attendance", null, authReady);
   const [leaders] = useCollection("leaders", null, authReady);
   const [admins] = useCollection("admins", null, authReady);
+  // ONE2ONE lives in its own collection, fetched in full like every
+  // other collection here, but each person carries a createdBy (the
+  // adder's email) so it can be filtered down to "mine" below — every
+  // signed-in user (leader or not) gets their own private-feeling list.
+  const [oneOnOneRaw] = useCollection("oneOnOne", null, authReady);
 
   // A manager (in "admins") gets full edit access even if they were
   // never separately added to "leaders" — managers aren't a subset of
@@ -3927,6 +4053,11 @@ function App() {
   );
 
   const members = useMemo(() => membersRaw.map((m) => ({ ...m, name: m.name || "(no name)" })), [membersRaw]);
+  const myOneOnOne = useMemo(
+    () => oneOnOneRaw.filter((p) => p.createdBy === currentEmail).sort((a, b) => (a.name || "").localeCompare(b.name || "")),
+    [oneOnOneRaw, currentEmail]
+  );
+  const liveOpenOneOnOne = openOneOnOne ? oneOnOneRaw.find((p) => p.id === openOneOnOne.id) || openOneOnOne : null;
 
   const attendanceByMember = useMemo(() => {
     const map = {};
@@ -4052,6 +4183,46 @@ function App() {
     } catch (err) {
       showError("Could not mark all sessions as attended. Error: " + err.message);
     }
+  };
+  // ============================================================
+  // ONE2ONE — each person is a doc in its own collection, carrying
+  // createdBy (the adder's email) and a plain array of sessions
+  // ({id, name, conducted, dateConducted}). Sessions are small and
+  // fully owned by the one parent doc, so they're edited by reading
+  // the array from local state and writing the whole array back,
+  // rather than a subcollection.
+  // ============================================================
+  const addOneOnOnePerson = (name) => {
+    return db.collection("oneOnOne").add({ name, createdBy: currentEmail, createdAt: new Date(), sessions: [] })
+      .then(() => { setAddOneOnOneOpen(false); showNotice("Added to ONE2ONE."); })
+      .catch((err) => showError("Could not add them. Error: " + err.message));
+  };
+  const deleteOneOnOnePerson = async (id, name) => {
+    if (!(await askConfirm({ title: "Remove from ONE2ONE?", message: `${name} and their sessions will be removed. This can't be undone.`, confirmLabel: "Remove", danger: true }))) return;
+    db.collection("oneOnOne").doc(id).delete()
+      .then(() => { setOpenOneOnOne(null); showNotice("Removed."); })
+      .catch((err) => showError("Could not remove them. Error: " + err.message));
+  };
+  const addOneOnOneSession = (personId, sessionName) => {
+    const person = oneOnOneRaw.find((p) => p.id === personId);
+    if (!person) return;
+    const sessions = [...(person.sessions || []), { id: genLocalId(), name: sessionName, conducted: false, dateConducted: null }];
+    db.collection("oneOnOne").doc(personId).update({ sessions })
+      .catch((err) => showError("Could not add the session. Error: " + err.message));
+  };
+  const deleteOneOnOneSession = (personId, sessionId) => {
+    const person = oneOnOneRaw.find((p) => p.id === personId);
+    if (!person) return;
+    const sessions = (person.sessions || []).filter((s) => s.id !== sessionId);
+    db.collection("oneOnOne").doc(personId).update({ sessions })
+      .catch((err) => showError("Could not delete the session. Error: " + err.message));
+  };
+  const toggleOneOnOneSession = (personId, sessionId, conducted) => {
+    const person = oneOnOneRaw.find((p) => p.id === personId);
+    if (!person) return;
+    const sessions = (person.sessions || []).map((s) => (s.id === sessionId ? { ...s, conducted, dateConducted: conducted ? new Date() : null } : s));
+    db.collection("oneOnOne").doc(personId).update({ sessions })
+      .catch((err) => showError("Could not save that. Error: " + err.message));
   };
   const addClass = (name, order, photoUrl) => {
     db.collection("classes").add({ name, order, photoUrl: photoUrl || null })
@@ -4411,6 +4582,7 @@ function App() {
         <nav style={styles.nav}>
           <button className="nav-item" style={{ ...styles.navItem, ...(tab === "roster" ? styles.navItemActive : {}) }} onClick={() => { setTab("roster"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Disciples</button>
           <button className="nav-item" style={{ ...styles.navItem, ...(tab === "classes" ? styles.navItemActive : {}) }} onClick={() => { setTab("classes"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Classes</button>
+          <button className="nav-item" style={{ ...styles.navItem, ...(tab === "one2one" ? styles.navItemActive : {}) }} onClick={() => { setTab("one2one"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); setOpenOneOnOne(null); }}>ONE2ONE</button>
           {isLeader && (
             <button className="nav-item" style={{ ...styles.navItem, ...(tab === "registrations" ? styles.navItemActive : {}) }} onClick={() => { setTab("registrations"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>
               Registrations{pendingRegistrations.length > 0 ? ` (${pendingRegistrations.length})` : ""}
@@ -4492,6 +4664,15 @@ function App() {
           />
         )}
 
+        {tab === "one2one" && (
+          <OneOnOne
+            people={myOneOnOne}
+            onAdd={() => setAddOneOnOneOpen(true)}
+            onOpen={setOpenOneOnOne}
+            onDelete={deleteOneOnOnePerson}
+          />
+        )}
+
         {tab === "settings" && isLeader && (
           <Settings
             leaders={leaders}
@@ -4537,6 +4718,24 @@ function App() {
         />
       )}
       {addOpen && <AddMemberModal classes={classes} topics={topics} onClose={() => setAddOpen(false)} onSave={addMember} />}
+      {liveOpenOneOnOne && (
+        <OneOnOneDetailModal
+          person={liveOpenOneOnOne}
+          onClose={() => setOpenOneOnOne(null)}
+          onAddSession={addOneOnOneSession}
+          onDeleteSession={deleteOneOnOneSession}
+          onToggleSession={toggleOneOnOneSession}
+        />
+      )}
+      {addOneOnOneOpen && (
+        <RenameModal
+          title="Add Member to ONE2ONE"
+          label="Full name"
+          initialValue=""
+          onClose={() => setAddOneOnOneOpen(false)}
+          onSave={addOneOnOnePerson}
+        />
+      )}
       {editingMember && (
         <EditMemberModal
           member={editingMember}
