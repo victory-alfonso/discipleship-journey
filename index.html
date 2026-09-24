@@ -677,7 +677,7 @@ function findPossibleDuplicates(members, name) {
 // FIRESTORE HOOKS — live-sync collections into React state
 // ============================================================
 
-function useCollection(path, orderField, enabled = true) {
+function useCollection(path, orderField, enabled = true, whereField = null, whereValue = null) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [retryToken, setRetryToken] = useState(0);
@@ -685,6 +685,9 @@ function useCollection(path, orderField, enabled = true) {
     if (!db || !enabled) { setData([]); setLoading(false); return; }
     let cancelled = false;
     let ref = db.collection(path);
+    // Optional equality filter — needed when Firestore rules only allow
+    // reading the docs that match (e.g. a ONE2ONE leader's own members).
+    if (whereField) ref = ref.where(whereField, "==", whereValue);
     const unsub = ref.onSnapshot((snap) => {
       let rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       if (orderField) rows.sort((a, b) => (a[orderField] || 0) - (b[orderField] || 0));
@@ -709,7 +712,7 @@ function useCollection(path, orderField, enabled = true) {
       }
     });
     return () => { cancelled = true; unsub(); };
-  }, [path, orderField, enabled, retryToken]);
+  }, [path, orderField, enabled, retryToken, whereField, whereValue]);
   return [data, loading];
 }
 
@@ -4247,7 +4250,7 @@ function App() {
   // other collection here; each person carries a createdBy (the
   // adder's email) so it can be filtered below — Leaders/Managers see
   // everyone, ONE2ONE leaders only see the people they added.
-  const [oneOnOneRaw] = useCollection("oneOnOne", null, authReady && canUseOneOnOne);
+  const [oneOnOneRaw] = useCollection("oneOnOne", null, authReady && canUseOneOnOne, isOneOnly ? "createdBy" : null, isOneOnly ? currentEmail : null);
 
   const [pendingRegistrationsAll] = useCollection("pendingRegistrations", null, isLeader);
   // Approved/rejected registrations stay in this collection (so each
