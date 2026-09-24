@@ -2898,7 +2898,7 @@ function DetailBar({ pct }) {
   );
 }
 
-function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch }) {
+function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
@@ -2986,19 +2986,28 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
                 <div style={detailLabel}>Batch</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                   {batches.map((b) => (
-                    <button
-                      key={b}
-                      type="button"
-                      onClick={() => setSelectedBatch(b)}
-                      style={{
-                        padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                        border: b === activeBatch ? "1px solid #E5A430" : "1px solid rgba(255,255,255,0.25)",
-                        background: b === activeBatch ? "#E5A430" : "rgba(255,255,255,0.08)",
-                        color: b === activeBatch ? "#23211D" : "#F5F2E4",
-                      }}
-                    >
-                      {b}
-                    </button>
+                    <div key={b} style={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedBatch(b)}
+                        style={{
+                          padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                          border: b === activeBatch ? "1px solid #E5A430" : "1px solid rgba(255,255,255,0.25)",
+                          background: b === activeBatch ? "#E5A430" : "rgba(255,255,255,0.08)",
+                          color: b === activeBatch ? "#23211D" : "#F5F2E4",
+                        }}
+                      >
+                        {b}
+                      </button>
+                      {isLeader && b === activeBatch && (
+                        <>
+                          <button type="button" onClick={() => onRenameBatch(classItem.id, b)} title="Rename batch" style={{ background: "transparent", border: "none", color: "#F5F2E4", cursor: "pointer", fontSize: 12, padding: "2px 5px", opacity: 0.8 }}>✎</button>
+                          {batches.length > 1 && (
+                            <button type="button" onClick={() => onDeleteBatch(classItem.id, b)} title="Delete batch" style={{ background: "transparent", border: "none", color: "#F5F2E4", cursor: "pointer", fontSize: 15, padding: "2px 5px", opacity: 0.8 }}>×</button>
+                          )}
+                        </>
+                      )}
+                    </div>
                   ))}
                   {isLeader && !addingBatch && (
                     <button type="button" onClick={() => setAddingBatch(true)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px dashed rgba(255,255,255,0.35)", background: "transparent", color: "#F5F2E4" }}>+ Add Batch</button>
@@ -3139,7 +3148,7 @@ function CopyRegistrationLinkButton({ classId }) {
   );
 }
 
-function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember, onAddBatch }) {
+function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
@@ -3196,19 +3205,28 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
           <div style={styles.sectionLabel}>Batch</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 }}>
             {batches.map((b) => (
-              <button
-                key={b}
-                type="button"
-                onClick={() => setSelectedBatch(b)}
-                style={{
-                  padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-                  border: b === activeBatch ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.25)",
-                  background: b === activeBatch ? "#1F3864" : "rgba(31,56,100,0.06)",
-                  color: b === activeBatch ? "#F5F2E4" : "#23211D",
-                }}
-              >
-                {b}
-              </button>
+              <div key={b} style={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <button
+                  type="button"
+                  onClick={() => setSelectedBatch(b)}
+                  style={{
+                    padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                    border: b === activeBatch ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.25)",
+                    background: b === activeBatch ? "#1F3864" : "rgba(31,56,100,0.06)",
+                    color: b === activeBatch ? "#F5F2E4" : "#23211D",
+                  }}
+                >
+                  {b}
+                </button>
+                {isLeader && b === activeBatch && (
+                  <>
+                    <button type="button" onClick={() => onRenameBatch(classItem.id, b)} title="Rename batch" style={{ background: "transparent", border: "none", color: "#1F3864", cursor: "pointer", fontSize: 12, padding: "2px 5px", opacity: 0.75 }}>✎</button>
+                    {batches.length > 1 && (
+                      <button type="button" onClick={() => onDeleteBatch(classItem.id, b)} title="Delete batch" style={{ background: "transparent", border: "none", color: "#1F3864", cursor: "pointer", fontSize: 15, padding: "2px 5px", opacity: 0.75 }}>×</button>
+                    )}
+                  </>
+                )}
+              </div>
             ))}
             {isLeader && !addingBatch && (
               <button type="button" onClick={() => setAddingBatch(true)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px dashed rgba(31,56,100,0.35)", background: "transparent", color: "#23211D" }}>+ Add Batch</button>
@@ -3455,7 +3473,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   );
 }
 
-function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch }) {
+function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch }) {
   const [query, setQuery] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -3532,6 +3550,8 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
           onDeleteTopic={onDeleteTopic}
           onOpenMember={onOpenMember}
           onAddBatch={onAddBatch}
+          onRenameBatch={onRenameBatch}
+          onDeleteBatch={onDeleteBatch}
         />
       )}
 
@@ -3722,6 +3742,7 @@ function App() {
   const [editingMember, setEditingMember] = useState(null);
   const [renamingClass, setRenamingClass] = useState(null);
   const [renamingTopic, setRenamingTopic] = useState(null);
+  const [renamingBatch, setRenamingBatch] = useState(null); // { classId, oldName }
 
   useEffect(() => {
     if (!auth) { setAuthUser(null); return; }
@@ -3902,6 +3923,16 @@ function App() {
       await batch.commit();
     }
   };
+  // Same idea as deleteRefsInChunks but for updates — used when renaming
+  // or deleting a batch, which can touch the class doc plus every
+  // session and member in that batch in one atomic-per-chunk sweep.
+  const commitWritesInChunks = async (writes) => {
+    for (let i = 0; i < writes.length; i += 400) {
+      const batch = db.batch();
+      writes.slice(i, i + 400).forEach((w) => batch.update(w.ref, w.data));
+      await batch.commit();
+    }
+  };
   // Topics store the class's name in their "class" field, and attendance
   // docs point at topics by id, so deleting a class also deletes its
   // sessions and their attendance records. Children go first and the
@@ -3968,6 +3999,75 @@ function App() {
     db.collection("classes").doc(classId).update({ batches: [...(classItem.batches || []), name] })
       .then(() => showNotice("Batch added."))
       .catch((err) => showError("Could not add the batch. Error: " + err.message));
+  };
+  // Renaming a batch has to cascade like a class rename does: every
+  // session in that batch gets the new batch label, and — for classes
+  // that match one of the discipleship tracks — every member currently
+  // parked in that batch gets their trackBatch label updated too. The
+  // class doc's own "batches" list is updated (and the new name added
+  // to it explicitly) so the batch keeps existing even if it's empty.
+  const renameBatch = (classId, oldName, newName) => {
+    const name = (newName || "").trim();
+    if (!name) return;
+    const classItem = classes.find((c) => c.id === classId);
+    if (!classItem) return;
+    if (name === oldName) { setRenamingBatch(null); return; }
+    const existing = getBatchesForClass(classItem, topics);
+    if (existing.includes(name)) { showError("That batch already exists."); return; }
+    const track = trackNameForClass(classItem.name);
+    const classTopics = topics.filter((t) => t.class === classItem.name && topicBatch(t) === oldName);
+    const affectedMembers = track ? members.filter((m) => ((m.trackBatch && m.trackBatch[track]) || "Batch 1") === oldName) : [];
+    const newBatchesList = (classItem.batches || []).map((b) => (b === oldName ? name : b));
+    if (!newBatchesList.includes(name)) newBatchesList.push(name);
+    const writes = [
+      { ref: db.collection("classes").doc(classId), data: { batches: newBatchesList } },
+      ...classTopics.map((t) => ({ ref: db.collection("topics").doc(t.id), data: { batch: name } })),
+      ...affectedMembers.map((m) => ({ ref: db.collection("members").doc(m.id), data: { trackBatch: { ...(m.trackBatch || {}), [track]: name } } })),
+    ];
+    commitWritesInChunks(writes)
+      .then(() => { setRenamingBatch(null); showNotice("Batch renamed."); })
+      .catch((err) => showError("Could not rename the batch. Error: " + err.message));
+  };
+  // Deleting a batch removes its sessions and their attendance records
+  // (mirroring deleteClass), and moves any members parked in that batch
+  // to whichever batch remains — a class always needs at least one.
+  const deleteBatch = async (classId, batchName) => {
+    const classItem = classes.find((c) => c.id === classId);
+    if (!classItem) return;
+    const allBatches = getBatchesForClass(classItem, topics);
+    if (allBatches.length <= 1) { showError("A class needs at least one batch — add another batch before deleting this one."); return; }
+    const track = trackNameForClass(classItem.name);
+    const batchTopics = topics.filter((t) => t.class === classItem.name && topicBatch(t) === batchName);
+    const topicIds = new Set(batchTopics.map((t) => t.id));
+    const batchAttendance = attendanceDocs.filter((a) => topicIds.has(a.topicId));
+    const affectedMembers = track ? members.filter((m) => ((m.trackBatch && m.trackBatch[track]) || "Batch 1") === batchName) : [];
+    const fallback = allBatches.find((b) => b !== batchName);
+    const parts = [];
+    if (batchTopics.length > 0) parts.push(`its ${batchTopics.length} session${batchTopics.length === 1 ? "" : "s"} and their attendance records`);
+    if (affectedMembers.length > 0) parts.push(`${affectedMembers.length} member${affectedMembers.length === 1 ? "" : "s"} moved to "${fallback}"`);
+    const ok = await askConfirm({
+      title: "Delete batch?",
+      message: parts.length > 0
+        ? `"${batchName}" will be deleted, along with ${parts.join(", and ")}. This can't be undone.`
+        : `"${batchName}" will be deleted. This can't be undone.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteRefsInChunks([
+        ...batchAttendance.map((a) => db.collection("attendance").doc(a.id)),
+        ...batchTopics.map((t) => db.collection("topics").doc(t.id)),
+      ]);
+      const newBatchesList = (classItem.batches || []).filter((b) => b !== batchName);
+      await commitWritesInChunks([
+        { ref: db.collection("classes").doc(classId), data: { batches: newBatchesList } },
+        ...affectedMembers.map((m) => ({ ref: db.collection("members").doc(m.id), data: { trackBatch: { ...(m.trackBatch || {}), [track]: fallback } } })),
+      ]);
+      showNotice("Batch deleted.");
+    } catch (err) {
+      showError("Could not delete the batch. Error: " + err.message);
+    }
   };
   const deleteTopic = async (id) => {
     const topic = topics.find((t) => t.id === id);
@@ -4171,6 +4271,8 @@ function App() {
             onEditTopic={setRenamingTopic}
             onOpenMember={setOpenMember}
             onAddBatch={addBatch}
+            onRenameBatch={(classId, oldName) => setRenamingBatch({ classId, oldName })}
+            onDeleteBatch={deleteBatch}
           />
         )}
 
@@ -4189,6 +4291,8 @@ function App() {
             onEditTopic={setRenamingTopic}
             onOpenMember={setOpenMember}
             onAddBatch={addBatch}
+            onRenameBatch={(classId, oldName) => setRenamingBatch({ classId, oldName })}
+            onDeleteBatch={deleteBatch}
           />
         )}
 
@@ -4261,6 +4365,15 @@ function App() {
           initialValue={renamingTopic.name}
           onClose={() => setRenamingTopic(null)}
           onSave={(name) => updateTopic(renamingTopic.id, name)}
+        />
+      )}
+      {renamingBatch && (
+        <RenameModal
+          title="Rename Batch"
+          label="Batch name"
+          initialValue={renamingBatch.oldName}
+          onClose={() => setRenamingBatch(null)}
+          onSave={(name) => renameBatch(renamingBatch.classId, renamingBatch.oldName, name)}
         />
       )}
     </div>
