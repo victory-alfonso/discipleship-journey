@@ -2898,7 +2898,7 @@ function DetailBar({ pct }) {
   );
 }
 
-function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch }) {
+function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
@@ -2917,6 +2917,9 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
     () => sortTopicsNaturally(topicsForClass(topics, classItem.name)).filter((t) => topicBatch(t) === activeBatch),
     [topics, classItem.name, activeBatch]
   );
+  // A batch counts as complete once it has at least one session and
+  // every session in it has been marked conducted.
+  const batchComplete = ts.length > 0 && ts.every((t) => t.conducted);
   const allClassMembers = useMemo(() => getClassMembers(members, classItem.id), [members, classItem.id]);
   const classMembers = useMemo(() => {
     if (!track) return allClassMembers;
@@ -3048,7 +3051,10 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
               </div>
             )}
 
-            <div style={detailLabel}>Sessions ({ts.length}) · {activeBatch}</div>
+            <div style={detailLabel}>
+              Sessions ({ts.length}) · {activeBatch}
+              {batchComplete && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: "#8FCB74" }}>✓ Batch complete</span>}
+            </div>
             {ts.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 6 }}>No sessions yet in {activeBatch}.</div>
             ) : (
@@ -3065,6 +3071,23 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
                         <DetailBar pct={tpct} />
                       </div>
                       <span style={{ fontSize: 12.5, fontWeight: 700, color: "#E5C77A" }}>{tpct}%</span>
+                      {isLeader ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); onToggleConducted(t.id, !t.conducted); }}
+                          title={t.conducted ? "Mark as not conducted" : "Mark as conducted"}
+                          style={{
+                            padding: "3px 9px", borderRadius: 12, fontSize: 10.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                            border: t.conducted ? "1px solid #7FB069" : "1px solid rgba(255,255,255,0.3)",
+                            background: t.conducted ? "rgba(127,176,105,0.18)" : "transparent",
+                            color: t.conducted ? "#8FCB74" : "rgba(245,242,228,0.65)",
+                          }}
+                        >
+                          {t.conducted ? "✓ Conducted" : "Mark Conducted"}
+                        </button>
+                      ) : (
+                        t.conducted && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#8FCB74", flexShrink: 0 }}>✓ Conducted</span>
+                      )}
                       {isLeader && (
                         <button style={styles.iconEdit} onClick={(e) => { e.stopPropagation(); onEditTopic(t); }} title="Edit session name">✎</button>
                       )}
@@ -3148,7 +3171,7 @@ function CopyRegistrationLinkButton({ classId }) {
   );
 }
 
-function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch }) {
+function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
@@ -3157,6 +3180,7 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
   const activeBatch = selectedBatch && batches.includes(selectedBatch) ? selectedBatch : batches[batches.length - 1];
   const track = trackNameForClass(classItem.name);
   const ts = topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === activeBatch);
+  const batchComplete = ts.length > 0 && ts.every((t) => t.conducted);
   const allClassMembers = useMemo(() => getClassMembers(members, classItem.id), [members, classItem.id]);
   const classMembers = useMemo(() => {
     if (!track) return allClassMembers;
@@ -3249,7 +3273,10 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
       )}
 
       <div style={styles.lightCard}>
-        <div style={styles.sectionLabel}>Sessions ({ts.length}) · {activeBatch}</div>
+        <div style={styles.sectionLabel}>
+          Sessions ({ts.length}) · {activeBatch}
+          {batchComplete && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: "#385026" }}>✓ Batch complete</span>}
+        </div>
         {ts.length === 0 ? (
           <div style={styles.emptyNote}>No sessions yet in {activeBatch}.</div>
         ) : (
@@ -3266,6 +3293,23 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
                     <ProgressBar pct={pct} />
                   </div>
                   <div style={styles.classBadge}>{pct}%</div>
+                  {isLeader ? (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onToggleConducted(t.id, !t.conducted); }}
+                      title={t.conducted ? "Mark as not conducted" : "Mark as conducted"}
+                      style={{
+                        padding: "3px 9px", borderRadius: 12, fontSize: 10.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                        border: t.conducted ? "1px solid #385026" : "1px solid rgba(31,56,100,0.25)",
+                        background: t.conducted ? "rgba(56,80,38,0.12)" : "transparent",
+                        color: t.conducted ? "#385026" : "#7A6E4E",
+                      }}
+                    >
+                      {t.conducted ? "✓ Conducted" : "Mark Conducted"}
+                    </button>
+                  ) : (
+                    t.conducted && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#385026", flexShrink: 0 }}>✓ Conducted</span>
+                  )}
                   {isLeader && (
                     <button style={styles.iconEdit} onClick={(e) => { e.stopPropagation(); onEditTopic(t); }} title="Edit session name">✎</button>
                   )}
@@ -3320,7 +3364,7 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
 // listing every member as attended / not yet attended
 // ============================================================
 
-function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, onBack, onToggleAttendance, onSetAttendanceDate, onEditTopic, onOpenMember }) {
+function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, onBack, onToggleAttendance, onSetAttendanceDate, onEditTopic, onOpenMember, onToggleConducted }) {
   const [scanOpen, setScanOpen] = useState(false);
   const [editUnlocked, setEditUnlocked] = useState(false);
   const classForTopic = useMemo(() => (classes || []).find((c) => c.name === topic.class), [classes, topic.class]);
@@ -3387,7 +3431,21 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
           <div style={styles.classBadge}>{topic.class}</div>
         </div>
         {isLeader && (
-          <button style={styles.primaryBtn} onClick={() => setScanOpen(true)}>Scan QR</button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => onToggleConducted(topic.id, !topic.conducted)}
+              style={{
+                padding: "9px 14px", borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: "pointer",
+                border: topic.conducted ? "1px solid #385026" : "1px solid rgba(31,56,100,0.25)",
+                background: topic.conducted ? "rgba(56,80,38,0.12)" : "transparent",
+                color: topic.conducted ? "#385026" : "#23211D",
+              }}
+            >
+              {topic.conducted ? "✓ Conducted" : "Mark Conducted"}
+            </button>
+            <button style={styles.primaryBtn} onClick={() => setScanOpen(true)}>Scan QR</button>
+          </div>
         )}
       </div>
 
@@ -3473,7 +3531,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   );
 }
 
-function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch }) {
+function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted }) {
   const [query, setQuery] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -3552,6 +3610,7 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
           onAddBatch={onAddBatch}
           onRenameBatch={onRenameBatch}
           onDeleteBatch={onDeleteBatch}
+          onToggleConducted={onToggleConducted}
         />
       )}
 
@@ -4094,6 +4153,15 @@ function App() {
       .then(() => { setRenamingTopic(null); showNotice("Session renamed."); })
       .catch((err) => showError("Could not rename the session. Error: " + err.message));
   };
+  // Marks a session as conducted (or reverts that), independent of
+  // individual member attendance — this is a simple leader-set flag
+  // for "did this session actually happen yet", which is what lets a
+  // batch's completeness be read off of its sessions.
+  const toggleTopicConducted = (id, conducted) => {
+    db.collection("topics").doc(id).update({ conducted })
+      .then(() => showNotice(conducted ? "Session marked as conducted." : "Session marked as not conducted."))
+      .catch((err) => showError("Could not update the session. Error: " + err.message));
+  };
   const seedDefaultClasses = async () => {
     try {
       for (const c of DEFAULT_CLASSES) {
@@ -4273,6 +4341,7 @@ function App() {
             onAddBatch={addBatch}
             onRenameBatch={(classId, oldName) => setRenamingBatch({ classId, oldName })}
             onDeleteBatch={deleteBatch}
+            onToggleConducted={toggleTopicConducted}
           />
         )}
 
@@ -4293,6 +4362,7 @@ function App() {
             onAddBatch={addBatch}
             onRenameBatch={(classId, oldName) => setRenamingBatch({ classId, oldName })}
             onDeleteBatch={deleteBatch}
+            onToggleConducted={toggleTopicConducted}
           />
         )}
 
@@ -4308,6 +4378,7 @@ function App() {
             onSetAttendanceDate={setAttendanceDate}
             onEditTopic={setRenamingTopic}
             onOpenMember={setOpenMember}
+            onToggleConducted={toggleTopicConducted}
           />
         )}
 
