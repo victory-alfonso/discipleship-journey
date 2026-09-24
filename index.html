@@ -593,6 +593,25 @@ function getBatchesForClass(classItem, topics) {
   if (set.size === 0) set.add("Batch 1");
   return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
+// A batch counts as complete once it has at least one session and
+// every session in it has been marked conducted — same rule used to
+// show the "✓ Batch complete" badge on the class detail view.
+function isBatchComplete(classItem, topics, batch) {
+  if (!classItem) return false;
+  const ts = topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === batch);
+  return ts.length > 0 && ts.every((t) => t.conducted);
+}
+// Batches still open for new enrollment — completed batches are
+// dropped so a leader can't enroll or add a member into a batch
+// that's already finished. Falls back to every batch if that would
+// otherwise leave no options at all (e.g. a class whose only batches
+// are all complete).
+function openBatchesForClass(classItem, topics) {
+  if (!classItem) return null;
+  const all = getBatchesForClass(classItem, topics || []);
+  const open = all.filter((b) => !isBatchComplete(classItem, topics || [], b));
+  return open.length ? open : all;
+}
 
 // Natural sort so "Session 2" lands before "Session 10" — topic
 // order from the data source isn't always numeric-safe.
@@ -2528,7 +2547,11 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
           // A track with no matching class yet (or before any classes
           // are set up) just falls back to "Batch 1".
           const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === track);
-          const batchOptions = matchingClass ? getBatchesForClass(matchingClass, topics || []) : ["Batch 1"];
+          // Completed batches are excluded so a leader can't enroll or
+          // add a member into a batch that's already finished; a
+          // member already recorded in one keeps that value on file
+          // even though it's no longer offered here for new picks.
+          const batchOptions = matchingClass ? openBatchesForClass(matchingClass, topics || []) : ["Batch 1"];
           const currentBatch = (trackBatch && trackBatch[track]) || "Batch 1";
           return (
             <div key={track} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -2570,7 +2593,16 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [trackStatus, setTrackStatus] = useState(() => (initialTrack ? { [initialTrack]: "Enrolled" } : {}));
-  const [trackBatch, setTrackBatch] = useState(() => (initialTrack && initialBatch ? { [initialTrack]: initialBatch } : {}));
+  const [trackBatch, setTrackBatch] = useState(() => {
+    if (!initialTrack || !initialBatch) return {};
+    // Don't default into a batch that's already complete (e.g. the
+    // leader had a finished batch selected when they hit "+ Add
+    // Member") — fall back to the first still-open batch instead.
+    const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === initialTrack);
+    const allowed = matchingClass ? openBatchesForClass(matchingClass, topics) : null;
+    const batch = allowed && !allowed.includes(initialBatch) ? allowed[0] : initialBatch;
+    return { [initialTrack]: batch };
+  });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   // Same "merge instead of creating a duplicate person" check used when
@@ -2708,7 +2740,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
 // EDIT MEMBER MODAL
 // ============================================================
 
-function EditMemberModal({ member, classes, topics, attendanceByMember, onClose, onSave, onCompleteAllSessions, onUpdateSessionAttendance }) {
+function EditMemberModal({ member, classes, topics, attendanceByMember, onClose, onSave, onCompleteAllSessions, onUpdateSessionAttendance, initialTrack }) {
   const [name, setName] = useState(member.name || "");
   const [photoUrl, setPhotoUrl] = useState(member.photoUrl || null);
   const [birthdate, setBirthdate] = useState(member.birthdate ? toDateInputValue(member.birthdate) : "");
@@ -2890,7 +2922,7 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
             <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
           </label>
         </div>
-        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} />
+        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
         <div style={styles.modalActions}>
           <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
@@ -3271,7 +3303,10 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   }, [classMembers, attendanceByMember, ts]);
 
   const openSession = (t) => { onOpenSession(t); };
-  const openMember = (m) => onOpenMember(m);
+  // Editing from inside a specific class should only show that
+  // class's discipleship track, not every track — pass the track
+  // along so the top level can restrict the edit form to it.
+  const openMember = (m) => onOpenMember(m, track);
   const addTopic = () => {
     if (!newTopic.trim()) return;
     onAddTopic(classItem.name, newTopic.trim(), ts.length + 1, activeBatch);
@@ -3716,7 +3751,7 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
         ) : (
           <div style={styles.rosterList}>
             {memberRows.map(({ member, done, total, pct }) => (
-              <div key={member.id} className="card-row" style={styles.rosterCard} onClick={() => onOpenMember(member)}>
+              <div key={member.id} className="card-row" style={styles.rosterCard} onClick={() => onOpenMember(member, track)}>
                 <Avatar name={member.name} photoUrl={member.photoUrl} size={44} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -3755,6 +3790,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   );
   const total = attended.length + notAttended.length;
   const pct = total ? Math.round((attended.length / total) * 100) : 0;
+  const track = trackNameForClass(topic.class);
 
   const MemberRow = ({ m, done }) => {
     const a = (attendanceByMember[m.id] || {})[topic.id];
@@ -3768,7 +3804,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
           onChange={(e) => { if (canEdit) onToggleAttendance(m.id, topic.id, e.target.checked); }}
           style={{ ...styles.sessionCheckbox, cursor: canEdit ? "pointer" : "not-allowed", opacity: isLeader && !editUnlocked ? 0.45 : 1 }}
         />
-        <div style={styles.sessionNameWrap} onClick={() => onOpenMember(m)} title="View member">
+        <div style={styles.sessionNameWrap} onClick={() => onOpenMember(m, track)} title="View member">
           <Avatar name={m.name} photoUrl={m.photoUrl} size={32} done={done} />
           <span style={styles.sessionName}>{m.name}</span>
           {done && <span style={styles.sessionCheckIcon}>✓</span>}
@@ -4462,6 +4498,12 @@ function App() {
   const [authUser, setAuthUser] = useState(undefined); // undefined = loading, null = signed out
   const [tab, setTab] = useState("roster");
   const [openMember, setOpenMember] = useState(null);
+  // Which discipleship track (if any) the currently open member was
+  // reached through — set when opened from inside a specific class
+  // (Classes tab), left null when opened from the Disciples tab so
+  // Edit Member shows every track. Used to restrict EditMemberModal.
+  const [openMemberTrack, setOpenMemberTrack] = useState(null);
+  const openMemberInContext = (m, track) => { setOpenMember(m); setOpenMemberTrack(track || null); };
   const [openClass, setOpenClass] = useState(null);
   const [openTopic, setOpenTopic] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -4617,6 +4659,7 @@ function App() {
         db.collection("members").doc(id),
       ]);
       setOpenMember(null);
+      setOpenMemberTrack(null);
       showNotice("Member removed.");
     } catch (err) {
       showError("Could not delete the member. Error: " + err.message);
@@ -5350,16 +5393,16 @@ function App() {
         </header>
 
         <nav style={styles.nav}>
-          {!isOneOnly && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "roster" ? styles.navItemActive : {}) }} onClick={() => { setTab("roster"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Disciples</button>}
-          {!isOneOnly && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "classes" ? styles.navItemActive : {}) }} onClick={() => { setTab("classes"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Classes</button>}
-          {canUseOneOnOne && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "one2one" ? styles.navItemActive : {}) }} onClick={() => { setTab("one2one"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); setOpenOneOnOne(null); }}>ONE2ONE</button>}
+          {!isOneOnly && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "roster" ? styles.navItemActive : {}) }} onClick={() => { setTab("roster"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); }}>Disciples</button>}
+          {!isOneOnly && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "classes" ? styles.navItemActive : {}) }} onClick={() => { setTab("classes"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); }}>Classes</button>}
+          {canUseOneOnOne && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "one2one" ? styles.navItemActive : {}) }} onClick={() => { setTab("one2one"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); setOpenOneOnOne(null); }}>ONE2ONE</button>}
           {isLeader && (
-            <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "registrations" ? styles.navItemActive : {}) }} onClick={() => { setTab("registrations"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>
+            <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "registrations" ? styles.navItemActive : {}) }} onClick={() => { setTab("registrations"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); }}>
               Registrations{pendingRegistrations.length > 0 ? ` (${pendingRegistrations.length})` : ""}
             </button>
           )}
           {isLeader && (
-            <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "settings" ? styles.navItemActive : {}) }} onClick={() => { setTab("settings"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Settings</button>
+            <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "settings" ? styles.navItemActive : {}) }} onClick={() => { setTab("settings"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); }}>Settings</button>
           )}
         </nav>
       </div>
@@ -5382,7 +5425,7 @@ function App() {
             topics={topics}
             attendanceByMember={attendanceByMember}
             isLeader={isLeader}
-            onOpen={setOpenMember}
+            onOpen={(m) => openMemberInContext(m, null)}
             onAdd={() => setAddOpen(true)}
           />
         )}
@@ -5404,7 +5447,7 @@ function App() {
             onAddTopic={addTopic}
             onDeleteTopic={deleteTopic}
             onEditTopic={setRenamingTopic}
-            onOpenMember={setOpenMember}
+            onOpenMember={openMemberInContext}
             onAddBatch={addBatch}
             onRenameBatch={(classId, oldName) => setRenamingBatch({ classId, oldName })}
             onDeleteBatch={deleteBatch}
@@ -5427,7 +5470,7 @@ function App() {
             onDeleteTopic={deleteTopic}
             onEditClass={setRenamingClass}
             onEditTopic={setRenamingTopic}
-            onOpenMember={setOpenMember}
+            onOpenMember={openMemberInContext}
             onAddBatch={addBatch}
             onRenameBatch={(classId, oldName) => setRenamingBatch({ classId, oldName })}
             onDeleteBatch={deleteBatch}
@@ -5478,7 +5521,7 @@ function App() {
           onToggleAttendance={toggleAttendance}
           onSetAttendanceDate={setAttendanceDate}
           onEditTopic={setRenamingTopic}
-          onOpenMember={setOpenMember}
+          onOpenMember={openMemberInContext}
           onToggleConducted={toggleTopicConducted}
         />
       )}
@@ -5490,7 +5533,7 @@ function App() {
           topics={topics}
           attendanceByMember={attendanceByMember}
           isLeader={isLeader}
-          onBack={() => setOpenMember(null)}
+          onBack={() => { setOpenMember(null); setOpenMemberTrack(null); }}
           onToggleAttendance={toggleAttendance}
           onSetAttendanceDate={setAttendanceDate}
           onDeleteMember={deleteMember}
@@ -5536,6 +5579,7 @@ function App() {
           onSave={(data) => updateMember(editingMember.id, data)}
           onCompleteAllSessions={completeAllSessionsForClass}
           onUpdateSessionAttendance={updateSessionAttendanceForClass}
+          initialTrack={openMemberTrack}
         />
       )}
       {renamingClass && (
