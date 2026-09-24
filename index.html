@@ -3901,19 +3901,23 @@ function oneOnOneClassSessions(classItem, topics) {
   const firstBatch = getBatchesForClass(classItem, topics)[0];
   return sortTopicsForDisplay(topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === firstBatch));
 }
-function isOneOnOneSessionDone(person, topic) {
+function isOneOnOneSessionDone(person, topic, attendanceByMember) {
   const p = person.progress && person.progress[topic.id];
-  if (p) return !!p.conducted;
+  if (p && p.conducted) return true;
+  // Marked present in the Classes tab for the linked Disciples member.
+  const att = attendanceByMember && person.memberId && attendanceByMember[person.memberId] && attendanceByMember[person.memberId][topic.id];
+  if (att && att.attended) return true;
+  if (p) return false;
   // Older ONE2ONE entries stored their own session list — match by name.
   const legacy = (person.sessions || []).find((x) => x.name === topic.name);
   return !!(legacy && legacy.conducted);
 }
-function oneOnOneDoneCount(person, sessions) {
-  return sessions.filter((t) => isOneOnOneSessionDone(person, t)).length;
+function oneOnOneDoneCount(person, sessions, attendanceByMember) {
+  return sessions.filter((t) => isOneOnOneSessionDone(person, t, attendanceByMember)).length;
 }
 
-function OneOnOneCard({ person, sessions, showAdder, onOpen, onEdit, onDelete }) {
-  const done = oneOnOneDoneCount(person, sessions);
+function OneOnOneCard({ person, sessions, attendanceByMember, showAdder, onOpen, onEdit, onDelete }) {
+  const done = oneOnOneDoneCount(person, sessions, attendanceByMember);
   const pct = sessions.length ? Math.round((done / sessions.length) * 100) : 0;
   const badge = pct >= 100 ? PHOTO_BADGE.done : pct > 0 ? PHOTO_BADGE.progress : PHOTO_BADGE.none;
   return (
@@ -3945,7 +3949,7 @@ function OneOnOneCard({ person, sessions, showAdder, onOpen, onEdit, onDelete })
   );
 }
 
-function OneOnOne({ people, sessions, hasClass, onAdd, onOpen, onEdit, onDelete, showAll }) {
+function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="stack-mobile" style={styles.toolbar}>
@@ -3968,6 +3972,7 @@ function OneOnOne({ people, sessions, hasClass, onAdd, onOpen, onEdit, onDelete,
               key={p.id}
               person={p}
               sessions={sessions}
+              attendanceByMember={attendanceByMember}
               showAdder={showAll}
               onOpen={onOpen}
               onEdit={onEdit}
@@ -3980,8 +3985,8 @@ function OneOnOne({ people, sessions, hasClass, onAdd, onOpen, onEdit, onDelete,
   );
 }
 
-function OneOnOneDetailModal({ person, sessions, hasClass, onClose, onEdit, onToggleSession }) {
-  const done = oneOnOneDoneCount(person, sessions);
+function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, onClose, onEdit, onToggleSession }) {
+  const done = oneOnOneDoneCount(person, sessions, attendanceByMember);
   const pct = sessions.length ? Math.round((done / sessions.length) * 100) : 0;
   const roundBtn = { position: "absolute", top: 12, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 32, height: 32, color: "#F5F2E4", fontSize: 18, cursor: "pointer", lineHeight: 1, zIndex: 3 };
 
@@ -4012,14 +4017,14 @@ function OneOnOneDetailModal({ person, sessions, hasClass, onClose, onEdit, onTo
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {sessions.map((t) => {
-                  const conducted = isOneOnOneSessionDone(person, t);
+                  const conducted = isOneOnOneSessionDone(person, t, attendanceByMember);
                   return (
                     <label key={t.id} style={{ ...detailRow, cursor: "pointer" }}>
                       <input
                         type="checkbox"
                         style={styles.sessionCheckbox}
                         checked={conducted}
-                        onChange={(e) => onToggleSession(person.id, t.id, e.target.checked)}
+                        onChange={(e) => onToggleSession(person, t.id, e.target.checked)}
                       />
                       <span style={{ flex: 1, fontSize: 14, fontWeight: 600, textDecoration: conducted ? "line-through" : "none", opacity: conducted ? 0.7 : 1 }}>{t.name}</span>
                     </label>
@@ -4440,27 +4445,106 @@ function App() {
   // the array from local state and writing the whole array back,
   // rather than a subcollection.
   // ============================================================
+  // Every ONE2ONE person is also a real Disciples member enrolled in the
+  // ONE2ONE class. The member doc is created in the same batch as the
+  // ONE2ONE doc and linked both ways (memberId / oneOnOneId), and their
+  // ONE2ONE session checks are mirrored into attendance + status below.
+  const oneOnOneTrack = () => (oneOnOneClass && trackNameForClass(oneOnOneClass.name)) || "One2One";
+  const oneOnOneStatusFor = (done, total) => (total > 0 && done === total ? "Completed" : done > 0 ? "In-Progress" : "Enrolled");
+  const buildOneOnOneMember = ({ name, photoUrl, oneOnOneId, status }) => {
+    const track = oneOnOneTrack();
+    const trackStatus = { [track]: status };
+    const classStatus = deriveClassStatusFromTracks(classes, trackStatus, null);
+    const classIds = Object.keys(classStatus).filter((id) => classStatus[id] && classStatus[id] !== "Not Enrolled");
+    if (oneOnOneClass) {
+      classStatus[oneOnOneClass.id] = status;
+      if (!classIds.includes(oneOnOneClass.id)) classIds.push(oneOnOneClass.id);
+    }
+    const trackBatch = oneOnOneClass ? { [track]: getBatchesForClass(oneOnOneClass, topics)[0] } : {};
+    return {
+      name, photoUrl: photoUrl || null,
+      birthdate: "", gender: "", lifeStage: "", category: "", contactNumber: "", address: "", notes: "",
+      classIds, classStatus, trackStatus, trackBatch,
+      dateAdded: new Date(), source: "one2one", createdBy: currentEmail, oneOnOneId,
+    };
+  };
   const addOneOnOnePerson = ({ name, photoUrl }) => {
-    return db.collection("oneOnOne").add({ name, photoUrl: photoUrl || null, createdBy: currentEmail, createdAt: new Date(), progress: {} })
-      .then(() => { setAddOneOnOneOpen(false); showNotice("Added to ONE2ONE."); })
+    const personRef = db.collection("oneOnOne").doc();
+    const memberRef = db.collection("members").doc();
+    const batch = db.batch();
+    batch.set(memberRef, buildOneOnOneMember({ name, photoUrl, oneOnOneId: personRef.id, status: "Enrolled" }));
+    batch.set(personRef, { name, photoUrl: photoUrl || null, createdBy: currentEmail, createdAt: new Date(), progress: {}, memberId: memberRef.id });
+    return batch.commit()
+      .then(() => { setAddOneOnOneOpen(false); showNotice("Added to ONE2ONE and Disciples."); })
       .catch((err) => showError("Could not add them. Error: " + err.message));
   };
-  const updateOneOnOnePerson = (id, { name, photoUrl }) => {
-    return db.collection("oneOnOne").doc(id).update({ name, photoUrl: photoUrl || null })
-      .then(() => { setEditingOneOnOne(null); showNotice("Saved."); })
-      .catch((err) => showError("Could not save the changes. Error: " + err.message));
+  const updateOneOnOnePerson = async (id, { name, photoUrl }) => {
+    try {
+      const person = oneOnOneRaw.find((p) => p.id === id);
+      const batch = db.batch();
+      batch.update(db.collection("oneOnOne").doc(id), { name, photoUrl: photoUrl || null });
+      if (person && person.memberId) {
+        const memberRef = db.collection("members").doc(person.memberId);
+        if ((await memberRef.get()).exists) batch.update(memberRef, { name, photoUrl: photoUrl || null });
+      }
+      await batch.commit();
+      setEditingOneOnOne(null);
+      showNotice("Saved.");
+    } catch (err) {
+      showError("Could not save the changes. Error: " + err.message);
+    }
   };
   const deleteOneOnOnePerson = async (id, name) => {
-    if (!(await askConfirm({ title: "Remove from ONE2ONE?", message: `${name} and their progress will be removed. This can't be undone.`, confirmLabel: "Remove", danger: true }))) return;
+    if (!(await askConfirm({ title: "Remove from ONE2ONE?", message: `${name} and their ONE2ONE progress will be removed. Their record in the Disciples tab is kept.`, confirmLabel: "Remove", danger: true }))) return;
     db.collection("oneOnOne").doc(id).delete()
       .then(() => { setOpenOneOnOne(null); showNotice("Removed."); })
       .catch((err) => showError("Could not remove them. Error: " + err.message));
   };
-  // Sessions come from the ONE2ONE class's topics; only this person's
-  // done/not-done state is written, keyed by the topic's id.
-  const toggleOneOnOneSession = (personId, topicId, conducted) => {
-    db.collection("oneOnOne").doc(personId).update({ [`progress.${topicId}`]: { conducted, dateConducted: conducted ? new Date() : null } })
-      .catch((err) => showError("Could not save that. Error: " + err.message));
+  // Checking a ONE2ONE session also marks that session attended for the
+  // linked Disciples member and keeps their ONE2ONE class status in sync
+  // (0 done = Enrolled, some = In-Progress, all = Completed), leaving a
+  // manually set Incomplete/Cancelled status alone — same rules as
+  // toggleAttendance above.
+  const toggleOneOnOneSession = async (person, topicId, conducted) => {
+    try {
+      const personRef = db.collection("oneOnOne").doc(person.id);
+      const total = oneOnOneSessions.length;
+      const doneNow = oneOnOneSessions.filter((t) => (t.id === topicId ? conducted : isOneOnOneSessionDone(person, t, attendanceByMember))).length;
+      const nextStatus = oneOnOneStatusFor(doneNow, total);
+
+      // Make sure the linked Disciples member exists (older ONE2ONE
+      // entries, or one removed from Disciples, get created here).
+      const memberRef = person.memberId ? db.collection("members").doc(person.memberId) : db.collection("members").doc();
+      if (!(await memberRef.get()).exists) {
+        const priorDone = oneOnOneSessions.filter((t) => isOneOnOneSessionDone(person, t, attendanceByMember)).length;
+        const fix = db.batch();
+        fix.set(memberRef, buildOneOnOneMember({ name: person.name, photoUrl: person.photoUrl, oneOnOneId: person.id, status: oneOnOneStatusFor(priorDone, total) }));
+        fix.update(personRef, { memberId: memberRef.id });
+        await fix.commit();
+      }
+
+      const track = oneOnOneTrack();
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(memberRef);
+        const m = snap.data() || {};
+        const currentStatus = (m.trackStatus && m.trackStatus[track]) || "Not Enrolled";
+        const AUTO_STATUSES = ["Not Enrolled", "Enrolled", "In-Progress", "Completed"];
+        tx.update(personRef, { [`progress.${topicId}`]: { conducted, dateConducted: conducted ? new Date() : null }, memberId: memberRef.id });
+        tx.set(db.collection("attendance").doc(`${memberRef.id}_${topicId}`), { memberId: memberRef.id, topicId, attended: conducted, dateAttended: conducted ? new Date() : null }, { merge: true });
+        if (AUTO_STATUSES.includes(currentStatus) && nextStatus !== currentStatus) {
+          const nextTrackStatus = { ...(m.trackStatus || {}), [track]: nextStatus };
+          const nextClassStatus = deriveClassStatusFromTracks(classes, nextTrackStatus, m.classStatus);
+          const classIds = Array.isArray(m.classIds) ? [...m.classIds] : [];
+          if (oneOnOneClass) {
+            nextClassStatus[oneOnOneClass.id] = nextStatus;
+            if (!classIds.includes(oneOnOneClass.id)) classIds.push(oneOnOneClass.id);
+          }
+          tx.update(memberRef, { trackStatus: nextTrackStatus, classStatus: nextClassStatus, classIds });
+        }
+      });
+    } catch (err) {
+      showError("Could not save that. Error: " + err.message);
+    }
   };
   const addClass = (name, order, photoUrl) => {
     db.collection("classes").add({ name, order, photoUrl: photoUrl || null })
@@ -4946,6 +5030,7 @@ function App() {
             onAdd={() => setAddOneOnOneOpen(true)}
             onOpen={setOpenOneOnOne}
             sessions={oneOnOneSessions}
+            attendanceByMember={attendanceByMember}
             hasClass={!!oneOnOneClass}
             onEdit={setEditingOneOnOne}
             onDelete={deleteOneOnOnePerson}
@@ -5005,6 +5090,7 @@ function App() {
         <OneOnOneDetailModal
           person={liveOpenOneOnOne}
           sessions={oneOnOneSessions}
+          attendanceByMember={attendanceByMember}
           hasClass={!!oneOnOneClass}
           onClose={() => setOpenOneOnOne(null)}
           onEdit={setEditingOneOnOne}
