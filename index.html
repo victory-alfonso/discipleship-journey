@@ -2385,7 +2385,7 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
               </label>
               {status !== "Not Enrolled" && (
                 <input
-                  style={{ ...styles.modalInput, marginBottom: 0, marginLeft: "auto", flex: "0 0 160px", fontSize: 12 }}
+                  style={{ ...styles.modalInput, marginBottom: 0, fontSize: 13 }}
                   placeholder="Batch (optional, e.g. Batch 2)"
                   value={(trackBatch && trackBatch[track]) || ""}
                   onChange={(e) => onBatchChange(track, e.target.value)}
