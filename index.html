@@ -1660,11 +1660,9 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
   const [lifeStageFilter, setLifeStageFilter] = useState("");
   const [genderFilter, setGenderFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
-  const [classFilter, setClassFilter] = useState("");
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
   const [trackChips, setTrackChips] = useState([]); // multi-select na array ng DISCIPLESHIP_TRACKS
-  const [statusToggle, setStatusToggle] = useState(""); // "" | "In-Progress" | "Completed"
   const [batchChip, setBatchChip] = useState("");      // batch label, kapag iisa lang ang napiling track
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
@@ -1682,20 +1680,16 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
     ? Array.from(new Set(members.map((m) => (m.trackBatch && m.trackBatch[singleTrackChip]) || "").filter(Boolean)))
     : [];
   const matchesTrackStatus = (m) => {
-    if (trackChips.length === 0 && !statusToggle) return true;
-    if (trackChips.length > 0) {
-      return trackChips.some((t) => {
-        const st = (m.trackStatus && m.trackStatus[t]) || "Not Enrolled";
-        const passesStatus = statusToggle ? st === statusToggle : st !== "Not Enrolled";
-        if (!passesStatus) return false;
-        if (batchChip && singleTrackChip === t) {
-          const b = (m.trackBatch && m.trackBatch[t]) || "";
-          if (b !== batchChip) return false;
-        }
-        return true;
-      });
-    }
-    return DISCIPLESHIP_TRACKS.some((t) => ((m.trackStatus && m.trackStatus[t]) || "Not Enrolled") === statusToggle);
+    if (trackChips.length === 0) return true;
+    return trackChips.some((t) => {
+      const st = (m.trackStatus && m.trackStatus[t]) || "Not Enrolled";
+      if (st === "Not Enrolled") return false;
+      if (batchChip && singleTrackChip === t) {
+        const b = (m.trackBatch && m.trackBatch[t]) || "";
+        if (b !== batchChip) return false;
+      }
+      return true;
+    });
   };
 
   const filtered = members.filter((m) => {
@@ -1710,15 +1704,11 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
     const mAge = ageFromBirthdate(m.birthdate);
     if (minAge && !(typeof mAge === "number" && mAge >= Number(minAge))) return false;
     if (maxAge && !(typeof mAge === "number" && mAge <= Number(maxAge))) return false;
-    if (classFilter) {
-      const isEnrolled = getEnrolledClasses(classes, m).some((c) => c.name === classFilter);
-      if (!isEnrolled) return false;
-    }
     if (!matchesTrackStatus(m)) return false;
     return true;
   });
-  const anyFilterActive = query || lifeStageFilter || genderFilter || categoryFilter || classFilter || minAge || maxAge || trackChips.length > 0 || statusToggle || batchChip;
-  const clearFilters = () => { setQuery(""); setLifeStageFilter(""); setGenderFilter(""); setCategoryFilter(""); setClassFilter(""); setMinAge(""); setMaxAge(""); setTrackChips([]); setStatusToggle(""); setBatchChip(""); };
+  const anyFilterActive = query || lifeStageFilter || genderFilter || categoryFilter || minAge || maxAge || trackChips.length > 0 || batchChip;
+  const clearFilters = () => { setQuery(""); setLifeStageFilter(""); setGenderFilter(""); setCategoryFilter(""); setMinAge(""); setMaxAge(""); setTrackChips([]); setBatchChip(""); };
 
   // Sortable columns: click a header to sort by it, click again to
   // flip direction. Track-status columns sort by a fixed status
@@ -1770,10 +1760,6 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
         <select style={styles.toolbarInput} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">Membership: All</option>
           {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select className="filter-span-2" style={{ ...styles.toolbarInput, flex: "1 1 160px" }} value={classFilter} onChange={(e) => setClassFilter(e.target.value)}>
-          <option value="">Class: All</option>
-          {classes.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
         </select>
         <input style={{ ...styles.toolbarInput, flex: "0 1 90px", minWidth: 70 }} type="number" min="0" placeholder="Min age" value={minAge} onChange={(e) => setMinAge(e.target.value)} />
         <input style={{ ...styles.toolbarInput, flex: "0 1 90px", minWidth: 70 }} type="number" min="0" placeholder="Max age" value={maxAge} onChange={(e) => setMaxAge(e.target.value)} />
@@ -1830,28 +1816,6 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
                 }}
               >
                 {b}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {members.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 10px" }}>
-          {["In-Progress", "Completed"].map((s) => {
-            const active = statusToggle === s;
-            return (
-              <button
-                key={s}
-                onClick={() => { setStatusToggle(active ? "" : s); }}
-                style={{
-                  padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-                  border: active ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.2)",
-                  background: active ? (s === "Completed" ? "rgba(56,80,38,0.18)" : "rgba(229,164,48,0.22)") : "rgba(255,255,255,0.5)",
-                  color: active ? (s === "Completed" ? "#385026" : "#A9782F") : "#7A6E4E",
-                }}
-              >
-                {s === "In-Progress" ? "In Prog." : s}
               </button>
             );
           })}
