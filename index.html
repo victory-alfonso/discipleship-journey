@@ -2216,7 +2216,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
 
               <div className="dj-modal-list" style={{ flex: 1, minWidth: 0, maxHeight: "72vh", overflowY: "auto", paddingRight: 2, paddingTop: 6 }}>
                 {ts.length === 0 ? (
-                  <div style={styles.emptyNote}>No topics added for this class yet.</div>
+                  <div style={{ ...styles.emptyNote, color: "rgba(245,242,228,0.7)" }}>No topics added for this class yet.</div>
                 ) : (
                   <div style={styles.sessionList}>
                     {ts.map((t) => {
@@ -2227,7 +2227,11 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
                           className="milestone-row"
                           style={{
                             ...styles.sessionRow,
-                            ...(doneT ? styles.sessionRowDone : {}),
+                            background: "rgba(255,255,255,0.09)",
+                            border: "1px solid rgba(255,255,255,0.16)",
+                            backdropFilter: "blur(6px)",
+                            WebkitBackdropFilter: "blur(6px)",
+                            ...(doneT ? { background: "rgba(142,209,158,0.22)", border: "1px solid rgba(142,209,158,0.45)" } : {}),
                           }}
                         >
                           <label style={{ ...styles.sessionNameWrap, cursor: "default" }}>
@@ -2235,14 +2239,14 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
                               type="checkbox"
                               checked={doneT}
                               disabled
-                              style={{ ...styles.sessionCheckbox, cursor: "not-allowed", opacity: 0.6 }}
+                              style={{ ...styles.sessionCheckbox, cursor: "not-allowed", opacity: 0.85, accentColor: "#8FD19E" }}
                             />
-                            <span style={styles.sessionName}>{t.name}</span>
-                            {doneT && <span style={styles.sessionCheckIcon}>✓</span>}
+                            <span style={{ ...styles.sessionName, color: "#F5F2E4" }}>{t.name}</span>
+                            {doneT && <span style={{ ...styles.sessionCheckIcon, color: "#8FD19E" }}>✓</span>}
                           </label>
                           {doneT && att[t.id].dateAttended && (
                             <span style={styles.topicMeta}>
-                              <span style={styles.sessionDateBadge}>{fmtDateTime(att[t.id].dateAttended)}</span>
+                              <span style={{ ...styles.sessionDateBadge, background: "rgba(255,255,255,0.16)", color: "#EAF7EC", border: "1px solid rgba(255,255,255,0.2)" }}>{fmtDateTime(att[t.id].dateAttended)}</span>
                             </span>
                           )}
                         </div>
