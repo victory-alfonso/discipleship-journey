@@ -3769,7 +3769,7 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, admins, 
     <div>
       <div style={styles.settingsSection}>
         <div style={styles.sectionLabel}>Leaders (can edit)</div>
-        <div style={styles.pairNote}>Anyone whose email is listed here can add classes, topics, members, and mark attendance. Everyone else who signs in gets a read-only view.</div>
+        <div style={styles.pairNote}>Anyone whose email is listed here (or in the Managers list below) can add classes, topics, members, and mark attendance. Everyone else who signs in gets a read-only view.</div>
         <div style={styles.restrictList}>
           {leaders.map((l) => (
             <div key={l.id} style={styles.restrictRow}>
@@ -3791,7 +3791,7 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, admins, 
       {isAdmin && (
         <div style={{ ...styles.settingsSection, marginTop: 20 }}>
           <div style={styles.sectionLabel}>Managers (can edit this Settings page)</div>
-          <div style={styles.pairNote}>Only managers listed here can add or remove leaders and other managers here. Every other leader can still see the Leaders list above, but not this section.</div>
+          <div style={styles.pairNote}>Only managers listed here can add or remove leaders and other managers here. A manager can already do everything a leader can, even without a separate entry in the Leaders list above.</div>
           {admins.length === 0 && (
             <div style={styles.emptyNote}>No managers set yet, so every leader can currently manage this page. Add someone below to lock it down to just them.</div>
           )}
@@ -3853,11 +3853,17 @@ function App() {
   const [leaders] = useCollection("leaders", null, authReady);
   const [admins] = useCollection("admins", null, authReady);
 
-  const isLeader = leaders.some((l) => l.id === currentEmail);
-  // Managers are a subset of leaders allowed to edit the Settings page
-  // (add/remove leaders and managers). Until the first manager is added,
-  // every leader is treated as a manager so nobody gets locked out.
-  const isAdmin = isLeader && (admins.length === 0 || admins.some((a) => a.id === currentEmail));
+  // A manager (in "admins") gets full edit access even if they were
+  // never separately added to "leaders" — managers aren't a subset of
+  // leaders, they're a superset with one extra privilege (managing this
+  // Settings page). Someone in "leaders" but not "admins" can edit but
+  // not manage; someone in neither can do nothing.
+  const isInLeadersList = leaders.some((l) => l.id === currentEmail);
+  const isInManagersList = admins.some((a) => a.id === currentEmail);
+  const isLeader = isInLeadersList || isInManagersList;
+  // Until the first manager is added, every leader is treated as a
+  // manager so nobody gets locked out of Settings.
+  const isAdmin = isInManagersList || (admins.length === 0 && isInLeadersList);
 
   const [pendingRegistrationsAll] = useCollection("pendingRegistrations", null, isLeader);
   // Approved/rejected registrations stay in this collection (so each
