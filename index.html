@@ -1658,6 +1658,27 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
   const [classFilter, setClassFilter] = useState("");
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
+  const [quickChip, setQuickChip] = useState("");
+  const [sortCol, setSortCol] = useState(null);
+  const [sortDir, setSortDir] = useState("asc");
+
+  const memberHasNoClass = (m) => DISCIPLESHIP_TRACKS.every((t) => ((m.trackStatus && m.trackStatus[t]) || "Not Enrolled") === "Not Enrolled");
+  const memberHasInProgress = (m) => DISCIPLESHIP_TRACKS.some((t) => (m.trackStatus && m.trackStatus[t]) === "In-Progress");
+  const memberCompletedAll = (m) => {
+    const started = DISCIPLESHIP_TRACKS.filter((t) => ((m.trackStatus && m.trackStatus[t]) || "Not Enrolled") !== "Not Enrolled");
+    return started.length > 0 && started.every((t) => m.trackStatus[t] === "Completed");
+  };
+  const memberIsNewlyRegistered = (m) => {
+    if (!m.dateAdded) return false;
+    const dt = m.dateAdded.toDate ? m.dateAdded.toDate() : new Date(m.dateAdded);
+    return (Date.now() - dt.getTime()) <= 30 * 24 * 60 * 60 * 1000;
+  };
+  const QUICK_CHIPS = [
+    { key: "noClass", label: "Walang class pa", test: memberHasNoClass },
+    { key: "inProgress", label: "May In-Progress", test: memberHasInProgress },
+    { key: "completedAll", label: "Completed lahat", test: memberCompletedAll },
+    { key: "newlyRegistered", label: "Bagong register", test: memberIsNewlyRegistered },
+  ];
 
   const filtered = members.filter((m) => {
     if (query) {
@@ -1675,10 +1696,40 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       const isEnrolled = getEnrolledClasses(classes, m).some((c) => c.name === classFilter);
       if (!isEnrolled) return false;
     }
+    if (quickChip) {
+      const chip = QUICK_CHIPS.find((c) => c.key === quickChip);
+      if (chip && !chip.test(m)) return false;
+    }
     return true;
   });
-  const anyFilterActive = query || lifeStageFilter || genderFilter || categoryFilter || classFilter || minAge || maxAge;
-  const clearFilters = () => { setQuery(""); setLifeStageFilter(""); setGenderFilter(""); setCategoryFilter(""); setClassFilter(""); setMinAge(""); setMaxAge(""); };
+  const anyFilterActive = query || lifeStageFilter || genderFilter || categoryFilter || classFilter || minAge || maxAge || quickChip;
+  const clearFilters = () => { setQuery(""); setLifeStageFilter(""); setGenderFilter(""); setCategoryFilter(""); setClassFilter(""); setMinAge(""); setMaxAge(""); setQuickChip(""); };
+
+  // Sortable columns: click a header to sort by it, click again to
+  // flip direction. Track-status columns sort by a fixed status
+  // rank so meaningful statuses (e.g. In-Progress) cluster together
+  // instead of sorting alphabetically.
+  const STATUS_SORT_RANK = { "Completed": 0, "In-Progress": 1, "Enrolled": 2, "Incomplete": 3, "Cancelled": 4, "Not Enrolled": 5 };
+  const sortAccessor = (m, col) => {
+    if (col === "name") return (m.name || "").toLowerCase();
+    if (col === "age") return ageFromBirthdate(m.birthdate) ?? -1;
+    if (col === "gender") return (m.gender || "").toLowerCase();
+    if (col === "lifeStage") return (m.lifeStage || "").toLowerCase();
+    if (col === "category") return (m.category || "").toLowerCase();
+    const status = (m.trackStatus && m.trackStatus[col]) || "Not Enrolled";
+    return STATUS_SORT_RANK[status] ?? 9;
+  };
+  const sorted = sortCol
+    ? [...filtered].sort((a, b) => {
+        const av = sortAccessor(a, sortCol), bv = sortAccessor(b, sortCol);
+        let cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
+        return sortDir === "asc" ? cmp : -cmp;
+      })
+    : filtered;
+  const toggleSort = (col) => {
+    if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else { setSortCol(col); setSortDir("asc"); }
+  };
 
   return (
     <div>
@@ -1715,8 +1766,50 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       </div>
 
       {members.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "-2px 0 10px" }}>
+          {QUICK_CHIPS.map((chip) => {
+            const active = quickChip === chip.key;
+            return (
+              <button
+                key={chip.key}
+                onClick={() => setQuickChip(active ? "" : chip.key)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: 20,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  border: active ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.25)",
+                  background: active ? "#1F3864" : "rgba(255,255,255,0.6)",
+                  color: active ? "#FFFFFF" : "#23211D",
+                }}
+              >
+                {chip.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {members.length > 0 && (
         <div style={{ fontSize: 12.5, color: "#7A6E4E", margin: "-6px 0 12px" }}>
           Showing {filtered.length} of {members.length} {members.length === 1 ? "member" : "members"}
+        </div>
+      )}
+
+      {members.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", fontSize: 11, color: "#7A6E4E", margin: "-4px 0 12px", alignItems: "center" }}>
+          <span style={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontSize: 10 }}>Legend:</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "rgba(31,56,100,0.18)" }} />
+            Not Enrolled
+          </span>
+          {TRACK_STATUSES.filter((s) => s !== "Not Enrolled").map((s) => (
+            <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+              <span style={{ ...styles.statusBadge, ...trackStatusBadgeStyle(s), padding: "2px 7px", fontSize: 8.5 }}>{s === "In-Progress" ? "In Prog." : s}</span>
+              {s}
+            </span>
+          ))}
         </div>
       )}
 
@@ -1727,21 +1820,24 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
             <thead>
               <tr>
                 {[
-                  { label: "Name" },
-                  { label: "Age" },
-                  { label: "Gender" },
-                  { label: "Life Stage" },
-                  { label: "Membership" },
-                  ...DISCIPLESHIP_TRACKS.map((t) => ({ label: t, wrap: t.length > 8 })),
+                  { label: "Name", col: "name" },
+                  { label: "Age", col: "age" },
+                  { label: "Gender", col: "gender" },
+                  { label: "Life Stage", col: "lifeStage" },
+                  { label: "Membership", col: "category" },
+                  ...DISCIPLESHIP_TRACKS.map((t) => ({ label: t, wrap: t.length > 8, col: t })),
                 ].map((h, i) => (
-                  <th key={h.label + i} style={{ textAlign: "left", padding: "10px 10px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, color: "#1F3864", background: "rgba(31,56,100,0.06)", borderBottom: "1px solid rgba(31,56,100,0.15)", whiteSpace: h.wrap ? "normal" : "nowrap", maxWidth: h.wrap ? 78 : undefined, lineHeight: 1.35, ...(i === 0 ? { position: "sticky", left: 0, zIndex: 2, background: "#ECE7D9", boxShadow: "2px 0 4px -3px rgba(31,56,100,0.25)" } : {}) }}>
-                    {h.label}
+                  <th
+                    key={h.label + i}
+                    onClick={() => toggleSort(h.col)}
+                    style={{ textAlign: "left", padding: "10px 10px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, color: "#1F3864", background: "rgba(31,56,100,0.06)", borderBottom: "1px solid rgba(31,56,100,0.15)", whiteSpace: h.wrap ? "normal" : "nowrap", maxWidth: h.wrap ? 78 : undefined, lineHeight: 1.35, cursor: "pointer", userSelect: "none", ...(i === 0 ? { position: "sticky", left: 0, zIndex: 2, background: "#ECE7D9", boxShadow: "2px 0 4px -3px rgba(31,56,100,0.25)" } : {}) }}>
+                    {h.label}{sortCol === h.col ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                   </th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((m) => {
+              {sorted.map((m) => {
                 const mAge = ageFromBirthdate(m.birthdate);
                 return (
                   <tr key={m.id} className="card-row" style={{ cursor: "pointer" }} onClick={() => onOpen(m)}>
