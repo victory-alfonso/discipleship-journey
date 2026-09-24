@@ -2980,7 +2980,7 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
           <div style={{ padding: "18px 20px 22px", color: "#F5F2E4" }}>
             {isLeader && (
               <div style={{ marginBottom: 18 }}>
-                <CopyRegistrationLinkButton classId={classItem.id} />
+                <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} />
               </div>
             )}
 
@@ -3149,15 +3149,21 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
 // sessions attended" progress for that class.
 // ============================================================
 
-function registrationLinkForClass(classId) {
+function registrationLinkForClass(classId, batch) {
   const base = window.location.href.replace(/[^/]*$/, "");
-  return `${base}register.html?classId=${classId}`;
+  const link = `${base}register.html?classId=${classId}`;
+  // Only stamp a batch onto the link when one was actually given — this
+  // keeps old copied links (and classes with just "Batch 1") behaving
+  // exactly as before, while a link copied while a specific batch tab
+  // is selected carries that batch so whoever fills it out is enrolled
+  // straight into it, no leader follow-up needed.
+  return batch ? `${link}&batch=${encodeURIComponent(batch)}` : link;
 }
 
-function CopyRegistrationLinkButton({ classId }) {
+function CopyRegistrationLinkButton({ classId, batch }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
-    const link = registrationLinkForClass(classId);
+    const link = registrationLinkForClass(classId, batch);
     try {
       await navigator.clipboard.writeText(link);
     } catch (err) {
@@ -3167,7 +3173,10 @@ function CopyRegistrationLinkButton({ classId }) {
     setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <button style={styles.ghostBtn} onClick={copy}>{copied ? "Copied!" : "Copy Registration Link"}</button>
+    <div style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
+      <button style={styles.ghostBtn} onClick={copy}>{copied ? "Copied!" : "Copy Registration Link"}</button>
+      {batch && <span style={{ fontSize: 11, color: "#7A6E4E" }}>Links new sign-ups straight into {batch}</span>}
+    </div>
   );
 }
 
@@ -3221,7 +3230,7 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
             {ts.length} session{ts.length === 1 ? "" : "s"} · {classMembers.length} member{classMembers.length === 1 ? "" : "s"}
           </div>
         </div>
-        {isLeader && <CopyRegistrationLinkButton classId={classItem.id} />}
+        {isLeader && <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} />}
       </div>
 
       {(batches.length > 1 || isLeader) && (
@@ -4242,6 +4251,24 @@ function App() {
     });
     return next;
   };
+  // Mirrors trackStatusForNewEnrollments, but for the batch label
+  // instead of the enrollment status. A registration link copied while
+  // a specific batch tab was selected (see CopyRegistrationLinkButton)
+  // carries that batch on the pending doc; approving it here is what
+  // actually places the person in that batch instead of leaving them
+  // to the "Batch 1" default. No batch on the pending doc (an older
+  // link, or a class that never got extra batches) leaves trackBatch
+  // untouched, same as before this feature existed.
+  const trackBatchForNewEnrollments = (classIds, existingTrackBatch, batchLabel) => {
+    if (!batchLabel) return existingTrackBatch || {};
+    const next = { ...(existingTrackBatch || {}) };
+    (classIds || []).forEach((cid) => {
+      const c = classes.find((cl) => cl.id === cid);
+      const track = c && trackNameForClass(c.name);
+      if (track) next[track] = batchLabel;
+    });
+    return next;
+  };
   const approveRegistration = async (pending, mergeIntoMemberId) => {
     try {
       let memberId = mergeIntoMemberId;
@@ -4251,14 +4278,16 @@ function App() {
         const newlyGrantedClassIds = (pending.classIds || []).filter((id) => !existingClassIds.includes(id));
         const nextClassIds = Array.from(new Set([...existingClassIds, ...(pending.classIds || [])]));
         const nextTrackStatus = trackStatusForNewEnrollments(newlyGrantedClassIds, member && member.trackStatus);
+        const nextTrackBatch = trackBatchForNewEnrollments(newlyGrantedClassIds, member && member.trackBatch, pending.batch);
         const nextClassStatus = deriveClassStatusFromTracks(classes, nextTrackStatus, member && member.classStatus);
-        await db.collection("members").doc(mergeIntoMemberId).update({ classIds: nextClassIds, trackStatus: nextTrackStatus, classStatus: nextClassStatus });
+        await db.collection("members").doc(mergeIntoMemberId).update({ classIds: nextClassIds, trackStatus: nextTrackStatus, trackBatch: nextTrackBatch, classStatus: nextClassStatus });
       } else {
-        const { id, selfRegistered, status, ...rest } = pending;
+        const { id, selfRegistered, status, batch, ...rest } = pending;
         const classIds = Array.isArray(pending.classIds) ? pending.classIds : [];
         const trackStatus = trackStatusForNewEnrollments(classIds, null);
+        const trackBatch = trackBatchForNewEnrollments(classIds, null, batch);
         const classStatus = deriveClassStatusFromTracks(classes, trackStatus, null);
-        const newMemberRef = await db.collection("members").add({ ...rest, classIds, trackStatus, classStatus, dateAdded: pending.dateAdded || new Date() });
+        const newMemberRef = await db.collection("members").add({ ...rest, classIds, trackStatus, trackBatch, classStatus, dateAdded: pending.dateAdded || new Date() });
         memberId = newMemberRef.id;
       }
       await db.collection("pendingRegistrations").doc(pending.id).update({ status: "approved", memberId });
