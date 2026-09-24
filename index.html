@@ -2430,7 +2430,7 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
   );
 }
 
-function AddMemberModal({ classes, topics, onClose, onSave }) {
+function AddMemberModal({ classes, topics, onClose, onSave, initialTrack, initialBatch, title }) {
   const [name, setName] = useState("");
   const [photoUrl, setPhotoUrl] = useState(null);
   const [birthdate, setBirthdate] = useState("");
@@ -2440,8 +2440,8 @@ function AddMemberModal({ classes, topics, onClose, onSave }) {
   const [contactNumber, setContactNumber] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
-  const [trackStatus, setTrackStatus] = useState({});
-  const [trackBatch, setTrackBatch] = useState({});
+  const [trackStatus, setTrackStatus] = useState(() => (initialTrack ? { [initialTrack]: "Enrolled" } : {}));
+  const [trackBatch, setTrackBatch] = useState(() => (initialTrack && initialBatch ? { [initialTrack]: initialBatch } : {}));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -2505,7 +2505,7 @@ function AddMemberModal({ classes, topics, onClose, onSave }) {
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
       <form style={styles.modalCard} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <div style={styles.modalTitle}>Add Member</div>
+        <div style={styles.modalTitle}>{title || "Add Member"}</div>
         {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
         <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
         <input style={styles.modalInput} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
@@ -2898,10 +2898,11 @@ function DetailBar({ pct }) {
   );
 }
 
-function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted }) {
+function ClassDetailModal({ classItem, classes, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
+  const [addMemberOpen, setAddMemberOpen] = useState(false);
   const batches = useMemo(() => getBatchesForClass(classItem, topics), [classItem, topics]);
   const [selectedBatch, setSelectedBatch] = useState(null);
   // Default to the last (newest, by natural sort) batch so a leader
@@ -3113,7 +3114,18 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
               </div>
             )}
 
-            <div style={{ ...detailLabel, marginTop: 24 }}>Members ({classMembers.length}) · {activeBatch}</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 24, flexWrap: "wrap" }}>
+              <div style={detailLabel}>Members ({classMembers.length}) · {activeBatch}</div>
+              {isLeader && onAddMember && (
+                <button
+                  type="button"
+                  onClick={() => setAddMemberOpen(true)}
+                  style={{ padding: "5px 12px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4" }}
+                >
+                  + Add Member
+                </button>
+              )}
+            </div>
             {classMembers.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)" }}>{allClassMembers.length === 0 ? "No members enrolled in this class yet." : `No members in ${activeBatch} yet.`}</div>
             ) : ts.length === 0 ? (
@@ -3139,6 +3151,17 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
           </div>
         </div>
       </div>
+      {addMemberOpen && (
+        <AddMemberModal
+          classes={classes || [classItem]}
+          topics={topics}
+          title={`Add Member to ${classItem.name}`}
+          initialTrack={track}
+          initialBatch={activeBatch}
+          onClose={() => setAddMemberOpen(false)}
+          onSave={(data) => onAddMember(data).then(() => setAddMemberOpen(false))}
+        />
+      )}
     </div>
   );
 }
@@ -3557,7 +3580,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   );
 }
 
-function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted }) {
+function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember }) {
   const [query, setQuery] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -3621,6 +3644,7 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
       {detailClass && (
         <ClassDetailModal
           classItem={detailClass}
+          classes={classes}
           topics={topics}
           members={members}
           attendanceByMember={attendanceByMember}
@@ -3637,6 +3661,7 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
           onRenameBatch={onRenameBatch}
           onDeleteBatch={onDeleteBatch}
           onToggleConducted={onToggleConducted}
+          onAddMember={onAddMember}
         />
       )}
 
@@ -4394,6 +4419,7 @@ function App() {
             onRenameBatch={(classId, oldName) => setRenamingBatch({ classId, oldName })}
             onDeleteBatch={deleteBatch}
             onToggleConducted={toggleTopicConducted}
+            onAddMember={addMember}
           />
         )}
 
