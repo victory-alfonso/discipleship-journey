@@ -3922,6 +3922,7 @@ function OneOnOneFormModal({ title, initial, submitLabel, onClose, onSave }) {
   const [photoUrl, setPhotoUrl] = useState(init.photoUrl || null);
   const [birthdate, setBirthdate] = useState(init.birthdate || "");
   const [gender, setGender] = useState(init.gender || "");
+  const [lifeStage, setLifeStage] = useState(init.lifeStage || "");
   const [contactNumber, setContactNumber] = useState(init.contactNumber || "");
   const [address, setAddress] = useState(init.address || "");
   const [error, setError] = useState("");
@@ -3932,12 +3933,13 @@ function OneOnOneFormModal({ title, initial, submitLabel, onClose, onSave }) {
     if (!name.trim()) { setError("Please enter the member's full name."); return; }
     if (!birthdate) { setError("Please enter a birthdate."); return; }
     if (!gender) { setError("Please select a gender."); return; }
+    if (!lifeStage) { setError("Please select a life stage."); return; }
     if (!contactNumber.trim()) { setError("Please enter a contact number."); return; }
     if (!address.trim()) { setError("Please enter an address."); return; }
     setError("");
     setBusy(true);
     try {
-      await onSave({ name: name.trim(), photoUrl: photoUrl || null, birthdate, gender, contactNumber: contactNumber.trim(), address: address.trim() });
+      await onSave({ name: name.trim(), photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber: contactNumber.trim(), address: address.trim() });
     } finally {
       setBusy(false);
     }
@@ -3965,14 +3967,21 @@ function OneOnOneFormModal({ title, initial, submitLabel, onClose, onSave }) {
         </div>
         <div style={styles.modalRow2}>
           <label style={styles.modalFieldLabel}>
+            Life stage
+            <select style={{ ...styles.modalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
+              <option value="">Select…</option>
+              {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
+            </select>
+          </label>
+          <label style={styles.modalFieldLabel}>
             Contact number
             <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
           </label>
-          <label style={styles.modalFieldLabel}>
-            Address
-            <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
-          </label>
         </div>
+        <label style={{ ...styles.modalFieldLabel, marginBottom: 8 }}>
+          Address
+          <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
+        </label>
         <div style={styles.modalActions}>
           <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : (submitLabel || "Save")}</button>
@@ -4517,7 +4526,7 @@ function App() {
   // ONE2ONE session checks are mirrored into attendance + status below.
   const oneOnOneTrack = () => (oneOnOneClass && trackNameForClass(oneOnOneClass.name)) || "One2One";
   const oneOnOneStatusFor = (done, total) => (total > 0 && done === total ? "Completed" : done > 0 ? "In-Progress" : "Enrolled");
-  const buildOneOnOneMember = ({ name, photoUrl, birthdate, gender, contactNumber, address, oneOnOneId, status }) => {
+  const buildOneOnOneMember = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address, oneOnOneId, status }) => {
     const track = oneOnOneTrack();
     const trackStatus = { [track]: status };
     const classStatus = deriveClassStatusFromTracks(classes, trackStatus, null);
@@ -4529,26 +4538,26 @@ function App() {
     const trackBatch = oneOnOneClass ? { [track]: getBatchesForClass(oneOnOneClass, topics)[0] } : {};
     return {
       name, photoUrl: photoUrl || null,
-      birthdate: birthdate || "", gender: gender || "", lifeStage: "", category: "", contactNumber: contactNumber || "", address: address || "", notes: "",
+      birthdate: birthdate || "", gender: gender || "", lifeStage: lifeStage || "", category: "", contactNumber: contactNumber || "", address: address || "", notes: "",
       classIds, classStatus, trackStatus, trackBatch,
       dateAdded: new Date(), source: "one2one", createdBy: currentEmail, oneOnOneId,
     };
   };
-  const addOneOnOnePerson = ({ name, photoUrl, birthdate, gender, contactNumber, address }) => {
+  const addOneOnOnePerson = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }) => {
     const personRef = db.collection("oneOnOne").doc();
     const memberRef = db.collection("members").doc();
     const batch = db.batch();
-    batch.set(memberRef, buildOneOnOneMember({ name, photoUrl, birthdate, gender, contactNumber, address, oneOnOneId: personRef.id, status: "Enrolled" }));
-    batch.set(personRef, { name, photoUrl: photoUrl || null, birthdate, gender, contactNumber, address, createdBy: currentEmail, createdAt: new Date(), progress: {}, memberId: memberRef.id });
+    batch.set(memberRef, buildOneOnOneMember({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address, oneOnOneId: personRef.id, status: "Enrolled" }));
+    batch.set(personRef, { name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address, createdBy: currentEmail, createdAt: new Date(), progress: {}, memberId: memberRef.id });
     return batch.commit()
       .then(() => { setAddOneOnOneOpen(false); showNotice("Added to ONE2ONE and Disciples."); })
       .catch((err) => showError("Could not add them. Error: " + err.message));
   };
-  const updateOneOnOnePerson = async (id, { name, photoUrl, birthdate, gender, contactNumber, address }) => {
+  const updateOneOnOnePerson = async (id, { name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }) => {
     try {
       const person = oneOnOneRaw.find((p) => p.id === id);
       const batch = db.batch();
-      const details = { name, photoUrl: photoUrl || null, birthdate, gender, contactNumber, address };
+      const details = { name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address };
       batch.update(db.collection("oneOnOne").doc(id), details);
       if (person && person.memberId) {
         const memberRef = db.collection("members").doc(person.memberId);
@@ -4585,7 +4594,7 @@ function App() {
       if (!(await memberRef.get()).exists) {
         const priorDone = oneOnOneSessions.filter((t) => isOneOnOneSessionDone(person, t, attendanceByMember)).length;
         const fix = db.batch();
-        fix.set(memberRef, buildOneOnOneMember({ name: person.name, photoUrl: person.photoUrl, birthdate: person.birthdate, gender: person.gender, contactNumber: person.contactNumber, address: person.address, oneOnOneId: person.id, status: oneOnOneStatusFor(priorDone, total) }));
+        fix.set(memberRef, buildOneOnOneMember({ name: person.name, photoUrl: person.photoUrl, birthdate: person.birthdate, gender: person.gender, lifeStage: person.lifeStage, contactNumber: person.contactNumber, address: person.address, oneOnOneId: person.id, status: oneOnOneStatusFor(priorDone, total) }));
         fix.update(personRef, { memberId: memberRef.id });
         await fix.commit();
       }
@@ -4613,6 +4622,111 @@ function App() {
       showError("Could not save that. Error: " + err.message);
     }
   };
+  // Self-heal for Leaders/Managers: keeps every ONE2ONE person in sync
+  // with the ONE2ONE class in the Classes tab — a Disciples member
+  // exists, is enrolled in the class, and every session they've done in
+  // ONE2ONE is recorded as attended (so the class's completed / in
+  // progress counts and each session's list of names stay right).
+  // Covers people added before the ONE2ONE class existed and older
+  // entries. It only fills gaps: an attendance record that already
+  // exists (even an unchecked one) is never overwritten.
+  const [oneOnOneSyncTick, setOneOnOneSyncTick] = useState(0);
+  const oneOnOneSyncing = useRef(false);
+  useEffect(() => {
+    if (!isLeader || !db || !oneOnOneClass || oneOnOneRaw.length === 0) return;
+    if (members.length === 0 && !oneOnOneRaw.some((p) => !p.memberId)) return;
+    if (oneOnOneSyncing.current) return;
+    oneOnOneSyncing.current = true;
+    let changed = false;
+    (async () => {
+      const total = oneOnOneSessions.length;
+      const track = oneOnOneTrack();
+      const AUTO = ["Not Enrolled", "Enrolled", "In-Progress", "Completed"];
+      const attIds = new Set(attendanceDocs.map((a) => a.id));
+      for (const p of oneOnOneRaw) {
+        try {
+          const legacyDone = (t) => {
+            const pr = p.progress && p.progress[t.id];
+            if (pr) return !!pr.conducted;
+            const lg = (p.sessions || []).find((x) => x.name === t.name);
+            return !!(lg && lg.conducted);
+          };
+          const doneByOneOnOne = oneOnOneSessions.filter(legacyDone);
+          const priorDone = oneOnOneSessions.filter((t) => isOneOnOneSessionDone(p, t, attendanceByMember)).length;
+
+          // 1. No linked member yet, or the linked one was deleted.
+          let m = p.memberId ? members.find((x) => x.id === p.memberId) : null;
+          if (!m) {
+            const memberRef = p.memberId ? db.collection("members").doc(p.memberId) : db.collection("members").doc();
+            if (p.memberId && members.length > 0 && (await memberRef.get()).exists) continue; // just not loaded yet
+            if (p.memberId && members.length === 0) continue;
+            const batch = db.batch();
+            batch.set(memberRef, buildOneOnOneMember({ name: p.name, photoUrl: p.photoUrl, birthdate: p.birthdate, gender: p.gender, lifeStage: p.lifeStage, contactNumber: p.contactNumber, address: p.address, oneOnOneId: p.id, status: oneOnOneStatusFor(priorDone, total) }));
+            if (memberRef.id !== p.memberId) batch.update(db.collection("oneOnOne").doc(p.id), { memberId: memberRef.id });
+            await batch.commit();
+            changed = true;
+            continue;
+          }
+
+          // 2. Enroll in the ONE2ONE class if the member isn't yet.
+          const update = {};
+          const trackStatus = { ...(m.trackStatus || {}) };
+          const classIds = Array.isArray(m.classIds) ? [...m.classIds] : [];
+          let classStatus = { ...(m.classStatus || {}) };
+          if (!classIds.includes(oneOnOneClass.id) && !trackStatus[track]) {
+            const st = oneOnOneStatusFor(priorDone, total);
+            trackStatus[track] = st;
+            classStatus = deriveClassStatusFromTracks(classes, trackStatus, m.classStatus);
+            classStatus[oneOnOneClass.id] = st;
+            classIds.push(oneOnOneClass.id);
+            update.trackStatus = trackStatus;
+            update.classStatus = classStatus;
+            update.classIds = classIds;
+            update.trackBatch = { ...(m.trackBatch || {}), [track]: getBatchesForClass(oneOnOneClass, topics)[0] };
+          }
+
+          // 3. Record sessions done in ONE2ONE that have no attendance doc yet.
+          const batch = db.batch();
+          const written = new Set();
+          for (const t of doneByOneOnOne) {
+            const docId = `${m.id}_${t.id}`;
+            if (attIds.has(docId)) continue;
+            const ref = db.collection("attendance").doc(docId);
+            if ((await ref.get()).exists) continue;
+            const pr = p.progress && p.progress[t.id];
+            batch.set(ref, { memberId: m.id, topicId: t.id, attended: true, dateAttended: (pr && pr.dateConducted) || new Date() });
+            written.add(t.id);
+          }
+
+          // 4. Keep the class status in step (auto states only).
+          if (written.size > 0 || update.classIds) {
+            const doneNow = oneOnOneSessions.filter((t) => written.has(t.id) || isOneOnOneSessionDone(p, t, attendanceByMember)).length;
+            const st = oneOnOneStatusFor(doneNow, total);
+            const cur = trackStatus[track] || "Not Enrolled";
+            if (AUTO.includes(cur) && cur !== st) {
+              trackStatus[track] = st;
+              classStatus = deriveClassStatusFromTracks(classes, trackStatus, classStatus);
+              classStatus[oneOnOneClass.id] = st;
+              if (!classIds.includes(oneOnOneClass.id)) classIds.push(oneOnOneClass.id);
+              update.trackStatus = trackStatus;
+              update.classStatus = classStatus;
+              update.classIds = classIds;
+            }
+          }
+          if (Object.keys(update).length > 0) batch.update(db.collection("members").doc(m.id), update);
+          if (written.size > 0 || Object.keys(update).length > 0) {
+            await batch.commit();
+            changed = true;
+          }
+        } catch (err) {
+          console.error("ONE2ONE sync", err);
+        }
+      }
+    })().finally(() => {
+      oneOnOneSyncing.current = false;
+      if (changed) setOneOnOneSyncTick((n) => n + 1);
+    });
+  }, [isLeader, oneOnOneRaw, members, attendanceDocs, classes, topics, oneOnOneClass, oneOnOneSessions, oneOnOneSyncTick]);
   const addClass = (name, order, photoUrl) => {
     db.collection("classes").add({ name, order, photoUrl: photoUrl || null })
       .then(() => showNotice("Class added."))
