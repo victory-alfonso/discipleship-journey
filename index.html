@@ -484,6 +484,29 @@ function topicsForClass(topics, className) {
   return topics.filter((t) => t.class === className);
 }
 
+// ---- Batches ------------------------------------------------------
+// A topic (session) belongs to a batch, stored as a plain "batch"
+// string field. Sessions created before this feature existed have no
+// "batch" field at all — topicBatch() treats those as "Batch 1"
+// automatically (no migration write needed, so nothing changes for
+// existing data unless a leader explicitly adds a new batch).
+function topicBatch(t) {
+  return (t && t.batch) || "Batch 1";
+}
+// The list of batches for a class is the union of: any batch names a
+// leader has explicitly created on the class doc (classItem.batches —
+// this is what lets a leader make an empty batch before any sessions
+// exist), plus any batch already used by that class's sessions. Always
+// includes at least "Batch 1" so a class with no batches configured
+// yet still works exactly as before.
+function getBatchesForClass(classItem, topics) {
+  const set = new Set();
+  ((classItem && classItem.batches) || []).forEach((b) => set.add(b));
+  topicsForClass(topics, classItem ? classItem.name : "").forEach((t) => set.add(topicBatch(t)));
+  if (set.size === 0) set.add("Batch 1");
+  return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
 // Natural sort so "Session 2" lands before "Session 10" — topic
 // order from the data source isn't always numeric-safe.
 function sessionSortKey(name) {
@@ -2364,13 +2387,20 @@ function backfillTrackStatusFromClassStatus(classes, trackStatus, classStatus) {
   return result;
 }
 
-function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchChange }) {
+function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchChange, classes, topics }) {
   return (
     <>
       <div style={styles.sectionLabel}>Discipleship tracks</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
         {DISCIPLESHIP_TRACKS.map((track) => {
           const status = trackStatus[track] || "Not Enrolled";
+          // The track maps to a real class (by name) when one exists —
+          // that class's batch list is what the dropdown below offers.
+          // A track with no matching class yet (or before any classes
+          // are set up) just falls back to "Batch 1".
+          const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === normalizeTrackClassName(track));
+          const batchOptions = matchingClass ? getBatchesForClass(matchingClass, topics || []) : ["Batch 1"];
+          const currentBatch = (trackBatch && trackBatch[track]) || "Batch 1";
           return (
             <div key={track} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
@@ -2384,12 +2414,13 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
                 </select>
               </label>
               {status !== "Not Enrolled" && (
-                <input
+                <select
                   style={{ ...styles.modalInput, marginBottom: 0, fontSize: 13 }}
-                  placeholder="Batch (optional, e.g. Batch 2)"
-                  value={(trackBatch && trackBatch[track]) || ""}
+                  value={batchOptions.includes(currentBatch) ? currentBatch : batchOptions[0]}
                   onChange={(e) => onBatchChange(track, e.target.value)}
-                />
+                >
+                  {batchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
+                </select>
               )}
             </div>
           );
@@ -2399,7 +2430,7 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
   );
 }
 
-function AddMemberModal({ classes, onClose, onSave }) {
+function AddMemberModal({ classes, topics, onClose, onSave }) {
   const [name, setName] = useState("");
   const [photoUrl, setPhotoUrl] = useState(null);
   const [birthdate, setBirthdate] = useState("");
@@ -2517,7 +2548,7 @@ function AddMemberModal({ classes, onClose, onSave }) {
             <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
           </label>
         </div>
-        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} />
+        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} />
         <div style={styles.modalActions}>
           <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Add"}</button>
@@ -2531,7 +2562,7 @@ function AddMemberModal({ classes, onClose, onSave }) {
 // EDIT MEMBER MODAL
 // ============================================================
 
-function EditMemberModal({ member, classes, onClose, onSave }) {
+function EditMemberModal({ member, classes, topics, onClose, onSave }) {
   const [name, setName] = useState(member.name || "");
   const [photoUrl, setPhotoUrl] = useState(member.photoUrl || null);
   const [birthdate, setBirthdate] = useState(member.birthdate ? toDateInputValue(member.birthdate) : "");
@@ -2645,7 +2676,7 @@ function EditMemberModal({ member, classes, onClose, onSave }) {
             <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
           </label>
         </div>
-        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} />
+        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} />
         <div style={styles.modalActions}>
           <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
@@ -2867,12 +2898,32 @@ function DetailBar({ pct }) {
   );
 }
 
-function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember }) {
+function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch }) {
   const [newTopic, setNewTopic] = useState("");
-  const ts = useMemo(() => sortTopicsNaturally(topicsForClass(topics, classItem.name)), [topics, classItem.name]);
-  const classMembers = useMemo(() => getClassMembers(members, classItem.id), [members, classItem.id]);
-  const { segments, total } = classDemographicsSegments(classItem, topics, classMembers, attendanceByMember);
-  const pct = classAttendanceRate(classItem.name, topics, classMembers, attendanceByMember);
+  const [newBatchName, setNewBatchName] = useState("");
+  const [addingBatch, setAddingBatch] = useState(false);
+  const batches = useMemo(() => getBatchesForClass(classItem, topics), [classItem, topics]);
+  const [selectedBatch, setSelectedBatch] = useState(null);
+  // Default to the last (newest, by natural sort) batch so a leader
+  // who just added "Batch 2026" lands there automatically.
+  const activeBatch = selectedBatch && batches.includes(selectedBatch) ? selectedBatch : batches[batches.length - 1];
+  // Only classes that match a Discipleship Track (the app's existing
+  // per-class enrollment mechanism) carry a per-member batch label
+  // (member.trackBatch). A custom/leader-made class with no matching
+  // track has no such label yet, so its member list isn't filtered by
+  // batch — only its sessions are.
+  const track = trackNameForClass(classItem.name);
+  const ts = useMemo(
+    () => sortTopicsNaturally(topicsForClass(topics, classItem.name)).filter((t) => topicBatch(t) === activeBatch),
+    [topics, classItem.name, activeBatch]
+  );
+  const allClassMembers = useMemo(() => getClassMembers(members, classItem.id), [members, classItem.id]);
+  const classMembers = useMemo(() => {
+    if (!track) return allClassMembers;
+    return allClassMembers.filter((m) => ((m.trackBatch && m.trackBatch[track]) || "Batch 1") === activeBatch);
+  }, [allClassMembers, track, activeBatch]);
+  const { segments, total } = classDemographicsSegments(classItem, ts, classMembers, attendanceByMember);
+  const pct = classAttendanceRate(classItem.name, ts, classMembers, attendanceByMember);
 
   const memberRows = useMemo(() => {
     return classMembers
@@ -2888,8 +2939,15 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
   const openMember = (m) => onOpenMember(m);
   const addTopic = () => {
     if (!newTopic.trim()) return;
-    onAddTopic(classItem.name, newTopic.trim(), ts.length + 1);
+    onAddTopic(classItem.name, newTopic.trim(), ts.length + 1, activeBatch);
     setNewTopic("");
+  };
+  const submitNewBatch = () => {
+    if (!newBatchName.trim()) return;
+    onAddBatch(classItem.id, newBatchName.trim());
+    setSelectedBatch(newBatchName.trim());
+    setNewBatchName("");
+    setAddingBatch(false);
   };
   const roundBtn = { position: "absolute", top: 12, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 32, height: 32, color: "#F5F2E4", fontSize: 18, cursor: "pointer", lineHeight: 1, zIndex: 3 };
 
@@ -2923,6 +2981,45 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
               </div>
             )}
 
+            {(batches.length > 1 || isLeader) && (
+              <div style={{ marginBottom: 18 }}>
+                <div style={detailLabel}>Batch</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
+                  {batches.map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setSelectedBatch(b)}
+                      style={{
+                        padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                        border: b === activeBatch ? "1px solid #E5A430" : "1px solid rgba(255,255,255,0.25)",
+                        background: b === activeBatch ? "#E5A430" : "rgba(255,255,255,0.08)",
+                        color: b === activeBatch ? "#23211D" : "#F5F2E4",
+                      }}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                  {isLeader && !addingBatch && (
+                    <button type="button" onClick={() => setAddingBatch(true)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px dashed rgba(255,255,255,0.35)", background: "transparent", color: "#F5F2E4" }}>+ Add Batch</button>
+                  )}
+                  {isLeader && addingBatch && (
+                    <div style={{ display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+                      <input
+                        autoFocus
+                        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4", fontSize: 12.5, outline: "none", width: 130 }}
+                        placeholder="e.g. Batch 2026"
+                        value={newBatchName}
+                        onChange={(e) => setNewBatchName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submitNewBatch(); } if (e.key === "Escape") { setAddingBatch(false); setNewBatchName(""); } }}
+                      />
+                      <button type="button" onClick={submitNewBatch} style={{ padding: "6px 12px", borderRadius: 8, border: "none", background: "#E5A430", color: "#23211D", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>Add</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             <div style={detailLabel}>Member Progress</div>
             {segments.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 20 }}>No data yet — add sessions and members to see progress.</div>
@@ -2942,9 +3039,9 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
               </div>
             )}
 
-            <div style={detailLabel}>Sessions ({ts.length})</div>
+            <div style={detailLabel}>Sessions ({ts.length}) · {activeBatch}</div>
             {ts.length === 0 ? (
-              <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 6 }}>No sessions yet.</div>
+              <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 6 }}>No sessions yet in {activeBatch}.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {ts.map((t) => {
@@ -2984,9 +3081,9 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
               </div>
             )}
 
-            <div style={{ ...detailLabel, marginTop: 24 }}>Members ({classMembers.length})</div>
+            <div style={{ ...detailLabel, marginTop: 24 }}>Members ({classMembers.length}) · {activeBatch}</div>
             {classMembers.length === 0 ? (
-              <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)" }}>No members enrolled in this class yet.</div>
+              <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)" }}>{allClassMembers.length === 0 ? "No members enrolled in this class yet." : `No members in ${activeBatch} yet.`}</div>
             ) : ts.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)" }}>Add sessions to this class to start tracking attendance.</div>
             ) : (
@@ -3042,10 +3139,27 @@ function CopyRegistrationLinkButton({ classId }) {
   );
 }
 
-function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember }) {
+function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember, onAddBatch }) {
   const [newTopic, setNewTopic] = useState("");
-  const ts = topicsForClass(topics, classItem.name);
-  const classMembers = useMemo(() => getClassMembers(members, classItem.id), [members, classItem.id]);
+  const [newBatchName, setNewBatchName] = useState("");
+  const [addingBatch, setAddingBatch] = useState(false);
+  const batches = useMemo(() => getBatchesForClass(classItem, topics), [classItem, topics]);
+  const [selectedBatch, setSelectedBatch] = useState(null);
+  const activeBatch = selectedBatch && batches.includes(selectedBatch) ? selectedBatch : batches[batches.length - 1];
+  const track = trackNameForClass(classItem.name);
+  const ts = topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === activeBatch);
+  const allClassMembers = useMemo(() => getClassMembers(members, classItem.id), [members, classItem.id]);
+  const classMembers = useMemo(() => {
+    if (!track) return allClassMembers;
+    return allClassMembers.filter((m) => ((m.trackBatch && m.trackBatch[track]) || "Batch 1") === activeBatch);
+  }, [allClassMembers, track, activeBatch]);
+  const submitNewBatch = () => {
+    if (!newBatchName.trim()) return;
+    onAddBatch(classItem.id, newBatchName.trim());
+    setSelectedBatch(newBatchName.trim());
+    setNewBatchName("");
+    setAddingBatch(false);
+  };
 
   const memberRows = useMemo(() => {
     return classMembers
@@ -3077,10 +3191,49 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
         {isLeader && <CopyRegistrationLinkButton classId={classItem.id} />}
       </div>
 
+      {(batches.length > 1 || isLeader) && (
+        <div style={styles.lightCard}>
+          <div style={styles.sectionLabel}>Batch</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 }}>
+            {batches.map((b) => (
+              <button
+                key={b}
+                type="button"
+                onClick={() => setSelectedBatch(b)}
+                style={{
+                  padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+                  border: b === activeBatch ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.25)",
+                  background: b === activeBatch ? "#1F3864" : "rgba(31,56,100,0.06)",
+                  color: b === activeBatch ? "#F5F2E4" : "#23211D",
+                }}
+              >
+                {b}
+              </button>
+            ))}
+            {isLeader && !addingBatch && (
+              <button type="button" onClick={() => setAddingBatch(true)} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px dashed rgba(31,56,100,0.35)", background: "transparent", color: "#23211D" }}>+ Add Batch</button>
+            )}
+            {isLeader && addingBatch && (
+              <div style={{ display: "flex", gap: 6 }}>
+                <input
+                  autoFocus
+                  style={{ ...styles.roleEditInput, width: 140 }}
+                  placeholder="e.g. Batch 2026"
+                  value={newBatchName}
+                  onChange={(e) => setNewBatchName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); submitNewBatch(); } if (e.key === "Escape") { setAddingBatch(false); setNewBatchName(""); } }}
+                />
+                <button style={styles.smallBtn} onClick={submitNewBatch}>Add</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div style={styles.lightCard}>
-        <div style={styles.sectionLabel}>Sessions</div>
+        <div style={styles.sectionLabel}>Sessions ({ts.length}) · {activeBatch}</div>
         {ts.length === 0 ? (
-          <div style={styles.emptyNote}>No topics yet.</div>
+          <div style={styles.emptyNote}>No sessions yet in {activeBatch}.</div>
         ) : (
           <div style={{ ...styles.rosterList, marginTop: 10 }}>
             {ts.map((t) => {
@@ -3110,15 +3263,15 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
         {isLeader && (
           <div style={{ ...styles.addRoleRow, marginTop: 10 }}>
             <input style={styles.roleEditInput} placeholder="New topic name" value={newTopic} onChange={(e) => setNewTopic(e.target.value)} />
-            <button style={styles.smallBtn} onClick={() => { if (newTopic.trim()) { onAddTopic(classItem.name, newTopic.trim(), ts.length + 1); setNewTopic(""); } }}>Add</button>
+            <button style={styles.smallBtn} onClick={() => { if (newTopic.trim()) { onAddTopic(classItem.name, newTopic.trim(), ts.length + 1, activeBatch); setNewTopic(""); } }}>Add</button>
           </div>
         )}
       </div>
 
       <div style={styles.lightCard}>
-        <div style={styles.sectionLabel}>Members ({classMembers.length})</div>
+        <div style={styles.sectionLabel}>Members ({classMembers.length}) · {activeBatch}</div>
         {classMembers.length === 0 ? (
-          <div style={styles.emptyNote}>No members enrolled in this class yet.</div>
+          <div style={styles.emptyNote}>{allClassMembers.length === 0 ? "No members enrolled in this class yet." : `No members in ${activeBatch} yet.`}</div>
         ) : ts.length === 0 ? (
           <div style={styles.emptyNote}>Add sessions to this class to start tracking attendance.</div>
         ) : (
@@ -3302,7 +3455,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   );
 }
 
-function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember }) {
+function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch }) {
   const [query, setQuery] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -3378,6 +3531,7 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
           onEditTopic={onEditTopic}
           onDeleteTopic={onDeleteTopic}
           onOpenMember={onOpenMember}
+          onAddBatch={onAddBatch}
         />
       )}
 
@@ -3796,10 +3950,24 @@ function App() {
       .then(() => { setRenamingClass(null); showNotice("Class updated."); })
       .catch((err) => showError("Could not update the class. Error: " + err.message));
   };
-  const addTopic = (className, name, order) => {
-    db.collection("topics").add({ class: className, name, order })
+  const addTopic = (className, name, order, batch) => {
+    db.collection("topics").add({ class: className, name, order, batch: batch || "Batch 1" })
       .then(() => showNotice("Session added."))
       .catch((err) => showError("Could not save the topic. Error: " + err.message));
+  };
+  // Adds a batch name to a class's "batches" list. Creating a batch
+  // this way (rather than only ever implying one from a session's
+  // "batch" field) is what lets a leader set up "Batch 2026" ahead of
+  // time, before any sessions or members are attached to it.
+  const addBatch = (classId, batchName) => {
+    const name = (batchName || "").trim();
+    if (!name) return;
+    const classItem = classes.find((c) => c.id === classId);
+    const existing = getBatchesForClass(classItem, topics);
+    if (existing.includes(name)) { showError("That batch already exists."); return; }
+    db.collection("classes").doc(classId).update({ batches: [...(classItem.batches || []), name] })
+      .then(() => showNotice("Batch added."))
+      .catch((err) => showError("Could not add the batch. Error: " + err.message));
   };
   const deleteTopic = async (id) => {
     const topic = topics.find((t) => t.id === id);
@@ -4002,6 +4170,7 @@ function App() {
             onDeleteTopic={deleteTopic}
             onEditTopic={setRenamingTopic}
             onOpenMember={setOpenMember}
+            onAddBatch={addBatch}
           />
         )}
 
@@ -4019,6 +4188,7 @@ function App() {
             onEditClass={setRenamingClass}
             onEditTopic={setRenamingTopic}
             onOpenMember={setOpenMember}
+            onAddBatch={addBatch}
           />
         )}
 
@@ -4065,11 +4235,12 @@ function App() {
           onEdit={() => setEditingMember(liveOpenMember)}
         />
       )}
-      {addOpen && <AddMemberModal classes={classes} onClose={() => setAddOpen(false)} onSave={addMember} />}
+      {addOpen && <AddMemberModal classes={classes} topics={topics} onClose={() => setAddOpen(false)} onSave={addMember} />}
       {editingMember && (
         <EditMemberModal
           member={editingMember}
           classes={classes}
+          topics={topics}
           onClose={() => setEditingMember(null)}
           onSave={(data) => updateMember(editingMember.id, data)}
         />
