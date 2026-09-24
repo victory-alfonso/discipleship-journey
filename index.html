@@ -3879,13 +3879,14 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
 
 // ============================================================
 // ONE2ONE — a personal discipleship tracker. Unlike the shared
-// Classes/Members roster, this list is scoped to whoever is
-// signed in: everyone (leader or not) can conduct a ONE2ONE and
-// keep their own list of people and sessions here, and only sees
-// the people they themselves added.
+// Classes/Members roster, access is role-based:
+//  - ONE2ONE leaders (Settings > ONE2ONE Leaders) only get this
+//    tab, and only see/edit the people they themselves added.
+//  - Leaders and Managers see and can edit everyone's ONE2ONE
+//    members (each row shows who added them).
 // ============================================================
 
-function OneOnOneRow({ person, onOpen, onDelete }) {
+function OneOnOneRow({ person, onOpen, onDelete, showAdder }) {
   const sessions = person.sessions || [];
   const done = sessions.filter((s) => s.conducted).length;
   const pct = sessions.length ? Math.round((done / sessions.length) * 100) : 0;
@@ -3894,7 +3895,7 @@ function OneOnOneRow({ person, onOpen, onDelete }) {
       <Avatar name={person.name} size={44} />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={styles.rosterName}>{person.name}</div>
-        <div style={styles.rosterMeta}>{done} of {sessions.length} session{sessions.length === 1 ? "" : "s"} done</div>
+        <div style={styles.rosterMeta}>{done} of {sessions.length} session{sessions.length === 1 ? "" : "s"} done{showAdder && person.createdBy ? ` · added by ${person.createdBy}` : ""}</div>
         <div style={styles.progressTrack}><div style={{ ...styles.progressFill, width: `${pct}%` }} /></div>
       </div>
       <span style={styles.rosterPct}>{pct}%</span>
@@ -3909,18 +3910,18 @@ function OneOnOneRow({ person, onOpen, onDelete }) {
   );
 }
 
-function OneOnOne({ people, onAdd, onOpen, onDelete }) {
+function OneOnOne({ people, onAdd, onOpen, onDelete, showAll }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="stack-mobile" style={styles.toolbar}>
         <div style={{ flex: 1, fontSize: 13, color: "#7A6E4E", alignSelf: "center" }}>
-          Your own ONE2ONE tracker — only people you've added show up here.
+          {showAll ? "All ONE2ONE members from every ONE2ONE leader." : "Your own ONE2ONE tracker — only people you've added show up here."}
         </div>
         <button style={styles.primaryBtn} onClick={onAdd}>+ Add Member</button>
       </div>
 
       {people.length === 0 ? (
-        <div style={styles.emptyNote}>You haven't added anyone to ONE2ONE yet.</div>
+        <div style={styles.emptyNote}>{showAll ? "No one has been added to ONE2ONE yet." : "You haven't added anyone to ONE2ONE yet."}</div>
       ) : (
         <div style={styles.rosterList}>
           {people.map((p) => (
@@ -3929,6 +3930,7 @@ function OneOnOne({ people, onAdd, onOpen, onDelete }) {
               person={p}
               onOpen={onOpen}
               onDelete={(id, name) => onDelete(id, name)}
+              showAdder={showAll}
             />
           ))}
         </div>
@@ -4101,8 +4103,9 @@ function PendingRegistrations({ pendingRegistrations, classes, members, onApprov
 // SETTINGS — leaders / mentors (leader-only)
 // ============================================================
 
-function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, admins, isAdmin, onAddAdmin, onRemoveAdmin }) {
+function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeaders, onAddOneLeader, onRemoveOneLeader, admins, isAdmin, onAddAdmin, onRemoveAdmin }) {
   const [newLeaderEmail, setNewLeaderEmail] = useState("");
+  const [newOneLeaderEmail, setNewOneLeaderEmail] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
 
   return (
@@ -4125,6 +4128,30 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, admins, 
           </div>
         ) : (
           <div style={styles.emptyNote}>Only managers can add or remove leaders.</div>
+        )}
+      </div>
+
+      <div style={{ ...styles.settingsSection, marginTop: 20 }}>
+        <div style={styles.sectionLabel}>ONE2ONE Leaders (ONE2ONE tab only)</div>
+        <div style={styles.pairNote}>Anyone listed here can sign in and use only the ONE2ONE tab — they can add members there and see/edit just the members they added. Leaders and Managers can see and edit all ONE2ONE members.</div>
+        {oneLeaders.length === 0 && (
+          <div style={styles.emptyNote}>No ONE2ONE leaders yet.</div>
+        )}
+        <div style={styles.restrictList}>
+          {oneLeaders.map((l) => (
+            <div key={l.id} style={styles.restrictRow}>
+              <span style={styles.restrictName}>{l.id}{l.id === currentEmail ? " (you)" : ""}</span>
+              {isAdmin && <button style={styles.iconDanger} onClick={() => onRemoveOneLeader(l.id)}>×</button>}
+            </div>
+          ))}
+        </div>
+        {isAdmin ? (
+          <div style={styles.addRoleRow}>
+            <input style={styles.roleEditInput} type="email" placeholder="email@example.com" value={newOneLeaderEmail} onChange={(e) => setNewOneLeaderEmail(e.target.value)} />
+            <button style={styles.smallBtn} onClick={() => { if (newOneLeaderEmail.trim()) { onAddOneLeader(newOneLeaderEmail.trim()); setNewOneLeaderEmail(""); } }}>Add</button>
+          </div>
+        ) : (
+          <div style={styles.emptyNote}>Only managers can add or remove ONE2ONE leaders.</div>
         )}
       </div>
 
@@ -4188,17 +4215,11 @@ function App() {
   // browser) is not a real sign-in — treat it as signed out so the leader
   // is asked to log in instead of landing in a Viewer session.
   const authReady = !!authUser && !authUser.isAnonymous;
-  const [membersRaw] = useCollection("members", null, authReady);
-  const [classes] = useCollection("classes", "order", authReady);
-  const [topics] = useCollection("topics", "order", authReady);
-  const [attendanceDocs] = useCollection("attendance", null, authReady);
+  // Roles come first so the shared collections below can be skipped
+  // for ONE2ONE-only leaders (they never see Disciples/Classes).
   const [leaders] = useCollection("leaders", null, authReady);
   const [admins] = useCollection("admins", null, authReady);
-  // ONE2ONE lives in its own collection, fetched in full like every
-  // other collection here, but each person carries a createdBy (the
-  // adder's email) so it can be filtered down to "mine" below — every
-  // signed-in user (leader or not) gets their own private-feeling list.
-  const [oneOnOneRaw] = useCollection("oneOnOne", null, authReady);
+  const [oneLeaders] = useCollection("one2oneLeaders", null, authReady);
 
   // A manager (in "admins") gets full edit access even if they were
   // never separately added to "leaders" — managers aren't a subset of
@@ -4211,6 +4232,22 @@ function App() {
   // Until the first manager is added, every leader is treated as a
   // manager so nobody gets locked out of Settings.
   const isAdmin = isInManagersList || (admins.length === 0 && isInLeadersList);
+  // ONE2ONE leaders: only the ONE2ONE tab, only their own added members.
+  // Leaders/Managers already have full access, so being in both lists
+  // just means the normal leader view.
+  const isOneLeader = oneLeaders.some((l) => l.id === currentEmail);
+  const isOneOnly = isOneLeader && !isLeader;
+  const canUseOneOnOne = isLeader || isOneLeader;
+
+  const [membersRaw] = useCollection("members", null, authReady && !isOneOnly);
+  const [classes] = useCollection("classes", "order", authReady && !isOneOnly);
+  const [topics] = useCollection("topics", "order", authReady && !isOneOnly);
+  const [attendanceDocs] = useCollection("attendance", null, authReady && !isOneOnly);
+  // ONE2ONE lives in its own collection, fetched in full like every
+  // other collection here; each person carries a createdBy (the
+  // adder's email) so it can be filtered below — Leaders/Managers see
+  // everyone, ONE2ONE leaders only see the people they added.
+  const [oneOnOneRaw] = useCollection("oneOnOne", null, authReady && canUseOneOnOne);
 
   const [pendingRegistrationsAll] = useCollection("pendingRegistrations", null, isLeader);
   // Approved/rejected registrations stay in this collection (so each
@@ -4223,10 +4260,15 @@ function App() {
 
   const members = useMemo(() => membersRaw.map((m) => ({ ...m, name: m.name || "(no name)" })), [membersRaw]);
   const myOneOnOne = useMemo(
-    () => oneOnOneRaw.filter((p) => p.createdBy === currentEmail).sort((a, b) => (a.name || "").localeCompare(b.name || "")),
-    [oneOnOneRaw, currentEmail]
+    () => oneOnOneRaw
+      .filter((p) => isLeader || p.createdBy === currentEmail)
+      .sort((a, b) => (a.name || "").localeCompare(b.name || "")),
+    [oneOnOneRaw, currentEmail, isLeader]
   );
-  const liveOpenOneOnOne = openOneOnOne ? oneOnOneRaw.find((p) => p.id === openOneOnOne.id) || openOneOnOne : null;
+  // ONE2ONE leaders are locked to the ONE2ONE tab; anyone with no
+  // ONE2ONE access can't land on it either.
+  const activeTab = isOneOnly ? "one2one" : (!canUseOneOnOne && tab === "one2one" ? "roster" : tab);
+  const liveOpenOneOnOne = openOneOnOne && canUseOneOnOne ? myOneOnOne.find((p) => p.id === openOneOnOne.id) || null : null;
 
   const attendanceByMember = useMemo(() => {
     const map = {};
@@ -4655,6 +4697,17 @@ function App() {
       .then(() => showNotice("Leader removed."))
       .catch((err) => showError("Could not remove the leader. Error: " + err.message));
   };
+  const addOneLeader = (email) => {
+    if (!isValidEmail(email)) { showError("That doesn't look like a valid email address. Please enter just the email, e.g. name@example.com — don't include \"(you)\" or any extra text."); return; }
+    db.collection("one2oneLeaders").doc(normEmail(email)).set({ addedAt: new Date(), addedBy: currentEmail })
+      .then(() => showNotice("ONE2ONE leader added."))
+      .catch((err) => showError("Could not add the ONE2ONE leader. Error: " + err.message));
+  };
+  const removeOneLeader = (email) => {
+    db.collection("one2oneLeaders").doc(email).delete()
+      .then(() => showNotice("ONE2ONE leader removed."))
+      .catch((err) => showError("Could not remove the ONE2ONE leader. Error: " + err.message));
+  };
   const addAdmin = (email) => {
     if (!isValidEmail(email)) { showError("That doesn't look like a valid email address. Please enter just the email, e.g. name@example.com — don't include \"(you)\" or any extra text."); return; }
     db.collection("admins").doc(normEmail(email)).set({ addedAt: new Date() })
@@ -4767,29 +4820,29 @@ function App() {
           <div style={styles.headerRight}>
             <span style={styles.headerUser} className="hide-mobile">
               {authUser.displayName || authUser.email}
-              <span style={{ ...styles.roleBadge, ...(isLeader ? styles.roleBadgeLeader : {}) }}>{isLeader ? "Leader" : "Viewer"}</span>
+              <span style={{ ...styles.roleBadge, ...(isLeader || isOneLeader ? styles.roleBadgeLeader : {}) }}>{isLeader ? "Leader" : isOneLeader ? "ONE2ONE Leader" : "Viewer"}</span>
             </span>
             <button style={styles.signOutBtn} onClick={() => auth.signOut()}>Sign out</button>
           </div>
         </header>
 
         <nav style={styles.nav}>
-          <button className="nav-item" style={{ ...styles.navItem, ...(tab === "roster" ? styles.navItemActive : {}) }} onClick={() => { setTab("roster"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Disciples</button>
-          <button className="nav-item" style={{ ...styles.navItem, ...(tab === "classes" ? styles.navItemActive : {}) }} onClick={() => { setTab("classes"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Classes</button>
-          <button className="nav-item" style={{ ...styles.navItem, ...(tab === "one2one" ? styles.navItemActive : {}) }} onClick={() => { setTab("one2one"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); setOpenOneOnOne(null); }}>ONE2ONE</button>
+          {!isOneOnly && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "roster" ? styles.navItemActive : {}) }} onClick={() => { setTab("roster"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Disciples</button>}
+          {!isOneOnly && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "classes" ? styles.navItemActive : {}) }} onClick={() => { setTab("classes"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Classes</button>}
+          {canUseOneOnOne && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "one2one" ? styles.navItemActive : {}) }} onClick={() => { setTab("one2one"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); setOpenOneOnOne(null); }}>ONE2ONE</button>}
           {isLeader && (
-            <button className="nav-item" style={{ ...styles.navItem, ...(tab === "registrations" ? styles.navItemActive : {}) }} onClick={() => { setTab("registrations"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>
+            <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "registrations" ? styles.navItemActive : {}) }} onClick={() => { setTab("registrations"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>
               Registrations{pendingRegistrations.length > 0 ? ` (${pendingRegistrations.length})` : ""}
             </button>
           )}
           {isLeader && (
-            <button className="nav-item" style={{ ...styles.navItem, ...(tab === "settings" ? styles.navItemActive : {}) }} onClick={() => { setTab("settings"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Settings</button>
+            <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "settings" ? styles.navItemActive : {}) }} onClick={() => { setTab("settings"); setOpenMember(null); setOpenClass(null); setOpenTopic(null); }}>Settings</button>
           )}
         </nav>
       </div>
 
       <main style={styles.main}>
-        {tab === "registrations" && isLeader && (
+        {activeTab === "registrations" && isLeader && (
           <PendingRegistrations
             pendingRegistrations={pendingRegistrations}
             classes={classes}
@@ -4799,7 +4852,7 @@ function App() {
           />
         )}
 
-        {tab === "roster" && (
+        {activeTab === "roster" && (
           <Roster
             members={members}
             classes={classes}
@@ -4811,7 +4864,7 @@ function App() {
           />
         )}
 
-        {tab === "classes" && !liveOpenClass && (
+        {activeTab === "classes" && !liveOpenClass && (
           <Classes
             classes={classes}
             topics={topics}
@@ -4838,7 +4891,7 @@ function App() {
           />
         )}
 
-        {tab === "classes" && liveOpenClass && (
+        {activeTab === "classes" && liveOpenClass && (
           <ClassOverview
             classItem={liveOpenClass}
             topics={topics}
@@ -4860,21 +4913,25 @@ function App() {
           />
         )}
 
-        {tab === "one2one" && (
+        {activeTab === "one2one" && (
           <OneOnOne
             people={myOneOnOne}
             onAdd={() => setAddOneOnOneOpen(true)}
             onOpen={setOpenOneOnOne}
             onDelete={deleteOneOnOnePerson}
+            showAll={isLeader}
           />
         )}
 
-        {tab === "settings" && isLeader && (
+        {activeTab === "settings" && isLeader && (
           <Settings
             leaders={leaders}
             currentEmail={currentEmail}
             onAddLeader={addLeader}
             onRemoveLeader={removeLeader}
+            oneLeaders={oneLeaders}
+            onAddOneLeader={addOneLeader}
+            onRemoveOneLeader={removeOneLeader}
             admins={admins}
             isAdmin={isAdmin}
             onAddAdmin={addAdmin}
