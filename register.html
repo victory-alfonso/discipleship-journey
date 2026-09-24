@@ -178,7 +178,7 @@ function renderError(message) {
   `;
 }
 
-function renderSuccess(className, classId, regId) {
+function renderSuccess(className, classId, batch, regId) {
   const statusLink = statusLinkForReg(regId);
   app.innerHTML = `
     <div class="msgScreen">
@@ -204,12 +204,12 @@ function renderSuccess(className, classId, regId) {
     }
     setTimeout(() => { if (btn) btn.textContent = "Copy My Link"; }, 2000);
   };
-  document.getElementById("againBtn").onclick = () => renderForm(className, classId);
+  document.getElementById("againBtn").onclick = () => renderForm(className, classId, batch);
 }
 
 // Name already has a pending registration for THIS class — don't create
 // a second doc, just hand back the link to the one that already exists.
-function renderAlreadyPendingSameClass(className, classId, regId) {
+function renderAlreadyPendingSameClass(className, classId, batch, regId) {
   const statusLink = statusLinkForReg(regId);
   app.innerHTML = `
     <div class="msgScreen">
@@ -221,11 +221,11 @@ function renderAlreadyPendingSameClass(className, classId, regId) {
     </div>
   `;
   document.getElementById("viewStatusBtn").onclick = () => { window.location.href = statusLink; };
-  document.getElementById("notMeBtn").onclick = () => renderForm(className, classId);
+  document.getElementById("notMeBtn").onclick = () => renderForm(className, classId, batch);
 }
 
 // Name is already an approved member of THIS class.
-function renderAlreadyMemberSameClass(className, classId) {
+function renderAlreadyMemberSameClass(className, classId, batch) {
   app.innerHTML = `
     <div class="msgScreen">
       <div class="checkCircle">✓</div>
@@ -234,13 +234,13 @@ function renderAlreadyMemberSameClass(className, classId) {
       <button class="againBtn" id="notMeBtn" style="margin-top:18px;">That wasn't me — register anyway</button>
     </div>
   `;
-  document.getElementById("notMeBtn").onclick = () => renderForm(className, classId);
+  document.getElementById("notMeBtn").onclick = () => renderForm(className, classId, batch);
 }
 
 // Name already has a record (member or pending) under a DIFFERENT class.
 // This is the "one profile per person" case: don't let self-registration
 // silently create a second, disconnected record for the same person.
-function renderDuplicateOtherClass(className, classId, otherClassNames, onContinueAnyway) {
+function renderDuplicateOtherClass(className, classId, batch, otherClassNames, onContinueAnyway) {
   const otherList = otherClassNames.length ? otherClassNames.map(esc).join(", ") : "another class";
   app.innerHTML = `
     <div class="card">
@@ -252,15 +252,15 @@ function renderDuplicateOtherClass(className, classId, otherClassNames, onContin
       <button class="againBtn" id="continueBtn" style="margin-top:10px;">That's a different person — submit anyway</button>
     </div>
   `;
-  document.getElementById("backBtn").onclick = () => renderForm(className, classId);
+  document.getElementById("backBtn").onclick = () => renderForm(className, classId, batch);
   document.getElementById("continueBtn").onclick = onContinueAnyway;
 }
 
-function renderForm(className, classId, errorMessage) {
+function renderForm(className, classId, batch, errorMessage) {
   app.innerHTML = `
     <div class="card">
       <div class="className">${esc(className)}</div>
-      <div class="classSub">Fill in your details to register for this class.</div>
+      <div class="classSub">Fill in your details to register for this class.${batch ? ` You'll be added to <strong>${esc(batch)}</strong>.` : ""}</div>
       ${errorMessage ? `<div class="errorBox">${esc(errorMessage)}</div>` : ""}
       <form id="regForm">
         <label class="field">
@@ -372,6 +372,12 @@ function renderForm(className, classId, errorMessage) {
       dateAdded: new Date(),
       selfRegistered: true,
       status: "pending",
+      // Only present when this link was copied while a specific batch
+      // was selected in index.html — a leader-controlled default (no
+      // batch, or a class with only "Batch 1") sends no batch at all,
+      // and the approval side falls back to "Batch 1" the same way the
+      // rest of the app already does.
+      ...(batch ? { batch } : {}),
     };
 
     const doSubmit = async () => {
@@ -384,11 +390,11 @@ function renderForm(className, classId, errorMessage) {
       try {
         await ensureSignedIn();
         await regRef.set(data);
-        renderSuccess(className, classId, regRef.id);
+        renderSuccess(className, classId, batch, regRef.id);
       } catch (err) {
         submitBtn.disabled = false;
         submitBtn.textContent = "Submit Registration";
-        renderForm(className, classId, "Couldn't submit your registration. " + (err && err.message ? err.message : "Please try again."));
+        renderForm(className, classId, batch, "Couldn't submit your registration. " + (err && err.message ? err.message : "Please try again."));
       }
     };
 
@@ -399,12 +405,12 @@ function renderForm(className, classId, errorMessage) {
       const dup = await findDuplicateContext(name, classId);
       if (dup) {
         if (dup.sameClass) {
-          if (dup.type === "pending") { renderAlreadyPendingSameClass(className, classId, dup.regId); return; }
-          renderAlreadyMemberSameClass(className, classId);
+          if (dup.type === "pending") { renderAlreadyPendingSameClass(className, classId, batch, dup.regId); return; }
+          renderAlreadyMemberSameClass(className, classId, batch);
           return;
         }
         const otherClassNames = await classNamesFor(dup.classIds.filter((id) => id !== classId));
-        renderDuplicateOtherClass(className, classId, otherClassNames, doSubmit);
+        renderDuplicateOtherClass(className, classId, batch, otherClassNames, doSubmit);
         return;
       }
     } catch (err) {
@@ -424,13 +430,14 @@ function ensureSignedIn() {
 
 async function init() {
   const classId = qs("classId");
+  const batch = qs("batch") || null;
   if (!classId) { renderMissingClass(); return; }
   try {
     await ensureSignedIn();
     const doc = await db.collection("classes").doc(classId).get();
     if (!doc.exists) { renderMissingClass(); return; }
     const classItem = doc.data();
-    renderForm(classItem.name || "Class", classId);
+    renderForm(classItem.name || "Class", classId, batch);
   } catch (err) {
     renderError(err && err.message ? err.message : "Couldn't load this class. Please check your connection and try again.");
   }
