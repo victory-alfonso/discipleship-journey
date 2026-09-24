@@ -2757,6 +2757,8 @@ function ClassRow({ classItem, topics, members, attendanceByMember, isLeader, on
   const classMembers = getClassMembers(members, classItem.id);
   const pct = classAttendanceRate(classItem.name, topics, classMembers, attendanceByMember);
   const badge = pct >= 100 ? PHOTO_BADGE.done : pct > 0 ? PHOTO_BADGE.progress : PHOTO_BADGE.none;
+  const completedCount = classMembers.filter((m) => ((m.classStatus && m.classStatus[classItem.id]) || "Enrolled") === "Completed").length;
+  const inProgressCount = classMembers.filter((m) => ((m.classStatus && m.classStatus[classItem.id]) || "Enrolled") === "In-Progress").length;
   return (
     <div
       className="dj-class-photo-card"
@@ -2799,13 +2801,11 @@ function ClassRow({ classItem, topics, members, attendanceByMember, isLeader, on
       )}
       <div style={{ position: "absolute", left: 12, right: 12, bottom: 12 }}>
         <div style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.2 }}>{classItem.name}</div>
-        <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.8)", marginTop: 3 }}>
-          {ts.length} session{ts.length === 1 ? "" : "s"} · {classMembers.length} member{classMembers.length === 1 ? "" : "s"}
-        </div>
         <div style={{ height: 4, borderRadius: 20, background: "rgba(255,255,255,0.25)", marginTop: 9, overflow: "hidden" }}>
           <div style={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: "100%", background: "#E5A430" }} />
         </div>
         <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 4 }}>{pct}% overall attendance</div>
+        <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 2 }}>{completedCount} completed · {inProgressCount} in progress</div>
       </div>
     </div>
   );
