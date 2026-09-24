@@ -2387,12 +2387,13 @@ function backfillTrackStatusFromClassStatus(classes, trackStatus, classStatus) {
   return result;
 }
 
-function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchChange, classes, topics }) {
+function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchChange, classes, topics, onlyTrack }) {
+  const tracksToShow = onlyTrack ? DISCIPLESHIP_TRACKS.filter((t) => t === onlyTrack) : DISCIPLESHIP_TRACKS;
   return (
     <>
       <div style={styles.sectionLabel}>Discipleship tracks</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-        {DISCIPLESHIP_TRACKS.map((track) => {
+        {tracksToShow.map((track) => {
           const status = trackStatus[track] || "Not Enrolled";
           // The track maps to a real class (by name) when one exists —
           // that class's batch list is what the dropdown below offers.
@@ -2548,7 +2549,7 @@ function AddMemberModal({ classes, topics, onClose, onSave, initialTrack, initia
             <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
           </label>
         </div>
-        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} />
+        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
         <div style={styles.modalActions}>
           <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Add"}</button>
