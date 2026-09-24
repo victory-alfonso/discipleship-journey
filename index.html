@@ -2938,7 +2938,7 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
       .sort((a, b) => b.pct - a.pct || a.member.name.localeCompare(b.member.name));
   }, [classMembers, attendanceByMember, ts]);
 
-  const openSession = (t) => { onClose(); if (onOpenClass) onOpenClass(classItem); onOpenSession(t); };
+  const openSession = (t) => { onOpenSession(t); };
   const openMember = (m) => onOpenMember(m);
   const addTopic = () => {
     if (!newTopic.trim()) return;
@@ -3364,7 +3364,7 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
 // listing every member as attended / not yet attended
 // ============================================================
 
-function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, onBack, onToggleAttendance, onSetAttendanceDate, onEditTopic, onOpenMember, onToggleConducted }) {
+function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, onClose, onToggleAttendance, onSetAttendanceDate, onEditTopic, onOpenMember, onToggleConducted }) {
   const [scanOpen, setScanOpen] = useState(false);
   const [editUnlocked, setEditUnlocked] = useState(false);
   const classForTopic = useMemo(() => (classes || []).find((c) => c.name === topic.class), [classes, topic.class]);
@@ -3417,8 +3417,23 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   };
 
   return (
-    <div>
-      <a style={styles.backLink} onClick={onBack}>&larr; Back to {topic.class}</a>
+    <div style={{ ...styles.modalOverlay, alignItems: "flex-start", padding: "5vh 20px" }} onClick={onClose}>
+      <div
+        style={{
+          position: "relative", width: "100%", maxWidth: 560, maxHeight: "90vh", display: "flex", flexDirection: "column",
+          background: "linear-gradient(160deg, #FBF8EE 0%, #F1EAD6 100%)", border: "1px solid rgba(255,255,255,0.6)",
+          borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out",
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          style={{ position: "absolute", top: 12, right: 12, zIndex: 3, background: "rgba(31,56,100,0.08)", border: "none", borderRadius: "50%", width: 30, height: 30, color: "#1F3864", fontSize: 16, cursor: "pointer", lineHeight: 1 }}
+          aria-label="Close"
+        >×</button>
+        <div style={{ overflowY: "auto", flex: 1, padding: "20px 22px 24px" }}>
+          <a style={styles.backLink} onClick={onClose}>&larr; Back to {topic.class}</a>
 
       <div style={styles.profileHeader}>
         <div>
@@ -3527,6 +3542,8 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
           </div>
         </>
       )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -4320,7 +4337,7 @@ function App() {
           />
         )}
 
-        {tab === "classes" && !liveOpenClass && !liveOpenTopic && (
+        {tab === "classes" && !liveOpenClass && (
           <Classes
             classes={classes}
             topics={topics}
@@ -4345,7 +4362,7 @@ function App() {
           />
         )}
 
-        {tab === "classes" && liveOpenClass && !liveOpenTopic && (
+        {tab === "classes" && liveOpenClass && (
           <ClassOverview
             classItem={liveOpenClass}
             topics={topics}
@@ -4366,22 +4383,6 @@ function App() {
           />
         )}
 
-        {tab === "classes" && liveOpenTopic && (
-          <SessionDetail
-            topic={liveOpenTopic}
-            classes={classes}
-            members={members}
-            attendanceByMember={attendanceByMember}
-            isLeader={isLeader}
-            onBack={() => setOpenTopic(null)}
-            onToggleAttendance={toggleAttendance}
-            onSetAttendanceDate={setAttendanceDate}
-            onEditTopic={setRenamingTopic}
-            onOpenMember={setOpenMember}
-            onToggleConducted={toggleTopicConducted}
-          />
-        )}
-
         {tab === "settings" && isLeader && (
           <Settings
             leaders={leaders}
@@ -4395,6 +4396,22 @@ function App() {
           />
         )}
       </main>
+
+      {liveOpenTopic && (
+        <SessionDetail
+          topic={liveOpenTopic}
+          classes={classes}
+          members={members}
+          attendanceByMember={attendanceByMember}
+          isLeader={isLeader}
+          onClose={() => setOpenTopic(null)}
+          onToggleAttendance={toggleAttendance}
+          onSetAttendanceDate={setAttendanceDate}
+          onEditTopic={setRenamingTopic}
+          onOpenMember={setOpenMember}
+          onToggleConducted={toggleTopicConducted}
+        />
+      )}
 
       {liveOpenMember && (
         <MemberProfile
