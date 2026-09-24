@@ -3916,6 +3916,72 @@ function oneOnOneDoneCount(person, sessions, attendanceByMember) {
   return sessions.filter((t) => isOneOnOneSessionDone(person, t, attendanceByMember)).length;
 }
 
+function OneOnOneFormModal({ title, initial, submitLabel, onClose, onSave }) {
+  const init = initial || {};
+  const [name, setName] = useState(init.name || "");
+  const [photoUrl, setPhotoUrl] = useState(init.photoUrl || null);
+  const [birthdate, setBirthdate] = useState(init.birthdate || "");
+  const [gender, setGender] = useState(init.gender || "");
+  const [contactNumber, setContactNumber] = useState(init.contactNumber || "");
+  const [address, setAddress] = useState(init.address || "");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) { setError("Please enter the member's full name."); return; }
+    if (!birthdate) { setError("Please enter a birthdate."); return; }
+    if (!gender) { setError("Please select a gender."); return; }
+    if (!contactNumber.trim()) { setError("Please enter a contact number."); return; }
+    if (!address.trim()) { setError("Please enter an address."); return; }
+    setError("");
+    setBusy(true);
+    try {
+      await onSave({ name: name.trim(), photoUrl: photoUrl || null, birthdate, gender, contactNumber: contactNumber.trim(), address: address.trim() });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <form style={{ ...styles.modalCard, maxHeight: "92vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <div style={styles.modalTitle}>{title}</div>
+        {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
+        <ClassPhotoPicker photoUrl={photoUrl} onChange={setPhotoUrl} />
+        <input style={styles.modalInput} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+        <div style={styles.modalRow2}>
+          <label style={styles.modalFieldLabel}>
+            Birthdate
+            <input style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
+          </label>
+          <label style={styles.modalFieldLabel}>
+            Gender
+            <select style={{ ...styles.modalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
+              <option value="">Select…</option>
+              {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </label>
+        </div>
+        <div style={styles.modalRow2}>
+          <label style={styles.modalFieldLabel}>
+            Contact number
+            <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
+          </label>
+          <label style={styles.modalFieldLabel}>
+            Address
+            <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
+          </label>
+        </div>
+        <div style={styles.modalActions}>
+          <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : (submitLabel || "Save")}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function OneOnOneCard({ person, sessions, attendanceByMember, showAdder, onOpen, onEdit, onDelete }) {
   const done = oneOnOneDoneCount(person, sessions, attendanceByMember);
   const pct = sessions.length ? Math.round((done / sessions.length) * 100) : 0;
@@ -4451,7 +4517,7 @@ function App() {
   // ONE2ONE session checks are mirrored into attendance + status below.
   const oneOnOneTrack = () => (oneOnOneClass && trackNameForClass(oneOnOneClass.name)) || "One2One";
   const oneOnOneStatusFor = (done, total) => (total > 0 && done === total ? "Completed" : done > 0 ? "In-Progress" : "Enrolled");
-  const buildOneOnOneMember = ({ name, photoUrl, oneOnOneId, status }) => {
+  const buildOneOnOneMember = ({ name, photoUrl, birthdate, gender, contactNumber, address, oneOnOneId, status }) => {
     const track = oneOnOneTrack();
     const trackStatus = { [track]: status };
     const classStatus = deriveClassStatusFromTracks(classes, trackStatus, null);
@@ -4463,29 +4529,30 @@ function App() {
     const trackBatch = oneOnOneClass ? { [track]: getBatchesForClass(oneOnOneClass, topics)[0] } : {};
     return {
       name, photoUrl: photoUrl || null,
-      birthdate: "", gender: "", lifeStage: "", category: "", contactNumber: "", address: "", notes: "",
+      birthdate: birthdate || "", gender: gender || "", lifeStage: "", category: "", contactNumber: contactNumber || "", address: address || "", notes: "",
       classIds, classStatus, trackStatus, trackBatch,
       dateAdded: new Date(), source: "one2one", createdBy: currentEmail, oneOnOneId,
     };
   };
-  const addOneOnOnePerson = ({ name, photoUrl }) => {
+  const addOneOnOnePerson = ({ name, photoUrl, birthdate, gender, contactNumber, address }) => {
     const personRef = db.collection("oneOnOne").doc();
     const memberRef = db.collection("members").doc();
     const batch = db.batch();
-    batch.set(memberRef, buildOneOnOneMember({ name, photoUrl, oneOnOneId: personRef.id, status: "Enrolled" }));
-    batch.set(personRef, { name, photoUrl: photoUrl || null, createdBy: currentEmail, createdAt: new Date(), progress: {}, memberId: memberRef.id });
+    batch.set(memberRef, buildOneOnOneMember({ name, photoUrl, birthdate, gender, contactNumber, address, oneOnOneId: personRef.id, status: "Enrolled" }));
+    batch.set(personRef, { name, photoUrl: photoUrl || null, birthdate, gender, contactNumber, address, createdBy: currentEmail, createdAt: new Date(), progress: {}, memberId: memberRef.id });
     return batch.commit()
       .then(() => { setAddOneOnOneOpen(false); showNotice("Added to ONE2ONE and Disciples."); })
       .catch((err) => showError("Could not add them. Error: " + err.message));
   };
-  const updateOneOnOnePerson = async (id, { name, photoUrl }) => {
+  const updateOneOnOnePerson = async (id, { name, photoUrl, birthdate, gender, contactNumber, address }) => {
     try {
       const person = oneOnOneRaw.find((p) => p.id === id);
       const batch = db.batch();
-      batch.update(db.collection("oneOnOne").doc(id), { name, photoUrl: photoUrl || null });
+      const details = { name, photoUrl: photoUrl || null, birthdate, gender, contactNumber, address };
+      batch.update(db.collection("oneOnOne").doc(id), details);
       if (person && person.memberId) {
         const memberRef = db.collection("members").doc(person.memberId);
-        if ((await memberRef.get()).exists) batch.update(memberRef, { name, photoUrl: photoUrl || null });
+        if ((await memberRef.get()).exists) batch.update(memberRef, details);
       }
       await batch.commit();
       setEditingOneOnOne(null);
@@ -4518,7 +4585,7 @@ function App() {
       if (!(await memberRef.get()).exists) {
         const priorDone = oneOnOneSessions.filter((t) => isOneOnOneSessionDone(person, t, attendanceByMember)).length;
         const fix = db.batch();
-        fix.set(memberRef, buildOneOnOneMember({ name: person.name, photoUrl: person.photoUrl, oneOnOneId: person.id, status: oneOnOneStatusFor(priorDone, total) }));
+        fix.set(memberRef, buildOneOnOneMember({ name: person.name, photoUrl: person.photoUrl, birthdate: person.birthdate, gender: person.gender, contactNumber: person.contactNumber, address: person.address, oneOnOneId: person.id, status: oneOnOneStatusFor(priorDone, total) }));
         fix.update(personRef, { memberId: memberRef.id });
         await fix.commit();
       }
@@ -5098,19 +5165,17 @@ function App() {
         />
       )}
       {addOneOnOneOpen && (
-        <ClassFormModal
+        <OneOnOneFormModal
           title="Add Member to ONE2ONE"
-          namePlaceholder="Full name"
+          submitLabel="Add"
           onClose={() => setAddOneOnOneOpen(false)}
           onSave={addOneOnOnePerson}
         />
       )}
       {editingOneOnOne && (
-        <ClassFormModal
+        <OneOnOneFormModal
           title="Edit ONE2ONE Member"
-          namePlaceholder="Full name"
-          initialName={editingOneOnOne.name}
-          initialPhoto={editingOneOnOne.photoUrl || null}
+          initial={editingOneOnOne}
           onClose={() => setEditingOneOnOne(null)}
           onSave={(data) => updateOneOnOnePerson(editingOneOnOne.id, data)}
         />
