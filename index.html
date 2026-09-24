@@ -2379,7 +2379,7 @@ function backfillTrackStatusFromClassStatus(classes, trackStatus, classStatus) {
   const result = { ...(trackStatus || {}) };
   DISCIPLESHIP_TRACKS.forEach((track) => {
     if (Object.prototype.hasOwnProperty.call(result, track)) return;
-    const cls = classes.find((c) => trackNameForClass(c.name) === normalizeTrackClassName(track));
+    const cls = classes.find((c) => trackNameForClass(c.name) === track);
     if (cls && classStatus && classStatus[cls.id] && classStatus[cls.id] !== "Not Enrolled") {
       result[track] = classStatus[cls.id];
     }
@@ -2398,7 +2398,7 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
           // that class's batch list is what the dropdown below offers.
           // A track with no matching class yet (or before any classes
           // are set up) just falls back to "Batch 1".
-          const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === normalizeTrackClassName(track));
+          const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === track);
           const batchOptions = matchingClass ? getBatchesForClass(matchingClass, topics || []) : ["Batch 1"];
           const currentBatch = (trackBatch && trackBatch[track]) || "Batch 1";
           return (
