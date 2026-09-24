@@ -2867,7 +2867,7 @@ function DetailBar({ pct }) {
   );
 }
 
-function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember }) {
+function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember }) {
   const [newTopic, setNewTopic] = useState("");
   const ts = useMemo(() => sortTopicsNaturally(topicsForClass(topics, classItem.name)), [topics, classItem.name]);
   const classMembers = useMemo(() => getClassMembers(members, classItem.id), [members, classItem.id]);
@@ -2884,7 +2884,7 @@ function ClassDetailModal({ classItem, topics, members, attendanceByMember, isLe
       .sort((a, b) => b.pct - a.pct || a.member.name.localeCompare(b.member.name));
   }, [classMembers, attendanceByMember, ts]);
 
-  const openSession = (t) => { onClose(); onOpenSession(t); };
+  const openSession = (t) => { onClose(); if (onOpenClass) onOpenClass(classItem); onOpenSession(t); };
   const openMember = (m) => onOpenMember(m);
   const addTopic = () => {
     if (!newTopic.trim()) return;
@@ -3302,7 +3302,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   );
 }
 
-function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember }) {
+function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember }) {
   const [query, setQuery] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -3373,6 +3373,7 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
           onClose={() => setDetailId(null)}
           onEditClass={onEditClass}
           onOpenSession={onOpenSession}
+          onOpenClass={onOpenClass}
           onAddTopic={onAddTopic}
           onEditTopic={onEditTopic}
           onDeleteTopic={onDeleteTopic}
@@ -3996,6 +3997,7 @@ function App() {
             onMoveClass={moveClass}
             onSeedDefaults={seedDefaultClasses}
             onOpenSession={setOpenTopic}
+            onOpenClass={setOpenClass}
             onAddTopic={addTopic}
             onDeleteTopic={deleteTopic}
             onEditTopic={setRenamingTopic}
