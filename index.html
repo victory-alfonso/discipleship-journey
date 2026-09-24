@@ -4962,14 +4962,17 @@ function App() {
       dateAdded: new Date(), source: "one2one", createdBy: currentEmail, oneOnOneId,
     };
   };
-  // A new ONE2ONE person is standalone (no status) and gets no
+  // A new ONE2ONE person starts as status "pending" and gets no
   // Disciples record yet — a Leader/Manager has to approve them first
-  // (see approveOneOnOnePerson below). The ONE2ONE leader can still mark
-  // sessions while pending (toggleOneOnOneSession handles that case by
-  // writing only to this doc), so no progress is lost while waiting.
+  // (see approveOneOnOnePerson below). Every "pending" check elsewhere
+  // (Registrations tab list, nav badge count, card badge) matches this
+  // string exactly, so it must be set here or the person silently never
+  // shows up for approval. The ONE2ONE leader can still mark sessions
+  // while pending (toggleOneOnOneSession handles that case by writing
+  // only to this doc), so no progress is lost while waiting.
   const addOneOnOnePerson = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }) => {
     const personRef = db.collection("oneOnOne").doc();
-    return personRef.set({ name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address, createdBy: currentEmail, createdAt: new Date(), progress: {} })
+    return personRef.set({ name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address, status: "pending", createdBy: currentEmail, createdAt: new Date(), progress: {} })
       .then(() => { setAddOneOnOneOpen(false); showNotice("Added to ONE2ONE."); })
       .catch((err) => showError("Could not add them. Error: " + err.message));
   };
