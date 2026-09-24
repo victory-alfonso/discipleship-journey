@@ -1861,7 +1861,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
               color: "#1F3864",
             }}
           >
-            Lahat
+            All
           </button>
           {batchOptionsForTrackChip.map((b) => {
             const active = batchChip === b;
@@ -3767,7 +3767,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
           <div style={styles.lightCard}>
             <div style={{ ...styles.sectionLabel, color: "#FF8A7A" }}>Not Attended ({notAttended.length})</div>
             {notAttended.length === 0 ? (
-              <div style={styles.emptyNote}>Kumpleto lahat.</div>
+              <div style={styles.emptyNote}>Complete.</div>
             ) : (
               <div style={styles.sessionList}>
                 {notAttended.map((m) => <MemberRow key={m.id} m={m} done={false} />)}
