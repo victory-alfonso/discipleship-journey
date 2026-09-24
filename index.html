@@ -2476,7 +2476,7 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
   );
 }
 
-function AddMemberModal({ classes, topics, onClose, onSave, initialTrack, initialBatch, title }) {
+function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrack, initialBatch, title }) {
   const [name, setName] = useState("");
   const [photoUrl, setPhotoUrl] = useState(null);
   const [birthdate, setBirthdate] = useState("");
@@ -2490,6 +2490,11 @@ function AddMemberModal({ classes, topics, onClose, onSave, initialTrack, initia
   const [trackBatch, setTrackBatch] = useState(() => (initialTrack && initialBatch ? { [initialTrack]: initialBatch } : {}));
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Same "merge instead of creating a duplicate person" check used when
+  // approving registrations — catches the same person being re-added
+  // here by name before a second Disciples record gets created.
+  const duplicates = useMemo(() => findPossibleDuplicates(members || [], name), [members, name]);
+  const [mergeId, setMergeId] = useState("");
 
   const setTrack = (track, value) => {
     setTrackStatus((prev) => ({ ...prev, [track]: value }));
@@ -2538,7 +2543,7 @@ function AddMemberModal({ classes, topics, onClose, onSave, initialTrack, initia
         trackStatus,
         trackBatch,
         dateAdded: new Date(),
-      });
+      }, mergeId || null);
     } catch (err) {
       // A save failure already shows a toast (from the parent's
       // addMember handler) — just stop treating the form as busy so
@@ -2554,7 +2559,19 @@ function AddMemberModal({ classes, topics, onClose, onSave, initialTrack, initia
         <div style={styles.modalTitle}>{title || "Add Member"}</div>
         {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
         <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
-        <input style={styles.modalInput} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+        <input style={styles.modalInput} placeholder="Full name" value={name} onChange={(e) => { setName(e.target.value); setMergeId(""); }} autoFocus required />
+        {duplicates.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={styles.sectionLabel}>Possible existing match</div>
+            <div style={styles.pairNote}>Someone in Disciples already has this exact name. Merge instead of creating a duplicate person, or pick "Add as new person" if it's someone else.</div>
+            <select style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
+              <option value="">Add as new person</option>
+              {duplicates.map((d) => (
+                <option key={d.id} value={d.id}>Merge into existing: {d.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div style={styles.modalRow2}>
           <label style={styles.modalFieldLabel}>
             Birthdate
@@ -2597,7 +2614,7 @@ function AddMemberModal({ classes, topics, onClose, onSave, initialTrack, initia
         <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
         <div style={styles.modalActions}>
           <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Add"}</button>
+          <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : (mergeId ? "Merge" : "Add")}</button>
         </div>
       </form>
     </div>
@@ -3348,11 +3365,12 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
         <AddMemberModal
           classes={classes || [classItem]}
           topics={topics}
+          members={members}
           title={`Add Member to ${classItem.name}`}
           initialTrack={track}
           initialBatch={activeBatch}
           onClose={() => setAddMemberOpen(false)}
-          onSave={(data) => onAddMember(data).then(() => setAddMemberOpen(false))}
+          onSave={(data, mergeId) => onAddMember(data, mergeId).then(() => setAddMemberOpen(false))}
         />
       )}
     </div>
@@ -3916,7 +3934,7 @@ function oneOnOneDoneCount(person, sessions, attendanceByMember) {
   return sessions.filter((t) => isOneOnOneSessionDone(person, t, attendanceByMember)).length;
 }
 
-function OneOnOneFormModal({ title, initial, submitLabel, onClose, onSave }) {
+function OneOnOneFormModal({ title, initial, submitLabel, members, onClose, onSave }) {
   const init = initial || {};
   const [name, setName] = useState(init.name || "");
   const [photoUrl, setPhotoUrl] = useState(init.photoUrl || null);
@@ -3927,6 +3945,11 @@ function OneOnOneFormModal({ title, initial, submitLabel, onClose, onSave }) {
   const [address, setAddress] = useState(init.address || "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Only relevant when adding someone new here — editing an existing
+  // ONE2ONE person is already linked to their own Disciples record, so
+  // there's nothing to merge.
+  const duplicates = useMemo(() => (initial ? [] : findPossibleDuplicates(members || [], name)), [members, name, initial]);
+  const [mergeId, setMergeId] = useState("");
 
   const submit = async (e) => {
     e.preventDefault();
@@ -3939,7 +3962,7 @@ function OneOnOneFormModal({ title, initial, submitLabel, onClose, onSave }) {
     setError("");
     setBusy(true);
     try {
-      await onSave({ name: name.trim(), photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber: contactNumber.trim(), address: address.trim() });
+      await onSave({ name: name.trim(), photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber: contactNumber.trim(), address: address.trim() }, mergeId || null);
     } finally {
       setBusy(false);
     }
@@ -3951,7 +3974,19 @@ function OneOnOneFormModal({ title, initial, submitLabel, onClose, onSave }) {
         <div style={styles.modalTitle}>{title}</div>
         {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
         <ClassPhotoPicker photoUrl={photoUrl} onChange={setPhotoUrl} />
-        <input style={styles.modalInput} placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+        <input style={styles.modalInput} placeholder="Full name" value={name} onChange={(e) => { setName(e.target.value); setMergeId(""); }} autoFocus required />
+        {duplicates.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={styles.sectionLabel}>Possible existing match</div>
+            <div style={styles.pairNote}>Someone in Disciples already has this exact name. Merge instead of creating a duplicate person, or pick "Add as new person" if it's someone else.</div>
+            <select style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
+              <option value="">Add as new person</option>
+              {duplicates.map((d) => (
+                <option key={d.id} value={d.id}>Merge into existing: {d.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div style={styles.modalRow2}>
           <label style={styles.modalFieldLabel}>
             Birthdate
@@ -3984,7 +4019,7 @@ function OneOnOneFormModal({ title, initial, submitLabel, onClose, onSave }) {
         </label>
         <div style={styles.modalActions}>
           <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : (submitLabel || "Save")}</button>
+          <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : (mergeId ? "Merge" : (submitLabel || "Save"))}</button>
         </div>
       </form>
     </div>
@@ -4400,7 +4435,43 @@ function App() {
   const liveOpenClass = openClass ? classes.find((c) => c.id === openClass.id) || openClass : null;
   const liveOpenTopic = openTopic ? topics.find((t) => t.id === openTopic.id) || openTopic : null;
 
-  const addMember = (data) => {
+  // mergeIntoMemberId comes from AddMemberModal's duplicate picker: when
+  // set, the person already exists in Disciples, so we fold the new
+  // form's classes/track info into that record instead of creating a
+  // second one. Never downgrades a track status the existing member
+  // already has, and unions class enrollments rather than replacing them.
+  const addMember = (data, mergeIntoMemberId) => {
+    if (mergeIntoMemberId) {
+      const existing = members.find((m) => m.id === mergeIntoMemberId) || {};
+      const nextClassIds = Array.from(new Set([...(existing.classIds || []), ...(data.classIds || [])]));
+      const nextTrackStatus = { ...(data.trackStatus || {}) };
+      Object.keys(existing.trackStatus || {}).forEach((k) => { nextTrackStatus[k] = existing.trackStatus[k]; });
+      Object.keys(data.trackStatus || {}).forEach((k) => {
+        if (!existing.trackStatus || !existing.trackStatus[k] || existing.trackStatus[k] === "Not Enrolled") {
+          nextTrackStatus[k] = data.trackStatus[k];
+        }
+      });
+      const nextTrackBatch = { ...(data.trackBatch || {}), ...(existing.trackBatch || {}) };
+      const nextClassStatus = deriveClassStatusFromTracks(classes, nextTrackStatus, existing.classStatus);
+      const fillGap = (key) => (existing[key] && String(existing[key]).trim()) ? existing[key] : data[key];
+      const merged = {
+        photoUrl: existing.photoUrl || data.photoUrl || null,
+        birthdate: fillGap("birthdate"),
+        gender: fillGap("gender"),
+        lifeStage: fillGap("lifeStage"),
+        category: fillGap("category"),
+        contactNumber: fillGap("contactNumber"),
+        address: fillGap("address"),
+        notes: [existing.notes, data.notes].filter(Boolean).join("\n"),
+        classIds: nextClassIds,
+        classStatus: nextClassStatus,
+        trackStatus: nextTrackStatus,
+        trackBatch: nextTrackBatch,
+      };
+      return db.collection("members").doc(mergeIntoMemberId).update(merged)
+        .then(() => { setAddOpen(false); showNotice("Merged into existing Disciples record."); })
+        .catch((err) => { showError("Could not merge into the existing member. Error: " + err.message); throw err; });
+    }
     return db.collection("members").add(data)
       .then(() => { setAddOpen(false); showNotice("Member saved."); })
       .catch((err) => { showError("Could not save the member. Error: " + err.message); throw err; });
@@ -4543,14 +4614,30 @@ function App() {
       dateAdded: new Date(), source: "one2one", createdBy: currentEmail, oneOnOneId,
     };
   };
-  const addOneOnOnePerson = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }) => {
+  // mergeIntoMemberId comes from OneOnOneFormModal's duplicate picker:
+  // when set, the person already has a Disciples record, so we link the
+  // new ONE2ONE entry to that existing member (and enroll them in the
+  // ONE2ONE track if needed) instead of creating a second member doc.
+  const addOneOnOnePerson = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }, mergeIntoMemberId) => {
     const personRef = db.collection("oneOnOne").doc();
-    const memberRef = db.collection("members").doc();
     const batch = db.batch();
-    batch.set(memberRef, buildOneOnOneMember({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address, oneOnOneId: personRef.id, status: "Enrolled" }));
-    batch.set(personRef, { name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address, createdBy: currentEmail, createdAt: new Date(), progress: {}, memberId: memberRef.id });
+    if (mergeIntoMemberId) {
+      const existing = members.find((m) => m.id === mergeIntoMemberId) || {};
+      const track = oneOnOneTrack();
+      const nextTrackStatus = { ...(existing.trackStatus || {}) };
+      if (!nextTrackStatus[track] || nextTrackStatus[track] === "Not Enrolled") nextTrackStatus[track] = "Enrolled";
+      const nextClassStatus = deriveClassStatusFromTracks(classes, nextTrackStatus, existing.classStatus);
+      const nextClassIds = Array.isArray(existing.classIds) ? [...existing.classIds] : [];
+      if (oneOnOneClass && !nextClassIds.includes(oneOnOneClass.id)) nextClassIds.push(oneOnOneClass.id);
+      batch.update(db.collection("members").doc(mergeIntoMemberId), { trackStatus: nextTrackStatus, classStatus: nextClassStatus, classIds: nextClassIds });
+      batch.set(personRef, { name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address, createdBy: currentEmail, createdAt: new Date(), progress: {}, memberId: mergeIntoMemberId });
+    } else {
+      const memberRef = db.collection("members").doc();
+      batch.set(memberRef, buildOneOnOneMember({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address, oneOnOneId: personRef.id, status: "Enrolled" }));
+      batch.set(personRef, { name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address, createdBy: currentEmail, createdAt: new Date(), progress: {}, memberId: memberRef.id });
+    }
     return batch.commit()
-      .then(() => { setAddOneOnOneOpen(false); showNotice("Added to ONE2ONE and Disciples."); })
+      .then(() => { setAddOneOnOneOpen(false); showNotice(mergeIntoMemberId ? "Linked to existing Disciples record and added to ONE2ONE." : "Added to ONE2ONE and Disciples."); })
       .catch((err) => showError("Could not add them. Error: " + err.message));
   };
   const updateOneOnOnePerson = async (id, { name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }) => {
@@ -5266,7 +5353,7 @@ function App() {
           onEdit={() => setEditingMember(liveOpenMember)}
         />
       )}
-      {addOpen && <AddMemberModal classes={classes} topics={topics} onClose={() => setAddOpen(false)} onSave={addMember} />}
+      {addOpen && <AddMemberModal classes={classes} topics={topics} members={members} onClose={() => setAddOpen(false)} onSave={addMember} />}
       {liveOpenOneOnOne && (
         <OneOnOneDetailModal
           person={liveOpenOneOnOne}
@@ -5282,6 +5369,7 @@ function App() {
         <OneOnOneFormModal
           title="Add Member to ONE2ONE"
           submitLabel="Add"
+          members={members}
           onClose={() => setAddOneOnOneOpen(false)}
           onSave={addOneOnOnePerson}
         />
