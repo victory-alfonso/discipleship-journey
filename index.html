@@ -642,9 +642,23 @@ function getClassMembers(members, classId) {
   return (members || []).filter((m) => !Array.isArray(m.classIds) || m.classIds.includes(classId));
 }
 
-function getEnrolledTopics(topics, enrolledClasses) {
+// Same idea as getClassMembers, but for a class's own sessions: when
+// the class matches a Discipleship Track (the only place a member's
+// per-class batch is recorded), only that member's own batch's
+// sessions count — so someone who finished a 7-session 2026 batch
+// isn't measured against a 2027 batch's extra sessions too. A custom
+// class with no matching track has no per-member batch label, so all
+// of its sessions still count, same as before.
+function getEnrolledTopics(topics, enrolledClasses, member) {
   const names = new Set(enrolledClasses.map((c) => c.name));
-  return topics.filter((t) => names.has(t.class));
+  return topics.filter((t) => {
+    if (!names.has(t.class)) return false;
+    const classItem = enrolledClasses.find((c) => c.name === t.class);
+    const track = classItem && trackNameForClass(classItem.name);
+    if (!track) return true;
+    const memberBatch = (member && member.trackBatch && member.trackBatch[track]) || "Batch 1";
+    return topicBatch(t) === memberBatch;
+  });
 }
 
 function normName(s) {
@@ -1981,7 +1995,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
   const att = attendanceByMember[member.id] || {};
 
   const enrolledClasses = useMemo(() => getEnrolledClasses(classes, member), [classes, member]);
-  const enrolledTopics = useMemo(() => getEnrolledTopics(topics, enrolledClasses), [topics, enrolledClasses]);
+  const enrolledTopics = useMemo(() => getEnrolledTopics(topics, enrolledClasses, member), [topics, enrolledClasses, member]);
   const enrolledTopicIds = useMemo(() => new Set(enrolledTopics.map((t) => t.id)), [enrolledTopics]);
 
   const [activeClassId, setActiveClassId] = useState(null);
@@ -2097,7 +2111,11 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
         )}
         <div style={dj.classGrid}>
           {enrolledClasses.map((c) => {
-            const ts = topicsForClass(topics, c.name);
+            const track = trackNameForClass(c.name);
+            const memberBatch = track ? ((member.trackBatch && member.trackBatch[track]) || "Batch 1") : null;
+            const ts = memberBatch
+              ? topicsForClass(topics, c.name).filter((t) => topicBatch(t) === memberBatch)
+              : topicsForClass(topics, c.name);
             const sessions = ts.map((t) => ({ id: t.id, attended: !!(att[t.id] && att[t.id].attended) }));
             const isActive = activeClassId === c.id;
             return (
@@ -2215,7 +2233,11 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
       {(() => {
         const activeClass = enrolledClasses.find((c) => c.id === activeClassId);
         if (!activeClass) return null;
-        const ts = topicsForClass(topics, activeClass.name);
+        const activeTrack = trackNameForClass(activeClass.name);
+        const activeMemberBatch = activeTrack ? ((member.trackBatch && member.trackBatch[activeTrack]) || "Batch 1") : null;
+        const ts = activeMemberBatch
+          ? topicsForClass(topics, activeClass.name).filter((t) => topicBatch(t) === activeMemberBatch)
+          : topicsForClass(topics, activeClass.name);
         const sessions = ts.map((t) => ({ id: t.id, attended: !!(att[t.id] && att[t.id].attended) }));
         return (
           <div
