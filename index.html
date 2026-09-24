@@ -1737,7 +1737,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
   };
 
   return (
-    <div>
+    <div style={{ background: "linear-gradient(135deg, #FBF8ED, #F5EFDA, #F0E9D2)", borderRadius: 16, padding: 10, margin: -10 }}>
       <div style={{ background: "rgba(255,255,255,0.5)", backdropFilter: "blur(18px) saturate(160%)", WebkitBackdropFilter: "blur(18px) saturate(160%)", border: "1px solid rgba(31,56,100,0.12)", borderRadius: 16, padding: "14px 14px 10px", marginBottom: 16, boxShadow: "0 10px 30px -18px rgba(35,33,29,0.2)" }}>
       <div className="stack-mobile" style={{ ...styles.toolbar, marginBottom: 12 }}>
         <input style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} placeholder="Search name, contact number, or address…" value={query} onChange={(e) => setQuery(e.target.value)} />
@@ -1883,6 +1883,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
             </tbody>
           </table>
       </div>
+    </div>
     </div>
   );
 }
