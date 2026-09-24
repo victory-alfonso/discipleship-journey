@@ -3112,7 +3112,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   };
   const submitNewBatch = () => {
     if (!newBatchName.trim()) return;
-    onAddBatch(classItem.id, newBatchName.trim());
+    onAddBatch(classItem.id, newBatchName.trim(), activeBatch);
     setSelectedBatch(newBatchName.trim());
     setNewBatchName("");
     setAddingBatch(false);
@@ -3391,7 +3391,7 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
   }, [allClassMembers, track, activeBatch]);
   const submitNewBatch = () => {
     if (!newBatchName.trim()) return;
-    onAddBatch(classItem.id, newBatchName.trim());
+    onAddBatch(classItem.id, newBatchName.trim(), activeBatch);
     setSelectedBatch(newBatchName.trim());
     setNewBatchName("");
     setAddingBatch(false);
@@ -4472,14 +4472,28 @@ function App() {
   // this way (rather than only ever implying one from a session's
   // "batch" field) is what lets a leader set up "Batch 2026" ahead of
   // time, before any sessions or members are attached to it.
-  const addBatch = (classId, batchName) => {
+  // Adds a batch name to a class's "batches" list. New batches start
+  // with a copy of the sessions from the batch the leader was viewing
+  // when they added it (same names, freshly unconducted, renumbered
+  // 1..n) so the curriculum doesn't have to be retyped every time —
+  // but never with any members or attendance; a batch always starts
+  // with nobody enrolled and nothing marked attended.
+  const addBatch = (classId, batchName, copyFromBatch) => {
     const name = (batchName || "").trim();
     if (!name) return;
     const classItem = classes.find((c) => c.id === classId);
     const existing = getBatchesForClass(classItem, topics);
     if (existing.includes(name)) { showError("That batch already exists."); return; }
-    db.collection("classes").doc(classId).update({ batches: [...(classItem.batches || []), name] })
-      .then(() => showNotice("Batch added."))
+    const sourceTopics = copyFromBatch
+      ? sortTopicsForDisplay(topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === copyFromBatch))
+      : [];
+    const batch = db.batch();
+    batch.update(db.collection("classes").doc(classId), { batches: [...(classItem.batches || []), name] });
+    sourceTopics.forEach((t, i) => {
+      batch.set(db.collection("topics").doc(), { class: classItem.name, name: t.name, order: i + 1, batch: name });
+    });
+    batch.commit()
+      .then(() => showNotice(sourceTopics.length ? `Batch added with ${sourceTopics.length} session${sourceTopics.length === 1 ? "" : "s"} copied.` : "Batch added."))
       .catch((err) => showError("Could not add the batch. Error: " + err.message));
   };
   // Renaming a batch has to cascade like a class rename does: every
