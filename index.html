@@ -2562,7 +2562,7 @@ function AddMemberModal({ classes, topics, onClose, onSave, initialTrack, initia
 // EDIT MEMBER MODAL
 // ============================================================
 
-function EditMemberModal({ member, classes, topics, onClose, onSave }) {
+function EditMemberModal({ member, classes, topics, onClose, onSave, onCompleteAllSessions }) {
   const [name, setName] = useState(member.name || "");
   const [photoUrl, setPhotoUrl] = useState(member.photoUrl || null);
   const [birthdate, setBirthdate] = useState(member.birthdate ? toDateInputValue(member.birthdate) : "");
@@ -2576,8 +2576,30 @@ function EditMemberModal({ member, classes, topics, onClose, onSave }) {
   const [trackBatch, setTrackBatch] = useState(member.trackBatch || {});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // Tracks (by name) the leader just confirmed to auto-complete —
+  // { [track]: classId } — so submit() knows which classes need every
+  // session marked attended once the status change itself is saved.
+  const [autoCompleteTracks, setAutoCompleteTracks] = useState({});
 
-  const setTrack = (track, value) => {
+  const setTrack = async (track, value) => {
+    if (value === "Completed" && trackStatus[track] !== "Completed") {
+      const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === track);
+      const className = matchingClass ? matchingClass.name : track;
+      const ok = await askConfirm({
+        title: "Mark as completed?",
+        message: `Do you want to tag ${member.name} as completed in ${className}? If yes, all of their sessions in ${className} will be marked as attended.`,
+        confirmLabel: "Yes, complete all",
+      });
+      if (!ok) return;
+      setAutoCompleteTracks((prev) => ({ ...prev, [track]: matchingClass ? matchingClass.id : null }));
+    } else if (value !== "Completed") {
+      setAutoCompleteTracks((prev) => {
+        if (!(track in prev)) return prev;
+        const next = { ...prev };
+        delete next[track];
+        return next;
+      });
+    }
     setTrackStatus((prev) => ({ ...prev, [track]: value }));
   };
   const setBatch = (track, value) => {
@@ -2622,6 +2644,10 @@ function EditMemberModal({ member, classes, topics, onClose, onSave }) {
         trackStatus,
         trackBatch,
       });
+      const classIdsToComplete = Object.values(autoCompleteTracks).filter(Boolean);
+      if (classIdsToComplete.length > 0 && onCompleteAllSessions) {
+        await Promise.all(classIdsToComplete.map((classId) => onCompleteAllSessions(member.id, classId)));
+      }
     } catch (err) {
       // A save failure already shows a toast (from the parent's
       // updateMember handler) — just stop treating the form as busy.
@@ -4005,6 +4031,27 @@ function App() {
     db.collection("attendance").doc(docId).set({ memberId, topicId, attended: true, dateAttended }, { merge: true })
       .catch((err) => showError("Could not save the date. Error: " + err.message));
   };
+  // Used when a leader manually flips a member's status to "Completed"
+  // in the Edit Member form (after confirming) — marks every session in
+  // that class as attended so the attendance records actually back up
+  // the status shown, instead of leaving it saying "Completed" while
+  // sessions still show 0 attended.
+  const completeAllSessionsForClass = async (memberId, classId) => {
+    const classInfo = classes.find((c) => c.id === classId);
+    if (!classInfo) return;
+    const classTopics = topicsForClass(topics, classInfo.name);
+    if (classTopics.length === 0) return;
+    const batch = db.batch();
+    classTopics.forEach((t) => {
+      const docId = `${memberId}_${t.id}`;
+      batch.set(db.collection("attendance").doc(docId), { memberId, topicId: t.id, attended: true, dateAttended: new Date() }, { merge: true });
+    });
+    try {
+      await batch.commit();
+    } catch (err) {
+      showError("Could not mark all sessions as attended. Error: " + err.message);
+    }
+  };
   const addClass = (name, order, photoUrl) => {
     db.collection("classes").add({ name, order, photoUrl: photoUrl || null })
       .then(() => showNotice("Class added."))
@@ -4496,6 +4543,7 @@ function App() {
           topics={topics}
           onClose={() => setEditingMember(null)}
           onSave={(data) => updateMember(editingMember.id, data)}
+          onCompleteAllSessions={completeAllSessionsForClass}
         />
       )}
       {renamingClass && (
