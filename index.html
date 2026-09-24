@@ -1681,7 +1681,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
     : [];
   const matchesTrackStatus = (m) => {
     if (trackChips.length === 0) return true;
-    return trackChips.some((t) => {
+    return trackChips.every((t) => {
       const st = (m.trackStatus && m.trackStatus[t]) || "Not Enrolled";
       if (st === "Not Enrolled") return false;
       if (batchChip && singleTrackChip === t) {
