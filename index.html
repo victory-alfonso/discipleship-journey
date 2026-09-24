@@ -219,6 +219,89 @@ function ConfirmHost() {
 }
 
 // ============================================================
+// SESSION PICKER — replaces a plain confirm() when a leader
+// downgrades a member away from "Completed" in Edit Member.
+// Lets them check off exactly which sessions actually happened
+// instead of leaving every session marked attended under a
+// status that now says otherwise. Usage:
+//   const result = await askSessionPicker({ title, message, sessions, initialChecked });
+//   if (result) { ...result is { [topicId]: boolean }... }
+// <SessionPickerHost /> is mounted once at the root.
+// ============================================================
+let sessionPickerListener = null;
+function askSessionPicker(opts) {
+  return new Promise((resolve) => {
+    if (!sessionPickerListener) { resolve(null); return; }
+    sessionPickerListener({ ...opts, resolve });
+  });
+}
+
+function SessionPickerHost() {
+  const [req, setReq] = useState(null);
+  const [checked, setChecked] = useState({});
+
+  useEffect(() => {
+    sessionPickerListener = (r) => { setReq(r); setChecked(r.initialChecked || {}); };
+    return () => { sessionPickerListener = null; };
+  }, []);
+
+  const close = (result) => {
+    if (req) req.resolve(result);
+    setReq(null);
+  };
+
+  useEffect(() => {
+    if (!req) return;
+    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [req]);
+
+  if (!req) return null;
+  const sessions = req.sessions || [];
+  const toggle = (id) => setChecked((prev) => ({ ...prev, [id]: !prev[id] }));
+  const allChecked = sessions.length > 0 && sessions.every((t) => checked[t.id]);
+  const setAll = (value) => setChecked(() => {
+    const next = {};
+    sessions.forEach((t) => { next[t.id] = value; });
+    return next;
+  });
+  return (
+    <div style={{ ...styles.modalOverlay, zIndex: 10001 }} onClick={() => close(null)}>
+      <div role="dialog" aria-modal="true" style={{ ...styles.modalCard, maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>{req.title || "Update sessions"}</div>
+        {req.message && (
+          <div style={{ fontSize: 13.5, color: "#4A4230", lineHeight: 1.5, marginBottom: 14 }}>{req.message}</div>
+        )}
+        {sessions.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setAll(!allChecked)}
+            style={{ alignSelf: "flex-start", marginBottom: 8, background: "none", border: "none", color: "#1F3864", fontSize: 12.5, fontWeight: 700, cursor: "pointer", padding: 0 }}
+          >
+            {allChecked ? "Uncheck all" : "Check all"}
+          </button>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: "44vh", overflowY: "auto", marginBottom: 8, border: "1px solid rgba(216,207,176,0.5)", borderRadius: 10, padding: "4px 8px" }}>
+          {sessions.length === 0 ? (
+            <div style={{ fontSize: 13, color: "#7A6E4E", fontStyle: "italic", padding: "8px 4px" }}>This class has no sessions yet.</div>
+          ) : sessions.map((t) => (
+            <label key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 4px", cursor: "pointer" }}>
+              <input type="checkbox" checked={!!checked[t.id]} onChange={() => toggle(t.id)} />
+              <span style={{ fontSize: 13.5, color: "#23211D", fontWeight: 600 }}>{t.name}</span>
+            </label>
+          ))}
+        </div>
+        <div style={styles.modalActions}>
+          <button style={styles.modalCancelBtn} onClick={() => close(null)}>Cancel</button>
+          <button style={styles.modalConfirmBtn} onClick={() => close(checked)}>Save</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // NOTICES (toast) — replaces native showError() so errors don't
 // block the UI. Call showError("...") / showNotice("...") from
 // anywhere; <ToastHost /> (mounted once at the root) renders them.
@@ -2625,7 +2708,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
 // EDIT MEMBER MODAL
 // ============================================================
 
-function EditMemberModal({ member, classes, topics, onClose, onSave, onCompleteAllSessions }) {
+function EditMemberModal({ member, classes, topics, attendanceByMember, onClose, onSave, onCompleteAllSessions, onUpdateSessionAttendance }) {
   const [name, setName] = useState(member.name || "");
   const [photoUrl, setPhotoUrl] = useState(member.photoUrl || null);
   const [birthdate, setBirthdate] = useState(member.birthdate ? toDateInputValue(member.birthdate) : "");
@@ -2643,9 +2726,15 @@ function EditMemberModal({ member, classes, topics, onClose, onSave, onCompleteA
   // { [track]: classId } — so submit() knows which classes need every
   // session marked attended once the status change itself is saved.
   const [autoCompleteTracks, setAutoCompleteTracks] = useState({});
+  // Tracks (by name) where the leader picked exactly which sessions are
+  // done after downgrading away from "Completed" — { [track]: { classId,
+  // attendance: { [topicId]: boolean } } } — applied in submit() the same
+  // way autoCompleteTracks is.
+  const [sessionOverrides, setSessionOverrides] = useState({});
 
   const setTrack = async (track, value) => {
-    if (value === "Completed" && trackStatus[track] !== "Completed") {
+    const prevValue = trackStatus[track];
+    if (value === "Completed" && prevValue !== "Completed") {
       const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === track);
       const className = matchingClass ? matchingClass.name : track;
       const ok = await askConfirm({
@@ -2655,6 +2744,38 @@ function EditMemberModal({ member, classes, topics, onClose, onSave, onCompleteA
       });
       if (!ok) return;
       setAutoCompleteTracks((prev) => ({ ...prev, [track]: matchingClass ? matchingClass.id : null }));
+      setSessionOverrides((prev) => {
+        if (!(track in prev)) return prev;
+        const next = { ...prev };
+        delete next[track];
+        return next;
+      });
+    } else if (prevValue === "Completed" && (value === "In-Progress" || value === "Incomplete") && onUpdateSessionAttendance) {
+      // Downgrading a completed track — ask exactly which sessions
+      // actually happened instead of quietly leaving every session in
+      // that class marked attended under a status that now says
+      // otherwise.
+      const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === track);
+      if (matchingClass) {
+        const classTopics = topicsForClass(topics, matchingClass.name);
+        const attForMember = (attendanceByMember && attendanceByMember[member.id]) || {};
+        const initialChecked = {};
+        classTopics.forEach((t) => { initialChecked[t.id] = attForMember[t.id] ? !!attForMember[t.id].attended : true; });
+        const result = await askSessionPicker({
+          title: `Update ${matchingClass.name} sessions`,
+          message: `${member.name} was marked Completed. Uncheck any session they haven't actually finished — this updates their attendance record to match.`,
+          sessions: classTopics,
+          initialChecked,
+        });
+        if (!result) return;
+        setSessionOverrides((prev) => ({ ...prev, [track]: { classId: matchingClass.id, attendance: result } }));
+      }
+      setAutoCompleteTracks((prev) => {
+        if (!(track in prev)) return prev;
+        const next = { ...prev };
+        delete next[track];
+        return next;
+      });
     } else if (value !== "Completed") {
       setAutoCompleteTracks((prev) => {
         if (!(track in prev)) return prev;
@@ -2710,6 +2831,10 @@ function EditMemberModal({ member, classes, topics, onClose, onSave, onCompleteA
       const classIdsToComplete = Object.values(autoCompleteTracks).filter(Boolean);
       if (classIdsToComplete.length > 0 && onCompleteAllSessions) {
         await Promise.all(classIdsToComplete.map((classId) => onCompleteAllSessions(member.id, classId)));
+      }
+      const overridesToApply = Object.values(sessionOverrides);
+      if (overridesToApply.length > 0 && onUpdateSessionAttendance) {
+        await Promise.all(overridesToApply.map((o) => onUpdateSessionAttendance(member.id, o.classId, o.attendance)));
       }
     } catch (err) {
       // A save failure already shows a toast (from the parent's
@@ -4583,6 +4708,25 @@ function App() {
       showError("Could not mark all sessions as attended. Error: " + err.message);
     }
   };
+  // Used when a leader downgrades a member away from "Completed" for a
+  // class in the Edit Member form's session picker — writes back exactly
+  // which sessions they checked as done, so the attendance records match
+  // the status they just chose instead of every session still showing
+  // attended.
+  const updateSessionAttendanceForClass = async (memberId, classId, attendanceMap) => {
+    const classInfo = classes.find((c) => c.id === classId);
+    if (!classInfo) return;
+    const batch = db.batch();
+    Object.entries(attendanceMap || {}).forEach(([topicId, attended]) => {
+      const docId = `${memberId}_${topicId}`;
+      batch.set(db.collection("attendance").doc(docId), { memberId, topicId, attended: !!attended, dateAttended: attended ? new Date() : null }, { merge: true });
+    });
+    try {
+      await batch.commit();
+    } catch (err) {
+      showError("Could not update session attendance. Error: " + err.message);
+    }
+  };
   // ============================================================
   // ONE2ONE — each person is a doc in its own collection, carrying
   // createdBy (the adder's email) and a plain array of sessions
@@ -5387,9 +5531,11 @@ function App() {
           member={editingMember}
           classes={classes}
           topics={topics}
+          attendanceByMember={attendanceByMember}
           onClose={() => setEditingMember(null)}
           onSave={(data) => updateMember(editingMember.id, data)}
           onCompleteAllSessions={completeAllSessionsForClass}
+          onUpdateSessionAttendance={updateSessionAttendanceForClass}
         />
       )}
       {renamingClass && (
@@ -5570,6 +5716,7 @@ root.render(
     <App />
     <ToastHost />
     <ConfirmHost />
+    <SessionPickerHost />
   </>
 );
 </script>
