@@ -454,12 +454,17 @@ const TRACK_STATUSES = ["Not Enrolled", "Enrolled", "In-Progress", "Incomplete",
 // as a small muted dot instead of a full text pill, which is what
 // was forcing the table into horizontal scroll. Meaningful statuses
 // still render as a short colored pill so they stand out.
-function TrackStatusCell({ status }) {
+function TrackStatusCell({ status, batch }) {
   if (status === "Not Enrolled") {
     return <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "rgba(31,56,100,0.18)" }} />;
   }
   const short = status === "In-Progress" ? "In Prog." : status;
-  return <span style={{ ...styles.statusBadge, ...trackStatusBadgeStyle(status), padding: "3px 8px", fontSize: 9.5 }}>{short}</span>;
+  return (
+    <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+      <span style={{ ...styles.statusBadge, ...trackStatusBadgeStyle(status), padding: "3px 8px", fontSize: 9.5 }}>{short}</span>
+      {batch && <span style={{ fontSize: 8.5, color: "#7A6E4E", whiteSpace: "nowrap" }}>{batch}</span>}
+    </div>
+  );
 }
 
 // ============================================================
@@ -1658,27 +1663,42 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
   const [classFilter, setClassFilter] = useState("");
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
-  const [quickChip, setQuickChip] = useState("");
+  const [quickView, setQuickView] = useState("");     // "noClass" | "newlyRegistered" | ""
+  const [trackChip, setTrackChip] = useState("");     // "" (Lahat) o isa sa DISCIPLESHIP_TRACKS
+  const [statusToggle, setStatusToggle] = useState(""); // "" | "In-Progress" | "Completed"
+  const [batchChip, setBatchChip] = useState("");      // batch label, kapag may trackChip
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
 
   const memberHasNoClass = (m) => DISCIPLESHIP_TRACKS.every((t) => ((m.trackStatus && m.trackStatus[t]) || "Not Enrolled") === "Not Enrolled");
-  const memberHasInProgress = (m) => DISCIPLESHIP_TRACKS.some((t) => (m.trackStatus && m.trackStatus[t]) === "In-Progress");
-  const memberCompletedAll = (m) => {
-    const started = DISCIPLESHIP_TRACKS.filter((t) => ((m.trackStatus && m.trackStatus[t]) || "Not Enrolled") !== "Not Enrolled");
-    return started.length > 0 && started.every((t) => m.trackStatus[t] === "Completed");
-  };
   const memberIsNewlyRegistered = (m) => {
     if (!m.dateAdded) return false;
     const dt = m.dateAdded.toDate ? m.dateAdded.toDate() : new Date(m.dateAdded);
     return (Date.now() - dt.getTime()) <= 30 * 24 * 60 * 60 * 1000;
   };
-  const QUICK_CHIPS = [
+  const QUICK_VIEWS = [
     { key: "noClass", label: "Walang class pa", test: memberHasNoClass },
-    { key: "inProgress", label: "May In-Progress", test: memberHasInProgress },
-    { key: "completedAll", label: "Completed lahat", test: memberCompletedAll },
     { key: "newlyRegistered", label: "Bagong register", test: memberIsNewlyRegistered },
   ];
+  // Distinct batch labels currently in use for the selected track, so
+  // the batch chip row only ever offers real, existing batches.
+  const batchOptionsForTrackChip = trackChip
+    ? Array.from(new Set(members.map((m) => (m.trackBatch && m.trackBatch[trackChip]) || "").filter(Boolean)))
+    : [];
+  const matchesTrackStatus = (m) => {
+    if (!trackChip && !statusToggle) return true;
+    if (trackChip) {
+      const st = (m.trackStatus && m.trackStatus[trackChip]) || "Not Enrolled";
+      const passesStatus = statusToggle ? st === statusToggle : st !== "Not Enrolled";
+      if (!passesStatus) return false;
+      if (batchChip) {
+        const b = (m.trackBatch && m.trackBatch[trackChip]) || "";
+        if (b !== batchChip) return false;
+      }
+      return true;
+    }
+    return DISCIPLESHIP_TRACKS.some((t) => ((m.trackStatus && m.trackStatus[t]) || "Not Enrolled") === statusToggle);
+  };
 
   const filtered = members.filter((m) => {
     if (query) {
@@ -1696,14 +1716,15 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       const isEnrolled = getEnrolledClasses(classes, m).some((c) => c.name === classFilter);
       if (!isEnrolled) return false;
     }
-    if (quickChip) {
-      const chip = QUICK_CHIPS.find((c) => c.key === quickChip);
-      if (chip && !chip.test(m)) return false;
+    if (quickView) {
+      const qv = QUICK_VIEWS.find((c) => c.key === quickView);
+      if (qv && !qv.test(m)) return false;
     }
+    if (!matchesTrackStatus(m)) return false;
     return true;
   });
-  const anyFilterActive = query || lifeStageFilter || genderFilter || categoryFilter || classFilter || minAge || maxAge || quickChip;
-  const clearFilters = () => { setQuery(""); setLifeStageFilter(""); setGenderFilter(""); setCategoryFilter(""); setClassFilter(""); setMinAge(""); setMaxAge(""); setQuickChip(""); };
+  const anyFilterActive = query || lifeStageFilter || genderFilter || categoryFilter || classFilter || minAge || maxAge || quickView || trackChip || statusToggle || batchChip;
+  const clearFilters = () => { setQuery(""); setLifeStageFilter(""); setGenderFilter(""); setCategoryFilter(""); setClassFilter(""); setMinAge(""); setMaxAge(""); setQuickView(""); setTrackChip(""); setStatusToggle(""); setBatchChip(""); };
 
   // Sortable columns: click a header to sort by it, click again to
   // flip direction. Track-status columns sort by a fixed status
@@ -1766,19 +1787,19 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       </div>
 
       {members.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "-2px 0 10px" }}>
-          {QUICK_CHIPS.map((chip) => {
-            const active = quickChip === chip.key;
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "-2px 0 6px" }}>
+          {QUICK_VIEWS.map((chip) => {
+            const active = quickView === chip.key;
             return (
               <button
                 key={chip.key}
-                onClick={() => setQuickChip(active ? "" : chip.key)}
+                onClick={() => {
+                  const val = active ? "" : chip.key;
+                  setQuickView(val);
+                  if (val) { setTrackChip(""); setStatusToggle(""); setBatchChip(""); }
+                }}
                 style={{
-                  padding: "6px 12px",
-                  borderRadius: 20,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  cursor: "pointer",
+                  padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
                   border: active ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.25)",
                   background: active ? "#1F3864" : "rgba(255,255,255,0.6)",
                   color: active ? "#FFFFFF" : "#23211D",
@@ -1792,24 +1813,97 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       )}
 
       {members.length > 0 && (
-        <div style={{ fontSize: 12.5, color: "#7A6E4E", margin: "-6px 0 12px" }}>
-          Showing {filtered.length} of {members.length} {members.length === 1 ? "member" : "members"}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 6px" }}>
+          <button
+            onClick={() => { setTrackChip(""); setQuickView(""); setBatchChip(""); }}
+            style={{
+              padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+              border: trackChip === "" ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.2)",
+              background: trackChip === "" ? "rgba(31,56,100,0.1)" : "rgba(255,255,255,0.5)",
+              color: "#1F3864",
+            }}
+          >
+            Lahat ng Klase
+          </button>
+          {DISCIPLESHIP_TRACKS.map((t) => {
+            const active = trackChip === t;
+            return (
+              <button
+                key={t}
+                onClick={() => { setTrackChip(active ? "" : t); setQuickView(""); setBatchChip(""); }}
+                style={{
+                  padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+                  border: active ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.2)",
+                  background: active ? "rgba(31,56,100,0.1)" : "rgba(255,255,255,0.5)",
+                  color: "#1F3864",
+                }}
+              >
+                {t}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {members.length > 0 && trackChip && batchOptionsForTrackChip.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 6px" }}>
+          <span style={{ fontSize: 10.5, color: "#7A6E4E", alignSelf: "center", marginRight: 2 }}>Batch:</span>
+          <button
+            onClick={() => setBatchChip("")}
+            style={{
+              padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer",
+              border: batchChip === "" ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.2)",
+              background: batchChip === "" ? "rgba(31,56,100,0.1)" : "rgba(255,255,255,0.5)",
+              color: "#1F3864",
+            }}
+          >
+            Lahat
+          </button>
+          {batchOptionsForTrackChip.map((b) => {
+            const active = batchChip === b;
+            return (
+              <button
+                key={b}
+                onClick={() => setBatchChip(active ? "" : b)}
+                style={{
+                  padding: "4px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: "pointer",
+                  border: active ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.2)",
+                  background: active ? "rgba(31,56,100,0.1)" : "rgba(255,255,255,0.5)",
+                  color: "#1F3864",
+                }}
+              >
+                {b}
+              </button>
+            );
+          })}
         </div>
       )}
 
       {members.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", fontSize: 11, color: "#7A6E4E", margin: "-4px 0 12px", alignItems: "center" }}>
-          <span style={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, fontSize: 10 }}>Legend:</span>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-            <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "rgba(31,56,100,0.18)" }} />
-            Not Enrolled
-          </span>
-          {TRACK_STATUSES.filter((s) => s !== "Not Enrolled").map((s) => (
-            <span key={s} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <span style={{ ...styles.statusBadge, ...trackStatusBadgeStyle(s), padding: "2px 7px", fontSize: 8.5 }}>{s === "In-Progress" ? "In Prog." : s}</span>
-              {s}
-            </span>
-          ))}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 10px" }}>
+          {["In-Progress", "Completed"].map((s) => {
+            const active = statusToggle === s;
+            return (
+              <button
+                key={s}
+                onClick={() => { setStatusToggle(active ? "" : s); setQuickView(""); }}
+                style={{
+                  padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
+                  border: active ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.2)",
+                  background: active ? (s === "Completed" ? "rgba(56,80,38,0.18)" : "rgba(229,164,48,0.22)") : "rgba(255,255,255,0.5)",
+                  color: active ? (s === "Completed" ? "#385026" : "#A9782F") : "#7A6E4E",
+                }}
+              >
+                {s === "In-Progress" ? "In Prog." : s}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {members.length > 0 && (
+        <div style={{ fontSize: 12.5, color: "#7A6E4E", margin: "-6px 0 12px" }}>
+          Showing {filtered.length} of {members.length} {members.length === 1 ? "member" : "members"}
         </div>
       )}
 
@@ -1853,9 +1947,10 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
                     <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(31,56,100,0.08)", color: "#4A4230", whiteSpace: "nowrap" }}>{m.category || "—"}</td>
                     {DISCIPLESHIP_TRACKS.map((track) => {
                       const status = (m.trackStatus && m.trackStatus[track]) || "Not Enrolled";
+                      const batch = (m.trackBatch && m.trackBatch[track]) || "";
                       return (
-                        <td key={track} title={`${track}: ${status}`} style={{ padding: "8px 10px", borderBottom: "1px solid rgba(31,56,100,0.08)", whiteSpace: "nowrap", textAlign: "center" }}>
-                          <TrackStatusCell status={status} />
+                        <td key={track} title={`${track}: ${status}${batch ? ` (${batch})` : ""}`} style={{ padding: "8px 10px", borderBottom: "1px solid rgba(31,56,100,0.08)", whiteSpace: "nowrap", textAlign: "center" }}>
+                          <TrackStatusCell status={status} batch={batch} />
                         </td>
                       );
                     })}
@@ -2342,23 +2437,36 @@ function backfillTrackStatusFromClassStatus(classes, trackStatus, classStatus) {
   return result;
 }
 
-function DiscipleshipTrackFields({ trackStatus, onChange }) {
+function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchChange }) {
   return (
     <>
       <div style={styles.sectionLabel}>Discipleship tracks</div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
-        {DISCIPLESHIP_TRACKS.map((track) => (
-          <label key={track} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-            <span style={{ flex: 1, color: "#4A4230" }}>{track}</span>
-            <select
-              style={{ ...styles.modalInput, marginBottom: 0, flex: "0 0 160px" }}
-              value={trackStatus[track] || "Not Enrolled"}
-              onChange={(e) => onChange(track, e.target.value)}
-            >
-              {TRACK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </label>
-        ))}
+        {DISCIPLESHIP_TRACKS.map((track) => {
+          const status = trackStatus[track] || "Not Enrolled";
+          return (
+            <div key={track} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
+                <span style={{ flex: 1, color: "#4A4230" }}>{track}</span>
+                <select
+                  style={{ ...styles.modalInput, marginBottom: 0, flex: "0 0 160px" }}
+                  value={status}
+                  onChange={(e) => onChange(track, e.target.value)}
+                >
+                  {TRACK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </label>
+              {status !== "Not Enrolled" && (
+                <input
+                  style={{ ...styles.modalInput, marginBottom: 0, marginLeft: "auto", flex: "0 0 160px", fontSize: 12 }}
+                  placeholder="Batch (optional, e.g. Batch 2)"
+                  value={(trackBatch && trackBatch[track]) || ""}
+                  onChange={(e) => onBatchChange(track, e.target.value)}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
     </>
   );
@@ -2375,11 +2483,15 @@ function AddMemberModal({ classes, onClose, onSave }) {
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [trackStatus, setTrackStatus] = useState({});
+  const [trackBatch, setTrackBatch] = useState({});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const setTrack = (track, value) => {
     setTrackStatus((prev) => ({ ...prev, [track]: value }));
+  };
+  const setBatch = (track, value) => {
+    setTrackBatch((prev) => ({ ...prev, [track]: value }));
   };
 
   // Each check has its own message so a leader who hits "Add" with one
@@ -2420,6 +2532,7 @@ function AddMemberModal({ classes, onClose, onSave }) {
         classIds,
         classStatus,
         trackStatus,
+        trackBatch,
         dateAdded: new Date(),
       });
     } catch (err) {
@@ -2477,7 +2590,7 @@ function AddMemberModal({ classes, onClose, onSave }) {
             <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
           </label>
         </div>
-        <DiscipleshipTrackFields trackStatus={trackStatus} onChange={setTrack} />
+        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} />
         <div style={styles.modalActions}>
           <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Add"}</button>
@@ -2502,11 +2615,15 @@ function EditMemberModal({ member, classes, onClose, onSave }) {
   const [address, setAddress] = useState(member.address || "");
   const [notes, setNotes] = useState(member.notes || "");
   const [trackStatus, setTrackStatus] = useState(() => backfillTrackStatusFromClassStatus(classes, member.trackStatus, member.classStatus));
+  const [trackBatch, setTrackBatch] = useState(member.trackBatch || {});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   const setTrack = (track, value) => {
     setTrackStatus((prev) => ({ ...prev, [track]: value }));
+  };
+  const setBatch = (track, value) => {
+    setTrackBatch((prev) => ({ ...prev, [track]: value }));
   };
 
   function validate() {
@@ -2545,6 +2662,7 @@ function EditMemberModal({ member, classes, onClose, onSave }) {
         classIds,
         classStatus,
         trackStatus,
+        trackBatch,
       });
     } catch (err) {
       // A save failure already shows a toast (from the parent's
@@ -2600,7 +2718,7 @@ function EditMemberModal({ member, classes, onClose, onSave }) {
             <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
           </label>
         </div>
-        <DiscipleshipTrackFields trackStatus={trackStatus} onChange={setTrack} />
+        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} />
         <div style={styles.modalActions}>
           <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
           <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
