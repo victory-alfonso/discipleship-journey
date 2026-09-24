@@ -524,6 +524,22 @@ function sortTopicsNaturally(list) {
     return (a.name || "").localeCompare(b.name || "");
   });
 }
+// Display/drag order for a class's sessions: primarily the "order"
+// field (which drag-to-reorder writes to), falling back to the old
+// name-based natural sort for any session saved before that field
+// existed.
+function sortTopicsForDisplay(list) {
+  return [...list].sort((a, b) => {
+    const oa = typeof a.order === "number" ? a.order : null;
+    const ob = typeof b.order === "number" ? b.order : null;
+    if (oa != null && ob != null && oa !== ob) return oa - ob;
+    if (oa != null && ob == null) return -1;
+    if (oa == null && ob != null) return 1;
+    const ka = sessionSortKey(a.name), kb = sessionSortKey(b.name);
+    if (ka !== kb) return ka - kb;
+    return (a.name || "").localeCompare(b.name || "");
+  });
+}
 
 function classProgressPct(className, topics, attendanceByMember, memberId) {
   const ts = topicsForClass(topics, className);
@@ -2929,7 +2945,124 @@ function DetailBar({ pct }) {
   );
 }
 
-function ClassDetailModal({ classItem, classes, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember }) {
+// Drag-to-reorder wrapper for a class's session list. Works with
+// mouse and touch alike via the Pointer Events API (no native HTML5
+// drag-and-drop, which iOS Safari doesn't support on touch). Only the
+// small handle icon is draggable — the row itself keeps its normal
+// tap-to-open behavior. While a drag is in progress the dragged row
+// follows the pointer and the rows between its start and target spot
+// shift out of the way; nothing is written until the drag ends, at
+// which point onReorder receives the full list of ids in their new
+// order for the caller to persist.
+function SortableSessionList({ topics, isLeader, renderRow, onReorder }) {
+  const [dragId, setDragId] = useState(null);
+  const [dragDelta, setDragDelta] = useState(0);
+  const dragInfo = useRef(null);
+  const rowRefs = useRef({});
+  const order = topics.map((t) => t.id);
+
+  const startDrag = (id, e) => {
+    if (!isLeader || topics.length < 2) return;
+    const idx = order.indexOf(id);
+    const el = rowRefs.current[id];
+    if (!el) return;
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+    let unit = el.getBoundingClientRect().height + 8;
+    const nextEl = rowRefs.current[order[idx + 1]];
+    const prevEl = rowRefs.current[order[idx - 1]];
+    if (nextEl) unit = nextEl.getBoundingClientRect().top - el.getBoundingClientRect().top;
+    else if (prevEl) unit = el.getBoundingClientRect().top - prevEl.getBoundingClientRect().top;
+    dragInfo.current = { pointerId: e.pointerId, startY: e.clientY, startIndex: idx, unit, order: [...order] };
+    setDragId(id);
+    setDragDelta(0);
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  const moveDrag = (e) => {
+    if (!dragInfo.current) return;
+    e.preventDefault();
+    setDragDelta(e.clientY - dragInfo.current.startY);
+  };
+  const endDrag = (e) => {
+    const info = dragInfo.current;
+    if (!info) return;
+    const shift = Math.round(dragDelta / info.unit);
+    const targetIndex = Math.max(0, Math.min(info.order.length - 1, info.startIndex + shift));
+    dragInfo.current = null;
+    setDragId(null);
+    setDragDelta(0);
+    if (targetIndex !== info.startIndex) {
+      const newOrder = [...info.order];
+      const [moved] = newOrder.splice(info.startIndex, 1);
+      newOrder.splice(targetIndex, 0, moved);
+      onReorder(newOrder);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {topics.map((t, i) => {
+        const info = dragInfo.current;
+        const isDragged = dragId === t.id;
+        let translateY = 0;
+        if (info) {
+          if (isDragged) {
+            translateY = dragDelta;
+          } else {
+            const idx = info.order.indexOf(t.id);
+            const shift = Math.round(dragDelta / info.unit);
+            const targetIndex = Math.max(0, Math.min(info.order.length - 1, info.startIndex + shift));
+            if (targetIndex > info.startIndex && idx > info.startIndex && idx <= targetIndex) translateY = -info.unit;
+            else if (targetIndex < info.startIndex && idx < info.startIndex && idx >= targetIndex) translateY = info.unit;
+          }
+        }
+        return (
+          <div
+            key={t.id}
+            ref={(el) => { rowRefs.current[t.id] = el; }}
+            style={{
+              position: "relative",
+              transform: translateY ? `translateY(${translateY}px)` : undefined,
+              transition: isDragged ? "none" : "transform 0.15s ease",
+              zIndex: isDragged ? 5 : 1,
+              boxShadow: isDragged ? "0 12px 26px rgba(0,0,0,0.3)" : undefined,
+            }}
+          >
+            {renderRow(t, i, {
+              onPointerDown: (e) => startDrag(t.id, e),
+              onPointerMove: moveDrag,
+              onPointerUp: endDrag,
+              onPointerCancel: endDrag,
+            })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Small drag handle icon for a sortable session row. Only rendered
+// for leaders; stops the row's own onClick from firing so dragging
+// never accidentally opens the session.
+function SessionDragHandle({ dragHandlers, dark }) {
+  return (
+    <span
+      onPointerDown={dragHandlers.onPointerDown}
+      onPointerMove={dragHandlers.onPointerMove}
+      onPointerUp={dragHandlers.onPointerUp}
+      onPointerCancel={dragHandlers.onPointerCancel}
+      onClick={(e) => e.stopPropagation()}
+      title="Drag to reorder"
+      style={{
+        cursor: "grab", touchAction: "none", flexShrink: 0, fontSize: 16, lineHeight: 1,
+        padding: "4px 4px", userSelect: "none", opacity: 0.6,
+        color: dark ? "#F5F2E4" : "#7A6E4E",
+      }}
+    >⠿</span>
+  );
+}
+
+function ClassDetailModal({ classItem, classes, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember, onReorderTopics }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
@@ -2946,7 +3079,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   // batch — only its sessions are.
   const track = trackNameForClass(classItem.name);
   const ts = useMemo(
-    () => sortTopicsNaturally(topicsForClass(topics, classItem.name)).filter((t) => topicBatch(t) === activeBatch),
+    () => sortTopicsForDisplay(topicsForClass(topics, classItem.name)).filter((t) => topicBatch(t) === activeBatch),
     [topics, classItem.name, activeBatch]
   );
   // A batch counts as complete once it has at least one session and
@@ -3090,13 +3223,17 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
             {ts.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 6 }}>No sessions yet in {activeBatch}.</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {ts.map((t) => {
+              <SortableSessionList
+                topics={ts}
+                isLeader={isLeader}
+                onReorder={onReorderTopics}
+                renderRow={(t, i, dragHandlers) => {
                   const { attended, notAttended } = topicAttendanceLists(classMembers, attendanceByMember, t.id);
                   const totalMembers = attended.length + notAttended.length;
                   const tpct = totalMembers ? Math.round((attended.length / totalMembers) * 100) : 0;
                   return (
-                    <div key={t.id} className="dj-detail-row" style={detailRow} onClick={() => openSession(t)}>
+                    <div className="dj-detail-row" style={detailRow} onClick={() => openSession(t)}>
+                      {isLeader && ts.length > 1 && <SessionDragHandle dragHandlers={dragHandlers} dark />}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 600 }}>{t.name}</div>
                         <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", marginTop: 2 }}>{attended.length} of {totalMembers} attended</div>
@@ -3129,8 +3266,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                       <span style={{ fontSize: 14, color: "rgba(245,242,228,0.55)" }}>›</span>
                     </div>
                   );
-                })}
-              </div>
+                }}
+              />
             )}
             {isLeader && (
               <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -3234,7 +3371,7 @@ function CopyRegistrationLinkButton({ classId, batch }) {
   );
 }
 
-function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted }) {
+function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onReorderTopics }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
@@ -3242,7 +3379,10 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
   const [selectedBatch, setSelectedBatch] = useState(null);
   const activeBatch = selectedBatch && batches.includes(selectedBatch) ? selectedBatch : batches[batches.length - 1];
   const track = trackNameForClass(classItem.name);
-  const ts = topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === activeBatch);
+  const ts = useMemo(
+    () => sortTopicsForDisplay(topicsForClass(topics, classItem.name)).filter((t) => topicBatch(t) === activeBatch),
+    [topics, classItem.name, activeBatch]
+  );
   const batchComplete = ts.length > 0 && ts.every((t) => t.conducted);
   const allClassMembers = useMemo(() => getClassMembers(members, classItem.id), [members, classItem.id]);
   const classMembers = useMemo(() => {
@@ -3343,46 +3483,52 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
         {ts.length === 0 ? (
           <div style={styles.emptyNote}>No sessions yet in {activeBatch}.</div>
         ) : (
-          <div style={{ ...styles.rosterList, marginTop: 10 }}>
-            {ts.map((t) => {
-              const { attended, notAttended } = topicAttendanceLists(classMembers, attendanceByMember, t.id);
-              const total = attended.length + notAttended.length;
-              const pct = total ? Math.round((attended.length / total) * 100) : 0;
-              return (
-                <div key={t.id} className="card-row" style={styles.rosterCard} onClick={() => onOpenSession(t)}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={styles.rosterName}>{t.name}</div>
-                    <div style={styles.rosterMeta}>{attended.length} of {total} attended</div>
-                    <ProgressBar pct={pct} />
+          <div style={{ marginTop: 10 }}>
+            <SortableSessionList
+              topics={ts}
+              isLeader={isLeader}
+              onReorder={onReorderTopics}
+              renderRow={(t, i, dragHandlers) => {
+                const { attended, notAttended } = topicAttendanceLists(classMembers, attendanceByMember, t.id);
+                const total = attended.length + notAttended.length;
+                const pct = total ? Math.round((attended.length / total) * 100) : 0;
+                return (
+                  <div className="card-row" style={styles.rosterCard} onClick={() => onOpenSession(t)}>
+                    {isLeader && ts.length > 1 && <SessionDragHandle dragHandlers={dragHandlers} />}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={styles.rosterName}>{t.name}</div>
+                      <div style={styles.rosterMeta}>{attended.length} of {total} attended</div>
+                      <ProgressBar pct={pct} />
+                    </div>
+                    <div style={styles.classBadge}>{pct}%</div>
+                    {isLeader ? (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onToggleConducted(t.id, !t.conducted); }}
+                        title={t.conducted ? "Mark as not conducted" : "Mark as conducted"}
+                        style={{
+                          padding: "3px 9px", borderRadius: 12, fontSize: 10.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                          border: t.conducted ? "1px solid #385026" : "1px solid rgba(31,56,100,0.25)",
+                          background: t.conducted ? "rgba(56,80,38,0.12)" : "transparent",
+                          color: t.conducted ? "#385026" : "#7A6E4E",
+                        }}
+                      >
+                        {t.conducted ? "✓ Conducted" : "Mark Conducted"}
+                      </button>
+                    ) : (
+                      t.conducted && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#385026", flexShrink: 0 }}>✓ Conducted</span>
+                    )}
+                    {isLeader && (
+                      <button style={styles.iconEdit} onClick={(e) => { e.stopPropagation(); onEditTopic(t); }} title="Edit session name">✎</button>
+                    )}
+                    {isLeader && (
+                      <button style={styles.iconDanger} onClick={(e) => { e.stopPropagation(); onDeleteTopic(t.id, t.name); }}>×</button>
+                    )}
+                    <span style={{ fontSize: 13, color: "#7590C2", flexShrink: 0 }}>›</span>
                   </div>
-                  <div style={styles.classBadge}>{pct}%</div>
-                  {isLeader ? (
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); onToggleConducted(t.id, !t.conducted); }}
-                      title={t.conducted ? "Mark as not conducted" : "Mark as conducted"}
-                      style={{
-                        padding: "3px 9px", borderRadius: 12, fontSize: 10.5, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
-                        border: t.conducted ? "1px solid #385026" : "1px solid rgba(31,56,100,0.25)",
-                        background: t.conducted ? "rgba(56,80,38,0.12)" : "transparent",
-                        color: t.conducted ? "#385026" : "#7A6E4E",
-                      }}
-                    >
-                      {t.conducted ? "✓ Conducted" : "Mark Conducted"}
-                    </button>
-                  ) : (
-                    t.conducted && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#385026", flexShrink: 0 }}>✓ Conducted</span>
-                  )}
-                  {isLeader && (
-                    <button style={styles.iconEdit} onClick={(e) => { e.stopPropagation(); onEditTopic(t); }} title="Edit session name">✎</button>
-                  )}
-                  {isLeader && (
-                    <button style={styles.iconDanger} onClick={(e) => { e.stopPropagation(); onDeleteTopic(t.id, t.name); }}>×</button>
-                  )}
-                  <span style={{ fontSize: 13, color: "#7590C2", flexShrink: 0 }}>›</span>
-                </div>
-              );
-            })}
+                );
+              }}
+            />
           </div>
         )}
         {isLeader && (
@@ -3611,7 +3757,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   );
 }
 
-function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember }) {
+function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember, onReorderTopics }) {
   const [query, setQuery] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -3693,6 +3839,7 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
           onDeleteBatch={onDeleteBatch}
           onToggleConducted={onToggleConducted}
           onAddMember={onAddMember}
+          onReorderTopics={onReorderTopics}
         />
       )}
 
@@ -4438,6 +4585,17 @@ function App() {
       .then(() => showNotice(conducted ? "Session marked as conducted." : "Session marked as not conducted."))
       .catch((err) => showError("Could not update the session. Error: " + err.message));
   };
+  // Reorders sessions after a drag-to-reorder inside one class+batch.
+  // orderedIds is that batch's full session list in its new order;
+  // each gets renumbered 1..n, same cleanup approach as moveClass.
+  const reorderTopics = (orderedIds) => {
+    const batch = db.batch();
+    orderedIds.forEach((id, i) => {
+      const t = topics.find((x) => x.id === id);
+      if (t && t.order !== i + 1) batch.update(db.collection("topics").doc(id), { order: i + 1 });
+    });
+    batch.commit().catch((err) => showError("Could not reorder the sessions. Error: " + err.message));
+  };
   const seedDefaultClasses = async () => {
     try {
       for (const c of DEFAULT_CLASSES) {
@@ -4640,6 +4798,7 @@ function App() {
             onDeleteBatch={deleteBatch}
             onToggleConducted={toggleTopicConducted}
             onAddMember={addMember}
+            onReorderTopics={reorderTopics}
           />
         )}
 
@@ -4661,6 +4820,7 @@ function App() {
             onRenameBatch={(classId, oldName) => setRenamingBatch({ classId, oldName })}
             onDeleteBatch={deleteBatch}
             onToggleConducted={toggleTopicConducted}
+            onReorderTopics={reorderTopics}
           />
         )}
 
