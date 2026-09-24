@@ -1663,39 +1663,37 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
   const [classFilter, setClassFilter] = useState("");
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
-  const [quickView, setQuickView] = useState("");     // "noClass" | "newlyRegistered" | ""
-  const [trackChip, setTrackChip] = useState("");     // "" (Lahat) o isa sa DISCIPLESHIP_TRACKS
+  const [trackChips, setTrackChips] = useState([]); // multi-select na array ng DISCIPLESHIP_TRACKS
   const [statusToggle, setStatusToggle] = useState(""); // "" | "In-Progress" | "Completed"
-  const [batchChip, setBatchChip] = useState("");      // batch label, kapag may trackChip
+  const [batchChip, setBatchChip] = useState("");      // batch label, kapag iisa lang ang napiling track
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
 
-  const memberHasNoClass = (m) => DISCIPLESHIP_TRACKS.every((t) => ((m.trackStatus && m.trackStatus[t]) || "Not Enrolled") === "Not Enrolled");
-  const memberIsNewlyRegistered = (m) => {
-    if (!m.dateAdded) return false;
-    const dt = m.dateAdded.toDate ? m.dateAdded.toDate() : new Date(m.dateAdded);
-    return (Date.now() - dt.getTime()) <= 30 * 24 * 60 * 60 * 1000;
+  const toggleTrackChip = (t) => {
+    setTrackChips((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
+    setBatchChip("");
   };
-  const QUICK_VIEWS = [
-    { key: "noClass", label: "Walang class pa", test: memberHasNoClass },
-    { key: "newlyRegistered", label: "Bagong register", test: memberIsNewlyRegistered },
-  ];
-  // Distinct batch labels currently in use for the selected track, so
-  // the batch chip row only ever offers real, existing batches.
-  const batchOptionsForTrackChip = trackChip
-    ? Array.from(new Set(members.map((m) => (m.trackBatch && m.trackBatch[trackChip]) || "").filter(Boolean)))
+
+  // Distinct batch labels currently in use, pero saklaw lang kapag
+  // iisa ang napiling track (para hindi magulo kung alin ang batch
+  // list na ipapakita kapag maraming track ang naka-select).
+  const singleTrackChip = trackChips.length === 1 ? trackChips[0] : null;
+  const batchOptionsForTrackChip = singleTrackChip
+    ? Array.from(new Set(members.map((m) => (m.trackBatch && m.trackBatch[singleTrackChip]) || "").filter(Boolean)))
     : [];
   const matchesTrackStatus = (m) => {
-    if (!trackChip && !statusToggle) return true;
-    if (trackChip) {
-      const st = (m.trackStatus && m.trackStatus[trackChip]) || "Not Enrolled";
-      const passesStatus = statusToggle ? st === statusToggle : st !== "Not Enrolled";
-      if (!passesStatus) return false;
-      if (batchChip) {
-        const b = (m.trackBatch && m.trackBatch[trackChip]) || "";
-        if (b !== batchChip) return false;
-      }
-      return true;
+    if (trackChips.length === 0 && !statusToggle) return true;
+    if (trackChips.length > 0) {
+      return trackChips.some((t) => {
+        const st = (m.trackStatus && m.trackStatus[t]) || "Not Enrolled";
+        const passesStatus = statusToggle ? st === statusToggle : st !== "Not Enrolled";
+        if (!passesStatus) return false;
+        if (batchChip && singleTrackChip === t) {
+          const b = (m.trackBatch && m.trackBatch[t]) || "";
+          if (b !== batchChip) return false;
+        }
+        return true;
+      });
     }
     return DISCIPLESHIP_TRACKS.some((t) => ((m.trackStatus && m.trackStatus[t]) || "Not Enrolled") === statusToggle);
   };
@@ -1716,15 +1714,11 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       const isEnrolled = getEnrolledClasses(classes, m).some((c) => c.name === classFilter);
       if (!isEnrolled) return false;
     }
-    if (quickView) {
-      const qv = QUICK_VIEWS.find((c) => c.key === quickView);
-      if (qv && !qv.test(m)) return false;
-    }
     if (!matchesTrackStatus(m)) return false;
     return true;
   });
-  const anyFilterActive = query || lifeStageFilter || genderFilter || categoryFilter || classFilter || minAge || maxAge || quickView || trackChip || statusToggle || batchChip;
-  const clearFilters = () => { setQuery(""); setLifeStageFilter(""); setGenderFilter(""); setCategoryFilter(""); setClassFilter(""); setMinAge(""); setMaxAge(""); setQuickView(""); setTrackChip(""); setStatusToggle(""); setBatchChip(""); };
+  const anyFilterActive = query || lifeStageFilter || genderFilter || categoryFilter || classFilter || minAge || maxAge || trackChips.length > 0 || statusToggle || batchChip;
+  const clearFilters = () => { setQuery(""); setLifeStageFilter(""); setGenderFilter(""); setCategoryFilter(""); setClassFilter(""); setMinAge(""); setMaxAge(""); setTrackChips([]); setStatusToggle(""); setBatchChip(""); };
 
   // Sortable columns: click a header to sort by it, click again to
   // flip direction. Track-status columns sort by a fixed status
@@ -1787,50 +1781,13 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       </div>
 
       {members.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, margin: "-2px 0 6px" }}>
-          {QUICK_VIEWS.map((chip) => {
-            const active = quickView === chip.key;
-            return (
-              <button
-                key={chip.key}
-                onClick={() => {
-                  const val = active ? "" : chip.key;
-                  setQuickView(val);
-                  if (val) { setTrackChip(""); setStatusToggle(""); setBatchChip(""); }
-                }}
-                style={{
-                  padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  border: active ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.25)",
-                  background: active ? "#1F3864" : "rgba(255,255,255,0.6)",
-                  color: active ? "#FFFFFF" : "#23211D",
-                }}
-              >
-                {chip.label}
-              </button>
-            );
-          })}
-        </div>
-      )}
-
-      {members.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 6px" }}>
-          <button
-            onClick={() => { setTrackChip(""); setQuickView(""); setBatchChip(""); }}
-            style={{
-              padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-              border: trackChip === "" ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.2)",
-              background: trackChip === "" ? "rgba(31,56,100,0.1)" : "rgba(255,255,255,0.5)",
-              color: "#1F3864",
-            }}
-          >
-            Lahat ng Klase
-          </button>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "-2px 0 6px" }}>
           {DISCIPLESHIP_TRACKS.map((t) => {
-            const active = trackChip === t;
+            const active = trackChips.includes(t);
             return (
               <button
                 key={t}
-                onClick={() => { setTrackChip(active ? "" : t); setQuickView(""); setBatchChip(""); }}
+                onClick={() => toggleTrackChip(t)}
                 style={{
                   padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
                   border: active ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.2)",
@@ -1845,7 +1802,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
         </div>
       )}
 
-      {members.length > 0 && trackChip && batchOptionsForTrackChip.length > 0 && (
+      {members.length > 0 && singleTrackChip && batchOptionsForTrackChip.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 6px" }}>
           <span style={{ fontSize: 10.5, color: "#7A6E4E", alignSelf: "center", marginRight: 2 }}>Batch:</span>
           <button
@@ -1886,7 +1843,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
             return (
               <button
                 key={s}
-                onClick={() => { setStatusToggle(active ? "" : s); setQuickView(""); }}
+                onClick={() => { setStatusToggle(active ? "" : s); }}
                 style={{
                   padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
                   border: active ? "1px solid #1F3864" : "1px solid rgba(31,56,100,0.2)",
