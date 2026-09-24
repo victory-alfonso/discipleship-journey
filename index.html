@@ -1738,8 +1738,9 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
 
   return (
     <div>
-      <div className="stack-mobile" style={styles.toolbar}>
-        <input style={styles.toolbarInput} placeholder="Search name, contact number, or address…" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div style={{ background: "rgba(255,255,255,0.5)", backdropFilter: "blur(18px) saturate(160%)", WebkitBackdropFilter: "blur(18px) saturate(160%)", border: "1px solid rgba(31,56,100,0.12)", borderRadius: 16, padding: "14px 14px 10px", marginBottom: 16, boxShadow: "0 10px 30px -18px rgba(35,33,29,0.2)" }}>
+      <div className="stack-mobile" style={{ ...styles.toolbar, marginBottom: 12 }}>
+        <input style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} placeholder="Search name, contact number, or address…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div style={{ display: "flex", gap: 10 }}>
           {isLeader && members.length > 0 && <button style={{ ...styles.ghostBtn, flex: 1 }} onClick={() => setPrintAllOpen(true)}>Print QR IDs</button>}
           {isLeader && <button style={{ ...styles.primaryBtn, flex: 1 }} onClick={onAdd}>+ Add Member</button>}
@@ -1748,21 +1749,21 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
 
       {printAllOpen && <PrintAllQrModal members={members} onClose={() => setPrintAllOpen(false)} />}
 
-      <div className="filter-grid-mobile" style={{ ...styles.toolbar, marginTop: -10, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-        <select style={styles.toolbarInput} value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)}>
+      <div className="filter-grid-mobile" style={{ ...styles.toolbar, marginTop: -2, marginBottom: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
+        <select style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)}>
           <option value="">Gender: All</option>
           {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
         </select>
-        <select style={styles.toolbarInput} value={lifeStageFilter} onChange={(e) => setLifeStageFilter(e.target.value)}>
+        <select style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} value={lifeStageFilter} onChange={(e) => setLifeStageFilter(e.target.value)}>
           <option value="">Life stage: All</option>
           {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
         </select>
-        <select style={styles.toolbarInput} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+        <select style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">Membership: All</option>
           {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        <input style={{ ...styles.toolbarInput, flex: "0 1 90px", minWidth: 70 }} type="number" min="0" placeholder="Min age" value={minAge} onChange={(e) => setMinAge(e.target.value)} />
-        <input style={{ ...styles.toolbarInput, flex: "0 1 90px", minWidth: 70 }} type="number" min="0" placeholder="Max age" value={maxAge} onChange={(e) => setMaxAge(e.target.value)} />
+        <input style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)", flex: "0 1 90px", minWidth: 70 }} type="number" min="0" placeholder="Min age" value={minAge} onChange={(e) => setMinAge(e.target.value)} />
+        <input style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)", flex: "0 1 90px", minWidth: 70 }} type="number" min="0" placeholder="Max age" value={maxAge} onChange={(e) => setMaxAge(e.target.value)} />
         {anyFilterActive && <button className="filter-span-2" style={styles.ghostBtn} onClick={clearFilters}>Clear filters</button>}
       </div>
 
@@ -1789,7 +1790,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       )}
 
       {members.length > 0 && singleTrackChip && batchOptionsForTrackChip.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 6px" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, margin: "0 0 4px" }}>
           <span style={{ fontSize: 10.5, color: "#7A6E4E", alignSelf: "center", marginRight: 2 }}>Batch:</span>
           <button
             onClick={() => setBatchChip("")}
@@ -1821,6 +1822,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
           })}
         </div>
       )}
+      </div>
 
       {members.length > 0 && (
         <div style={{ fontSize: 12.5, color: "#7A6E4E", margin: "-6px 0 12px" }}>
@@ -1845,7 +1847,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
                   <th
                     key={h.label + i}
                     onClick={() => toggleSort(h.col)}
-                    style={{ textAlign: "left", padding: "10px 10px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, color: "#1F3864", background: "rgba(31,56,100,0.06)", borderBottom: "1px solid rgba(31,56,100,0.15)", whiteSpace: h.wrap ? "normal" : "nowrap", maxWidth: h.wrap ? 78 : undefined, lineHeight: 1.35, cursor: "pointer", userSelect: "none", ...(i === 0 ? { position: "sticky", left: 0, zIndex: 2, background: "#ECE7D9", boxShadow: "2px 0 4px -3px rgba(31,56,100,0.25)" } : {}) }}>
+                    style={{ textAlign: "left", padding: "10px 10px", fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.3, color: "#1F3864", background: "rgba(31,56,100,0.08)", backdropFilter: "blur(12px) saturate(160%)", WebkitBackdropFilter: "blur(12px) saturate(160%)", borderBottom: "1px solid rgba(31,56,100,0.15)", whiteSpace: h.wrap ? "normal" : "nowrap", maxWidth: h.wrap ? 78 : undefined, lineHeight: 1.35, cursor: "pointer", userSelect: "none", ...(i === 0 ? { position: "sticky", left: 0, zIndex: 2, background: "rgba(236,231,217,0.78)", boxShadow: "2px 0 4px -3px rgba(31,56,100,0.25)" } : {}) }}>
                     {h.label}{sortCol === h.col ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
                   </th>
                 ))}
@@ -1856,7 +1858,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
                 const mAge = ageFromBirthdate(m.birthdate);
                 return (
                   <tr key={m.id} className="card-row" style={{ cursor: "pointer" }} onClick={() => onOpen(m)}>
-                    <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(31,56,100,0.08)", position: "sticky", left: 0, zIndex: 1, background: "#F6F2E6", boxShadow: "2px 0 4px -3px rgba(31,56,100,0.2)" }}>
+                    <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(31,56,100,0.08)", position: "sticky", left: 0, zIndex: 1, background: "rgba(246,242,230,0.78)", backdropFilter: "blur(12px) saturate(160%)", WebkitBackdropFilter: "blur(12px) saturate(160%)", boxShadow: "2px 0 4px -3px rgba(31,56,100,0.2)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <Avatar name={m.name} photoUrl={m.photoUrl} size={30} />
                         <span style={{ fontWeight: 700, color: "#23211D", whiteSpace: "nowrap" }}>{m.name}</span>
