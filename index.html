@@ -187,6 +187,14 @@
     .dj-nav { padding: 8px 10px !important; gap: 4px !important; }
     .dj-nav .nav-item { padding: 8px 12px !important; font-size: 12.5px !important; }
     .dj-main { padding: 16px 12px 40px !important; }
+
+    /* The native date-picker control (Birthdate) renders wider than
+       its CSS box allows for on mobile Safari, so in the Birthdate /
+       Gender modalRow2 pair it can still spill into Gender even
+       though the grid itself has room. Capping it below its column
+       width leaves a safety margin so that overflow stays inside its
+       own column instead of overlapping Gender's. */
+    .dj-date-input { max-width: 112px !important; padding: 9px 6px !important; font-size: 12.5px !important; }
   }
 
   @media print {
@@ -3639,7 +3647,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
         <div style={styles.modalRow2}>
           <label style={styles.modalFieldLabel}>
             Birthdate
-            <input style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
+            <input className="dj-date-input" style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
           </label>
           <label style={styles.modalFieldLabel}>
             Gender
@@ -3836,7 +3844,7 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
         <div style={styles.modalRow2}>
           <label style={styles.modalFieldLabel}>
             Birthdate
-            <input style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
+            <input className="dj-date-input" style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
           </label>
           <label style={styles.modalFieldLabel}>
             Gender
@@ -5162,7 +5170,7 @@ function OneOnOneFormModal({ title, initial, submitLabel, members, onClose, onSa
         <div style={styles.modalRow2}>
           <label style={styles.modalFieldLabel}>
             Birthdate
-            <input style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
+            <input className="dj-date-input" style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
           </label>
           <label style={styles.modalFieldLabel}>
             Gender
