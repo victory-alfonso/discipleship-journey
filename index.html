@@ -63,9 +63,10 @@
 
   /* Logo spark — tapping an empty part of the screen pops a small
      Victory logo icon at the tap point: quick pop-in, then it stays
-     put and vibrates (building up) until it bursts like a bubble —
-     timed to match the tiny bubble-burst particles and pop sound
-     fired from JS — see djBubblePop / djPlayBubblePop). */
+     put and vibrates (building up, with a matching charge-up hum
+     from JS) until it explodes — the icon itself shatters into a
+     few pieces with a bright flash and an explosion sound. See
+     djGenerateShatterPieces / djPlayChargeUp / djPlayExplosion. */
   @keyframes djLogoSpark {
     0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(0deg); }
     14%  { opacity: 1; transform: translate(-50%, -50%) scale(1.18) rotate(0deg); }
@@ -89,15 +90,27 @@
     .dj-logo-spark { animation-duration: 0.01s; }
   }
 
-  /* Tiny bubbles that burst outward from the pop point, in sync
-     with the logo's pop moment above. */
-  @keyframes djBubblePop {
-    0%   { opacity: 0.95; transform: translate(-50%, -50%) translate(0, 0) scale(1); }
-    100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--bx), var(--by)) scale(0.15); }
+  /* A bright warm flash right at the explosion point, so the burst
+     reads clearly even before the eye picks out the flying pieces. */
+  @keyframes djPopFlash {
+    0%   { opacity: 0.9; transform: translate(-50%, -50%) scale(0.15); }
+    55%  { opacity: 0.6; }
+    100% { opacity: 0; transform: translate(-50%, -50%) scale(2.6); }
   }
-  .dj-bubble-pop { animation: djBubblePop 0.5s cubic-bezier(0.15, 0.7, 0.4, 1) both; }
+  .dj-pop-flash { animation: djPopFlash 0.4s ease-out both; }
   @media (prefers-reduced-motion: reduce) {
-    .dj-bubble-pop { display: none; }
+    .dj-pop-flash { display: none; }
+  }
+
+  /* The four quadrants the logo itself shatters into, each flung
+     outward toward its own corner and tumbling as it fades. */
+  @keyframes djShatterPiece {
+    0%   { opacity: 1; transform: translate(-50%, -50%) translate(0, 0) rotate(0deg) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--bx), var(--by)) rotate(var(--br)) scale(0.5); }
+  }
+  .dj-shatter-piece { animation: djShatterPiece 0.5s cubic-bezier(0.15, 0.7, 0.4, 1) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .dj-shatter-piece { display: none; }
   }
 
   .authInput:focus { border-color: #1F3864; box-shadow: 0 0 0 3px rgba(31,56,100,0.15); }
@@ -523,15 +536,21 @@ function djIsTouchableTarget(el) {
   return false;
 }
 
-// Duration of the whole logo-spark lifecycle, and the moment (as a
-// fraction of it) the djLogoSpark keyframes above finish their
-// vibration build-up and pop — the bubble burst + sound are timed
-// to land exactly then, at the same spot the icon appeared (it no
-// longer moves, so no rise offset is needed).
+// Duration of the whole logo-spark lifecycle, and the two moments
+// (as fractions of it) that matter: when the vibration build-up
+// starts (matches the djLogoSpark keyframes' 22% wobble-start), and
+// when it peaks and the icon explodes (matches the keyframes'
+// 85%/86% pop). The charge-up hum and the explosion sound/shatter
+// are scheduled off these same fractions so audio and visuals stay
+// in sync, at the same spot the icon appeared (it doesn't move).
 const DJ_SPARK_DURATION_MS = 1400;
+const DJ_SPARK_VIBRATION_START_FRACTION = 0.22;
 const DJ_SPARK_POP_FRACTION = 0.86;
+// Size of the logo-spark icon (px) — also used to slice it into
+// quadrants for the shatter effect, so the pieces line up exactly.
+const DJ_ICON_SIZE = 28;
 
-// Lazily-created, reused AudioContext for the little pop sound so we
+// Lazily-created, reused AudioContext for the sound effects so we
 // don't spin up a new one on every tap (and so it only ever starts
 // from within a real user gesture, satisfying autoplay policies).
 let djAudioCtx = null;
@@ -543,37 +562,142 @@ function djGetAudioCtx() {
   return djAudioCtx;
 }
 
-// A short synthesized "bubble pop" — a quick upward-then-downward
-// pitch blip under a fast attack/decay envelope. No audio file
-// needed, so it stays in this single index.html.
-function djPlayBubblePop() {
+// A rising, buzzing "charge-up" hum that plays under the icon's
+// vibration build-up — a sawtooth tone sweeping upward with a
+// tremolo (amplitude wobble) that itself speeds up over time, so it
+// feels like it's building toward the explosion.
+function djPlayChargeUp(durationSec) {
   try {
     const ctx = djGetAudioCtx();
-    if (!ctx) return;
+    if (!ctx || durationSec <= 0) return;
     const now = ctx.currentTime;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    const detune = (Math.random() - 0.5) * 220; // slight variety tap to tap
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(700 + detune, now);
-    osc.frequency.exponentialRampToValueAtTime(1900 + detune, now + 0.045);
-    osc.frequency.exponentialRampToValueAtTime(220, now + 0.1);
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(80, now);
+    osc.frequency.exponentialRampToValueAtTime(260, now + durationSec);
+    lfo.type = "sine";
+    lfo.frequency.setValueAtTime(6, now);
+    lfo.frequency.exponentialRampToValueAtTime(30, now + durationSec); // buzz speeds up
+    lfoGain.gain.setValueAtTime(0.05, now); // modulation depth on the main gain
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.32, now + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.11, now + durationSec * 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.06, now + durationSec);
+    lfo.connect(lfoGain);
+    lfoGain.connect(gain.gain); // tremolo: LFO modulates the envelope directly
     osc.connect(gain);
     gain.connect(ctx.destination);
     osc.start(now);
-    osc.stop(now + 0.14);
+    lfo.start(now);
+    osc.stop(now + durationSec + 0.05);
+    lfo.stop(now + durationSec + 0.05);
   } catch (err) {
     // Audio is purely decorative — never let it break the tap effect.
   }
 }
 
+// A punchy little "explosion" — a filtered noise crack, a low sine
+// thump for weight, and a bright triangle blip on top for snap. No
+// audio file needed, so it all stays inline in this one index.html.
+function djPlayExplosion() {
+  try {
+    const ctx = djGetAudioCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+
+    const bufferSize = Math.floor(ctx.sampleRate * 0.25);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+    }
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+    const noiseFilter = ctx.createBiquadFilter();
+    noiseFilter.type = "bandpass";
+    noiseFilter.frequency.value = 1200;
+    noiseFilter.Q.value = 0.6;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.5, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+    noise.connect(noiseFilter);
+    noiseFilter.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+
+    const thump = ctx.createOscillator();
+    const thumpGain = ctx.createGain();
+    thump.type = "sine";
+    thump.frequency.setValueAtTime(160, now);
+    thump.frequency.exponentialRampToValueAtTime(45, now + 0.18);
+    thumpGain.gain.setValueAtTime(0.0001, now);
+    thumpGain.gain.exponentialRampToValueAtTime(0.6, now + 0.012);
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+    thump.connect(thumpGain);
+    thumpGain.connect(ctx.destination);
+
+    const blip = ctx.createOscillator();
+    const blipGain = ctx.createGain();
+    blip.type = "triangle";
+    blip.frequency.setValueAtTime(1500, now);
+    blip.frequency.exponentialRampToValueAtTime(300, now + 0.09);
+    blipGain.gain.setValueAtTime(0.0001, now);
+    blipGain.gain.exponentialRampToValueAtTime(0.25, now + 0.006);
+    blipGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+    blip.connect(blipGain);
+    blipGain.connect(ctx.destination);
+
+    noise.start(now);
+    thump.start(now);
+    blip.start(now);
+    noise.stop(now + 0.26);
+    thump.stop(now + 0.26);
+    blip.stop(now + 0.12);
+  } catch (err) {
+    // Audio is purely decorative — never let it break the tap effect.
+  }
+}
+
+// Splits the logo icon into its four quadrants, each flung outward
+// toward its own corner — so it reads as the icon itself shattering,
+// not generic sparkle particles. Each piece is a same-size div using
+// the full logo as its background image, offset via backgroundPosition
+// so it shows only its quadrant.
+function djGenerateShatterPieces(groupId, popX, popY) {
+  const half = DJ_ICON_SIZE / 2;
+  const pieces = [];
+  for (let row = 0; row < 2; row++) {
+    for (let col = 0; col < 2; col++) {
+      // Center of this quadrant relative to the icon's own center.
+      const cx = (col === 0 ? -1 : 1) * (half / 2);
+      const cy = (row === 0 ? -1 : 1) * (half / 2);
+      const norm = Math.hypot(cx, cy) || 1;
+      const dist = 26 + Math.random() * 20;
+      const bx = (cx / norm) * dist + (Math.random() - 0.5) * 8;
+      const by = (cy / norm) * dist + (Math.random() - 0.5) * 8 - 4; // slight upward bias
+      const br = (Math.random() - 0.5) * 260; // tumble, degrees
+      pieces.push({
+        id: `${groupId}-p${row}${col}`,
+        groupId,
+        x: popX + cx,
+        y: popY + cy,
+        bgX: -col * half,
+        bgY: -row * half,
+        bx,
+        by,
+        br,
+      });
+    }
+  }
+  return pieces;
+}
+
 let logoSparkSeq = 0;
 function LogoSparkHost() {
   const [sparks, setSparks] = useState([]); // { id, x, y }
-  const [bubbles, setBubbles] = useState([]); // { id, groupId, x, y, bx, by, size }
+  const [pieces, setPieces] = useState([]); // shatter fragments, { id, groupId, x, y, bgX, bgY, bx, by, br }
+  const [flashes, setFlashes] = useState([]); // { id, x, y }
   const lastSparkAtRef = useRef(0);
 
   useEffect(() => {
@@ -598,35 +722,34 @@ function LogoSparkHost() {
         setSparks((prev) => prev.filter((s) => s.id !== id));
       }, DJ_SPARK_DURATION_MS);
 
-      // Fire the pop — bubble burst + sound — timed to the moment
-      // the icon's vibration build-up in the CSS keyframes peaks
-      // and it visually pops.
       const reducedMotion =
         window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      // Charge-up hum, synced to the vibration build-up in the CSS
+      // keyframes (skipped when reduced motion also skips the wobble).
+      if (!reducedMotion) {
+        const vibrationStartDelay = DJ_SPARK_DURATION_MS * DJ_SPARK_VIBRATION_START_FRACTION;
+        const chargeDurationSec =
+          (DJ_SPARK_DURATION_MS * (DJ_SPARK_POP_FRACTION - DJ_SPARK_VIBRATION_START_FRACTION)) / 1000;
+        setTimeout(() => djPlayChargeUp(chargeDurationSec), vibrationStartDelay);
+      }
+
+      // Fire the explosion — shattered icon pieces + flash + sound —
+      // timed to the moment the vibration build-up peaks and the icon
+      // visually pops in the CSS keyframes.
       const popDelay = reducedMotion ? 0 : DJ_SPARK_DURATION_MS * DJ_SPARK_POP_FRACTION;
       setTimeout(() => {
-        djPlayBubblePop();
-        if (reducedMotion) return; // skip the little bubble particles too
-        const popX = x;
-        const popY = y;
-        const count = 6 + Math.floor(Math.random() * 3); // 6-8 little bubbles
+        djPlayExplosion();
+        if (reducedMotion) return; // skip the shatter pieces + flash too
         const groupId = id;
-        const burst = Array.from({ length: count }, (_, i) => {
-          const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.6;
-          const dist = 14 + Math.random() * 22;
-          return {
-            id: `${groupId}-b${i}`,
-            groupId,
-            x: popX,
-            y: popY,
-            bx: Math.cos(angle) * dist,
-            by: Math.sin(angle) * dist - 6, // slight upward bias
-            size: 4 + Math.random() * 6,
-          };
-        });
-        setBubbles((prev) => [...prev.slice(-48), ...burst]);
+        setFlashes((prev) => [...prev.slice(-5), { id: groupId, x, y }]);
         setTimeout(() => {
-          setBubbles((prev) => prev.filter((b) => b.groupId !== groupId));
+          setFlashes((prev) => prev.filter((f) => f.id !== groupId));
+        }, 420);
+        const burst = djGenerateShatterPieces(groupId, x, y);
+        setPieces((prev) => [...prev.slice(-24), ...burst]);
+        setTimeout(() => {
+          setPieces((prev) => prev.filter((p) => p.groupId !== groupId));
         }, 520);
       }, popDelay);
     };
@@ -634,7 +757,7 @@ function LogoSparkHost() {
     return () => window.removeEventListener("pointerdown", onPointerDown, true);
   }, []);
 
-  if (sparks.length === 0 && bubbles.length === 0) return null;
+  if (sparks.length === 0 && pieces.length === 0 && flashes.length === 0) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9500, pointerEvents: "none" }}>
       {sparks.map((s) => (
@@ -647,29 +770,47 @@ function LogoSparkHost() {
             position: "fixed",
             left: s.x,
             top: s.y,
-            width: 28,
-            height: 28,
+            width: DJ_ICON_SIZE,
+            height: DJ_ICON_SIZE,
             objectFit: "contain",
             filter: "drop-shadow(0 3px 6px rgba(20,18,14,0.35))",
           }}
         />
       ))}
-      {bubbles.map((b) => (
+      {flashes.map((f) => (
         <span
-          key={b.id}
-          className="dj-bubble-pop"
+          key={f.id}
+          className="dj-pop-flash"
           style={{
             position: "fixed",
-            left: b.x,
-            top: b.y,
-            width: b.size,
-            height: b.size,
+            left: f.x,
+            top: f.y,
+            width: 46,
+            height: 46,
             borderRadius: "50%",
             background:
-              "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.95), rgba(255,255,255,0.4) 55%, rgba(190,220,255,0.15) 80%)",
-            boxShadow: "0 0 4px rgba(255,255,255,0.55)",
-            "--bx": `${b.bx}px`,
-            "--by": `${b.by}px`,
+              "radial-gradient(circle, rgba(255,224,150,0.9), rgba(255,196,90,0.5) 45%, rgba(255,196,90,0) 72%)",
+          }}
+        />
+      ))}
+      {pieces.map((p) => (
+        <span
+          key={p.id}
+          className="dj-shatter-piece"
+          style={{
+            position: "fixed",
+            left: p.x,
+            top: p.y,
+            width: DJ_ICON_SIZE / 2,
+            height: DJ_ICON_SIZE / 2,
+            backgroundImage: `url(${VICTORY_LOGO_DATA_URI})`,
+            backgroundSize: `${DJ_ICON_SIZE}px ${DJ_ICON_SIZE}px`,
+            backgroundPosition: `${p.bgX}px ${p.bgY}px`,
+            backgroundRepeat: "no-repeat",
+            filter: "drop-shadow(0 2px 4px rgba(20,18,14,0.4))",
+            "--bx": `${p.bx}px`,
+            "--by": `${p.by}px`,
+            "--br": `${p.br}deg`,
           }}
         />
       ))}
