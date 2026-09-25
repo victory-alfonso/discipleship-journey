@@ -791,15 +791,25 @@ const TRACK_STATUSES = ["Not Enrolled", "Enrolled", "In-Progress", "Incomplete",
 // as a small muted dot instead of a full text pill, which is what
 // was forcing the table into horizontal scroll. Meaningful statuses
 // still render as a short colored pill so they stand out.
-function TrackStatusCell({ status, batch }) {
+function TrackStatusCell({ status, batch, dark }) {
   if (status === "Not Enrolled") {
-    return <span style={{ display: "inline-block", width: 7, height: 7, borderRadius: "50%", background: "rgba(31,56,100,0.18)" }} />;
+    return (
+      <span
+        style={{
+          display: "inline-block",
+          width: 7,
+          height: 7,
+          borderRadius: "50%",
+          background: dark ? "rgba(245,242,228,0.35)" : "rgba(31,56,100,0.18)",
+        }}
+      />
+    );
   }
   const short = status === "In-Progress" ? "In Prog." : status;
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-      <span style={{ ...styles.statusBadge, ...trackStatusBadgeStyle(status), padding: "3px 8px", fontSize: 9.5 }}>{short}</span>
-      {batch && <span style={{ fontSize: 8.5, color: "#7A6E4E", whiteSpace: "nowrap" }}>{batch}</span>}
+      <span style={{ ...styles.statusBadge, ...trackStatusBadgeStyle(status, dark), padding: "3px 8px", fontSize: 9.5 }}>{short}</span>
+      {batch && <span style={{ fontSize: 8.5, color: dark ? "rgba(245,242,228,0.55)" : "#7A6E4E", whiteSpace: "nowrap" }}>{batch}</span>}
     </div>
   );
 }
@@ -808,13 +818,13 @@ function TrackStatusCell({ status, batch }) {
 // HELPERS — attendance / progress calculations
 // ============================================================
 
-function trackStatusBadgeStyle(status) {
-  if (status === "Completed") return styles.statusBadgeDone;
-  if (status === "In-Progress") return styles.statusBadgeProgress;
-  if (status === "Enrolled") return styles.statusBadgeEnrolled;
-  if (status === "Incomplete") return styles.statusBadgeIncomplete;
-  if (status === "Cancelled") return styles.statusBadgeCancelled;
-  return styles.statusBadgeNone;
+function trackStatusBadgeStyle(status, dark) {
+  if (status === "Completed") return dark ? styles.statusBadgeDoneDark : styles.statusBadgeDone;
+  if (status === "In-Progress") return dark ? styles.statusBadgeProgressDark : styles.statusBadgeProgress;
+  if (status === "Enrolled") return dark ? styles.statusBadgeEnrolledDark : styles.statusBadgeEnrolled;
+  if (status === "Incomplete") return dark ? styles.statusBadgeIncompleteDark : styles.statusBadgeIncomplete;
+  if (status === "Cancelled") return dark ? styles.statusBadgeCancelledDark : styles.statusBadgeCancelled;
+  return dark ? styles.statusBadgeNoneDark : styles.statusBadgeNone;
 }
 
 function topicsForClass(topics, className) {
@@ -2530,7 +2540,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
                 <div style={dj.className}>{c.name}</div>
                 <div style={dj.classSessions}>{ts.length} session{ts.length === 1 ? "" : "s"}</div>
                 <div style={{ marginTop: 8 }}>
-                  <TrackStatusCell status={(member.classStatus && member.classStatus[c.id]) || "Enrolled"} />
+                  <TrackStatusCell status={(member.classStatus && member.classStatus[c.id]) || "Enrolled"} dark />
                 </div>
               </div>
             );
@@ -3841,7 +3851,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: 14, fontWeight: 600 }}>{member.name}</span>
-                        <TrackStatusCell status={(member.classStatus && member.classStatus[classItem.id]) || "Enrolled"} />
+                        <TrackStatusCell status={(member.classStatus && member.classStatus[classItem.id]) || "Enrolled"} dark />
                       </div>
                       <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", marginTop: 2 }}>{done} of {totalSessions} sessions attended</div>
                       <DetailBar pct={mpct} />
@@ -6471,6 +6481,17 @@ const styles = {
   statusBadgeNone: { background: "rgba(255,255,255,0.6)", color: "#7A6E4E", border: "1px solid rgba(31,56,100,0.18)" },
   statusBadgeIncomplete: { background: "rgba(230,126,34,0.16)", color: "#B5651D", border: "1px solid rgba(181,101,29,0.45)" },
   statusBadgeCancelled: { background: "rgba(166,64,47,0.14)", color: "#A6402F", border: "1px solid rgba(166,64,47,0.4)" },
+  // Dark-context versions of the badges above — same shapes, but with
+  // light-on-translucent-color coloring (like the "Conducted" pill
+  // used elsewhere on dark cards) instead of dark navy/green/etc text,
+  // which was reading as near-invisible on the dark navy modals (the
+  // member profile's Classes grid and a class's Members list).
+  statusBadgeDoneDark: { background: "rgba(127,176,105,0.18)", color: "#8FCB74", border: "1px solid rgba(143,203,116,0.45)" },
+  statusBadgeProgressDark: { background: "rgba(229,164,48,0.2)", color: "#F0C860", border: "1px solid rgba(240,200,96,0.45)" },
+  statusBadgeEnrolledDark: { background: "rgba(159,193,245,0.18)", color: "#B9D3FA", border: "1px solid rgba(159,193,245,0.45)" },
+  statusBadgeNoneDark: { background: "rgba(255,255,255,0.1)", color: "rgba(245,242,228,0.65)", border: "1px solid rgba(255,255,255,0.3)" },
+  statusBadgeIncompleteDark: { background: "rgba(230,126,52,0.2)", color: "#F0A868", border: "1px solid rgba(240,168,104,0.45)" },
+  statusBadgeCancelledDark: { background: "rgba(198,90,72,0.2)", color: "#E9A493", border: "1px solid rgba(233,164,147,0.45)" },
   rosterCard: { display: "flex", alignItems: "center", gap: 14, background: "rgba(255,255,255,0.55)", backdropFilter: "blur(18px) saturate(160%)", WebkitBackdropFilter: "blur(18px) saturate(160%)", border: "1px solid rgba(31,56,100,0.12)", borderRadius: 12, padding: "14px 16px", cursor: "pointer", boxShadow: "0 8px 20px -14px rgba(35,33,29,0.2)" },
   rosterName: { fontSize: 15, fontWeight: 700, color: "#23211D" },
   rosterMeta: { fontSize: 12.5, color: "#7A6E4E", margin: "2px 0 8px" },
