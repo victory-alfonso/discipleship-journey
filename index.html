@@ -16,6 +16,23 @@
   body { margin: 0; overflow-x: clip; max-width: 100%; color: #23211D; background-color: #F5F2E4; background-image: radial-gradient(circle at 12% 12%, rgba(229,164,48,0.14), transparent 42%), radial-gradient(circle at 88% 8%, rgba(31,56,100,0.1), transparent 45%), radial-gradient(circle at 15% 85%, rgba(56,80,38,0.08), transparent 45%), radial-gradient(circle at 90% 88%, rgba(31,56,100,0.08), transparent 48%), linear-gradient(160deg, #F5F2E4 0%, #EFE7D3 45%, #F0EAD8 100%); background-attachment: fixed; }
   input, button, select, textarea, a { touch-action: manipulation; }
   input:focus, textarea:focus, select:focus { border-color: #1F3864 !important; box-shadow: 0 0 0 3px rgba(31,56,100,0.15) !important; }
+
+  /* Fast, repeated taps on plain/blank areas of the screen were being
+     picked up by the browser as an attempt to select text (especially
+     on mobile Safari/Chrome), which pops a native text-selection
+     overlay + selection handles on top of the app. Once that overlay
+     grabs the touch events, taps stop reaching the React app at all,
+     which reads as the whole page freezing/lagging. Disabling text
+     selection and the iOS long-press callout globally (and explicitly
+     re-enabling it only where people actually need to select/type
+     text) fixes this without affecting normal use. */
+  * { -webkit-touch-callout: none; }
+  html, body { -webkit-user-select: none; user-select: none; }
+  input, textarea, [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
+    -webkit-touch-callout: default;
+  }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: rgba(31,56,100,0.3); border-radius: 8px; }
 
