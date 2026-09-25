@@ -562,11 +562,10 @@ function djGetAudioCtx() {
   return djAudioCtx;
 }
 
-// A rising, gentle "charge-up" hum that plays under the icon's
-// vibration build-up — a soft tone sweeping upward with a light
-// tremolo (amplitude wobble) that itself speeds up over time, so it
-// feels like it's building toward the explosion, without being loud
-// or harsh.
+// A soft, watery "bubbling" hum that plays under the icon's
+// vibration build-up — a pure sine tone gently rising in pitch with
+// a light wobble (like air bubbling up through water) that speeds up
+// over time, building toward the bubble-pop burst. Quiet on purpose.
 function djPlayChargeUp(durationSec) {
   try {
     const ctx = djGetAudioCtx();
@@ -576,16 +575,16 @@ function djPlayChargeUp(durationSec) {
     const gain = ctx.createGain();
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
-    osc.type = "triangle";
-    osc.frequency.setValueAtTime(80, now);
-    osc.frequency.exponentialRampToValueAtTime(260, now + durationSec);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(120, now);
+    osc.frequency.exponentialRampToValueAtTime(300, now + durationSec);
     lfo.type = "sine";
-    lfo.frequency.setValueAtTime(6, now);
-    lfo.frequency.exponentialRampToValueAtTime(30, now + durationSec); // buzz speeds up
-    lfoGain.gain.setValueAtTime(0.02, now); // modulation depth on the main gain
+    lfo.frequency.setValueAtTime(5, now);
+    lfo.frequency.exponentialRampToValueAtTime(22, now + durationSec); // wobble speeds up
+    lfoGain.gain.setValueAtTime(0.018, now); // modulation depth on the main gain
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.04, now + durationSec * 0.7);
-    gain.gain.exponentialRampToValueAtTime(0.02, now + durationSec);
+    gain.gain.exponentialRampToValueAtTime(0.035, now + durationSec * 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.018, now + durationSec);
     lfo.connect(lfoGain);
     lfoGain.connect(gain.gain); // tremolo: LFO modulates the envelope directly
     osc.connect(gain);
@@ -599,62 +598,35 @@ function djPlayChargeUp(durationSec) {
   }
 }
 
-// A punchy little "explosion" — a filtered noise crack, a low sine
-// thump for weight, and a bright triangle blip on top for snap. No
-// audio file needed, so it all stays inline in this one index.html.
+// A little cluster of soft "bubble pop" plinks — several quick sine
+// chirps, each rising fast in pitch with a snappy percussive decay,
+// staggered by a few milliseconds and randomized slightly in pitch
+// and timing so it reads as a small burst of bubbles popping rather
+// than one single sound. No audio file needed, so it all stays
+// inline in this one index.html.
 function djPlayExplosion() {
   try {
     const ctx = djGetAudioCtx();
     if (!ctx) return;
     const now = ctx.currentTime;
-
-    const bufferSize = Math.floor(ctx.sampleRate * 0.25);
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < bufferSize; i++) {
-      data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufferSize, 2);
+    const popCount = 4 + Math.floor(Math.random() * 3); // 4-6 little pops
+    for (let i = 0; i < popCount; i++) {
+      const t0 = now + i * (0.03 + Math.random() * 0.018);
+      const startFreq = 550 + Math.random() * 300;
+      const endFreq = startFreq * (1.7 + Math.random() * 0.6);
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(startFreq, t0);
+      osc.frequency.exponentialRampToValueAtTime(endFreq, t0 + 0.05);
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(0.13, t0 + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.12);
     }
-    const noise = ctx.createBufferSource();
-    noise.buffer = buffer;
-    const noiseFilter = ctx.createBiquadFilter();
-    noiseFilter.type = "bandpass";
-    noiseFilter.frequency.value = 1200;
-    noiseFilter.Q.value = 0.6;
-    const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.2, now);
-    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
-    noise.connect(noiseFilter);
-    noiseFilter.connect(noiseGain);
-    noiseGain.connect(ctx.destination);
-
-    const thump = ctx.createOscillator();
-    const thumpGain = ctx.createGain();
-    thump.type = "sine";
-    thump.frequency.setValueAtTime(160, now);
-    thump.frequency.exponentialRampToValueAtTime(45, now + 0.18);
-    thumpGain.gain.setValueAtTime(0.0001, now);
-    thumpGain.gain.exponentialRampToValueAtTime(0.25, now + 0.012);
-    thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
-    thump.connect(thumpGain);
-    thumpGain.connect(ctx.destination);
-
-    const blip = ctx.createOscillator();
-    const blipGain = ctx.createGain();
-    blip.type = "triangle";
-    blip.frequency.setValueAtTime(1500, now);
-    blip.frequency.exponentialRampToValueAtTime(300, now + 0.09);
-    blipGain.gain.setValueAtTime(0.0001, now);
-    blipGain.gain.exponentialRampToValueAtTime(0.1, now + 0.006);
-    blipGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
-    blip.connect(blipGain);
-    blipGain.connect(ctx.destination);
-
-    noise.start(now);
-    thump.start(now);
-    blip.start(now);
-    noise.stop(now + 0.26);
-    thump.stop(now + 0.26);
-    blip.stop(now + 0.12);
   } catch (err) {
     // Audio is purely decorative — never let it break the tap effect.
   }
