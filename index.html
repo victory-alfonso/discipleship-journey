@@ -61,6 +61,20 @@
     .dj-notice, .dj-notice.dj-notice-leaving, .dj-notice .dj-notice-icon { animation-duration: 0.01s; }
   }
 
+  /* Logo spark — tapping an empty part of the screen pops a small
+     Victory logo icon at the tap point: quick pop-in, gentle rise,
+     then fade. */
+  @keyframes djLogoSpark {
+    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
+    18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+    30%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) translateY(-46px) scale(0.9); }
+  }
+  .dj-logo-spark { animation: djLogoSpark 1.4s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .dj-logo-spark { animation-duration: 0.01s; }
+  }
+
   .authInput:focus { border-color: #1F3864; box-shadow: 0 0 0 3px rgba(31,56,100,0.15); }
   .authTabBtn:hover { color: #1F3864 !important; }
   .authPwToggle:hover { color: #4A4230 !important; }
@@ -444,6 +458,90 @@ function ToastHost() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ============================================================
+// LOGO SPARK — tapping any empty, non-interactive part of the
+// screen (background, whitespace, card padding — not buttons,
+// links, inputs, or anything with a pointer cursor) pops up a
+// small Victory logo icon at the tap point that gently rises and
+// fades. Purely decorative; never blocks a real tap on something
+// touchable, and skips entirely while a modal/dialog is open.
+// <LogoSparkHost /> is mounted once at the root.
+// ============================================================
+
+// An element counts as "touchable" (skip the spark) if it, or any
+// ancestor up to <body>, is a natural control, carries an
+// interactive role, or has a pointer cursor — which covers this
+// app's cards, nav items, rows and buttons without needing to tag
+// every one of them individually.
+function djIsTouchableTarget(el) {
+  const interactiveTags = new Set(["BUTTON", "A", "INPUT", "SELECT", "TEXTAREA", "LABEL", "OPTION"]);
+  let node = el;
+  let hops = 0;
+  while (node && node !== document.body && hops < 40) {
+    if (node.nodeType === 1) {
+      if (interactiveTags.has(node.tagName)) return true;
+      const role = node.getAttribute && node.getAttribute("role");
+      if (role && ["button", "link", "dialog", "alertdialog", "checkbox", "tab", "menuitem"].includes(role)) return true;
+      if (node.isContentEditable) return true;
+      const cs = window.getComputedStyle(node);
+      if (cs && cs.cursor === "pointer") return true;
+    }
+    node = node.parentElement;
+    hops++;
+  }
+  return false;
+}
+
+let logoSparkSeq = 0;
+function LogoSparkHost() {
+  const [sparks, setSparks] = useState([]); // { id, x, y }
+  const lastSparkAtRef = useRef(0);
+
+  useEffect(() => {
+    const onPointerDown = (e) => {
+      if (e.button !== undefined && e.button !== 0) return; // left click / primary touch only
+      // Skip while any modal/dialog is open so it never fights with that UI.
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+      if (djIsTouchableTarget(e.target)) return;
+      const now = Date.now();
+      if (now - lastSparkAtRef.current < 350) return; // gentle debounce
+      lastSparkAtRef.current = now;
+      const x = e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX) ?? window.innerWidth / 2;
+      const y = e.clientY ?? (e.touches && e.touches[0] && e.touches[0].clientY) ?? window.innerHeight / 2;
+      const id = ++logoSparkSeq;
+      setSparks((prev) => [...prev.slice(-5), { id, x, y }]);
+      setTimeout(() => {
+        setSparks((prev) => prev.filter((s) => s.id !== id));
+      }, 1400);
+    };
+    window.addEventListener("pointerdown", onPointerDown, true);
+    return () => window.removeEventListener("pointerdown", onPointerDown, true);
+  }, []);
+
+  if (sparks.length === 0) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 9500, pointerEvents: "none" }}>
+      {sparks.map((s) => (
+        <img
+          key={s.id}
+          src={VICTORY_LOGO_DATA_URI}
+          alt=""
+          className="dj-logo-spark"
+          style={{
+            position: "fixed",
+            left: s.x,
+            top: s.y,
+            width: 28,
+            height: 28,
+            objectFit: "contain",
+            filter: "drop-shadow(0 3px 6px rgba(20,18,14,0.35))",
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -6231,6 +6329,7 @@ root.render(
     <ToastHost />
     <ConfirmHost />
     <SessionPickerHost />
+    <LogoSparkHost />
   </>
 );
 </script>
