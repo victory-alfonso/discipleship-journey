@@ -1156,13 +1156,6 @@ function nextSessionForBatch(classItem, topics, batch) {
   const ts = sortTopicsForDisplay(topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === batch));
   return ts.find((t) => !t.conducted) || null;
 }
-// True for the single ONE2ONE class (same name match findOneOnOneClass
-// uses) — its Classes-tab card shows batch completion counts instead
-// of a "next session" line, since ONE2ONE progress is tracked per
-// member rather than as a group session schedule.
-function isOneOnOneClassName(name) {
-  return (name || "").toLowerCase().replace(/[^a-z0-9]/g, "").startsWith("one2one");
-}
 // A member's own batch's sessions for a class — same rule
 // getEnrolledTopics uses: a class matching a Discipleship Track only
 // counts that member's own batch's sessions; a custom class with no
