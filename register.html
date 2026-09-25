@@ -42,10 +42,14 @@
   .checkCircle { width: 56px; height: 56px; border-radius: 50%; background: #385026; color: #EFE7D3; display: flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 14px; }
 
   .againBtn { margin-top: 18px; padding: 10px 18px; border-radius: 8px; border: 1px solid #D8CFB0; background: #FFFFFF; color: #4A4230; cursor: pointer; font-size: 13.5px; font-weight: 600; }
+
+  .qrBox { display: inline-block; background: #FFFFFF; padding: 10px; border-radius: 10px; border: 1px solid #E4DCC6; }
+  .fixedField { width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #D8CFB0; font-size: 14.5px; background: #F1ECDA; color: #6B5E3E; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 <body>
 <div class="header">
@@ -165,6 +169,17 @@ function renderMissingClass() {
     <div class="msgScreen">
       <div class="big">Link not set up</div>
       <div class="sub">This registration link is missing a class. Please ask your leader for the correct link, or scan the QR code they shared for your class.</div>
+    </div>
+  `;
+}
+
+// Shown when a "one2one" link's leader can't be found — e.g. the leader
+// was removed from Settings > ONE2ONE Leaders after the link was shared.
+function renderMissingLeader() {
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="big">Link not set up</div>
+      <div class="sub">This ONE2ONE registration link isn't valid anymore. Please ask for a fresh link from your ONE2ONE leader.</div>
     </div>
   `;
 }
@@ -423,12 +438,196 @@ function renderForm(className, classId, batch, errorMessage) {
   });
 }
 
+// ============================================================
+// ONE2ONE self-registration — reached via a link copied from a
+// specific ONE2ONE leader's profile in the ONE2ONE tab (see
+// registrationLinkForOneOnOne / CopyOneOnOneRegistrationLinkButton
+// in index.html). Unlike the class flow above, this writes straight
+// to the "oneOnOne" collection under that leader's email instead of
+// "pendingRegistrations", and skips the "Membership" question
+// entirely since ONE2ONE members don't have that field at all (see
+// OneOnOneFormModal in index.html) — the form shows a fixed
+// "ONE2ONE Leader" box in its place instead of a select.
+// ============================================================
+
+// Same scheme index.html's oneOnOneQrText uses, so the leader's
+// scanner (ScanOneOnOneAttendanceModal) recognizes this code right
+// away — it works immediately, even before a Leader/Manager approves
+// the person into Disciples.
+function oneOnOneQrText(oneOnOneId) {
+  return `DJONE2ONE:${oneOnOneId}`;
+}
+
+function renderOneOnOneSuccess(leaderEmail, leaderName, personId, name) {
+  const qrText = oneOnOneQrText(personId);
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="checkCircle">✓</div>
+      <div class="big">You're in, ${esc(name)}!</div>
+      <div class="sub">Your ONE2ONE registration has been submitted and is waiting for a leader to approve it into Disciples. This QR code already works for attendance right now — save or screenshot it before you leave this page.</div>
+      <div class="qrBox" id="qrBox" style="margin-top:16px;"></div>
+      <button class="againBtn" id="downloadQrBtn" style="margin-top:14px;">Save QR Code</button>
+      <button class="againBtn" id="againBtn" style="margin-top:10px;">Register another person</button>
+    </div>
+  `;
+  const qrBox = document.getElementById("qrBox");
+  new QRCode(qrBox, { text: qrText, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+  document.getElementById("downloadQrBtn").onclick = () => {
+    const canvas = qrBox.querySelector("canvas");
+    if (!canvas) return;
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = `${name}-QR.png`;
+    a.click();
+  };
+  document.getElementById("againBtn").onclick = () => renderOneOnOneForm(leaderEmail, leaderName);
+}
+
+function renderOneOnOneForm(leaderEmail, leaderName, errorMessage) {
+  app.innerHTML = `
+    <div class="card">
+      <div class="className">ONE2ONE Registration</div>
+      <div class="classSub">Fill in your details to register under <strong>${esc(leaderName || leaderEmail)}</strong>'s ONE2ONE tracker.</div>
+      ${errorMessage ? `<div class="errorBox">${esc(errorMessage)}</div>` : ""}
+      <form id="regForm">
+        <label class="field">
+          <input class="input" name="name" placeholder="Full name *" aria-label="Full name" required autofocus autocomplete="name" />
+        </label>
+        <div class="row2">
+          <label class="field">
+            <span>Birthdate *</span>
+            <input class="input" name="birthdate" type="date" required max="${new Date().toISOString().slice(0,10)}" autocomplete="bday" />
+            <div class="ageHint" id="ageHint"></div>
+          </label>
+          <label class="field">
+            <span>Gender *</span>
+            <select class="input" name="gender" required>
+              <option value="" disabled selected>Select…</option>
+              ${GENDERS.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="row2">
+          <label class="field">
+            <span>Membership</span>
+            <input class="fixedField" value="ONE2ONE Leader" disabled />
+          </label>
+          <label class="field">
+            <span>Life stage *</span>
+            <select class="input" name="lifeStage" required>
+              <option value="" disabled selected>Select…</option>
+              ${LIFE_STAGES.map((ls) => `<option value="${esc(ls)}">${esc(ls)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="row2">
+          <label class="field">
+            <span>Contact number *</span>
+            <input class="input" name="contactNumber" type="tel" placeholder="Contact number" required autocomplete="tel" />
+          </label>
+          <label class="field">
+            <span>Address *</span>
+            <input class="input" name="address" placeholder="Address" required autocomplete="street-address" />
+          </label>
+        </div>
+        <button class="submitBtn" type="submit" id="submitBtn">Submit Registration</button>
+      </form>
+      <div class="noteBox">Your registration is reviewed by a Leader/Manager before it's added to Disciples — but your attendance QR code (shown after you submit) already works right away, so there's nothing extra to wait for on that front.</div>
+    </div>
+  `;
+
+  const birthdateInput = document.querySelector('input[name="birthdate"]');
+  const ageHint = document.getElementById("ageHint");
+  birthdateInput.addEventListener("input", () => {
+    const age = computeAge(birthdateInput.value);
+    ageHint.textContent = age !== null && age >= 0 ? `Age: ${age}` : "";
+  });
+
+  // Same "required alone lets whitespace through" fix as the class form.
+  const blankCheckFields = [
+    ["name", "Please enter your full name."],
+    ["contactNumber", "Please enter a contact number."],
+    ["address", "Please enter an address."],
+  ];
+  blankCheckFields.forEach(([fieldName, message]) => {
+    const input = document.querySelector(`[name="${fieldName}"]`);
+    input.addEventListener("input", () => input.setCustomValidity(""));
+  });
+
+  document.getElementById("regForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = document.getElementById("submitBtn");
+
+    let firstInvalid = null;
+    blankCheckFields.forEach(([fieldName, message]) => {
+      const input = form[fieldName];
+      if (!input.value.trim()) {
+        input.setCustomValidity(message);
+        if (!firstInvalid) firstInvalid = input;
+      } else {
+        input.setCustomValidity("");
+      }
+    });
+    if (firstInvalid) { firstInvalid.reportValidity(); firstInvalid.focus(); return; }
+
+    const name = form.name.value.trim();
+    // No "category"/Membership field here on purpose — ONE2ONE people
+    // never have one (see OneOnOneFormModal / addOneOnOnePerson in
+    // index.html); the fixed "ONE2ONE Leader" box above is display-only.
+    const data = {
+      name,
+      photoUrl: null,
+      birthdate: form.birthdate.value,
+      gender: form.gender.value,
+      lifeStage: form.lifeStage.value,
+      contactNumber: form.contactNumber.value.trim(),
+      address: form.address.value.trim(),
+      createdBy: leaderEmail,
+      status: "pending",
+      selfRegistered: true,
+      createdAt: new Date(),
+      progress: {},
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Submitting…";
+    // Same known-ID-up-front trick as the class flow, so the id can
+    // double as the QR text (DJONE2ONE:<id>) with no extra lookup.
+    const personRef = db.collection("oneOnOne").doc();
+    try {
+      await ensureSignedIn();
+      await personRef.set(data);
+      renderOneOnOneSuccess(leaderEmail, leaderName, personRef.id, name);
+    } catch (err) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Submit Registration";
+      renderOneOnOneForm(leaderEmail, leaderName, "Couldn't submit your registration. " + (err && err.message ? err.message : "Please try again."));
+    }
+  });
+}
+
 function ensureSignedIn() {
   if (auth.currentUser) return Promise.resolve(auth.currentUser);
   return auth.signInAnonymously().then((cred) => cred.user);
 }
 
 async function init() {
+  const one2oneParam = qs("one2one");
+  if (one2oneParam) {
+    const leaderEmail = one2oneParam.trim().toLowerCase();
+    try {
+      await ensureSignedIn();
+      const leaderDoc = await db.collection("one2oneLeaders").doc(leaderEmail).get();
+      if (!leaderDoc.exists) { renderMissingLeader(); return; }
+      const leaderData = leaderDoc.data() || {};
+      renderOneOnOneForm(leaderEmail, leaderData.name || null);
+    } catch (err) {
+      renderError(err && err.message ? err.message : "Couldn't load this link. Please check your connection and try again.");
+    }
+    return;
+  }
+
   const classId = qs("classId");
   const batch = qs("batch") || null;
   if (!classId) { renderMissingClass(); return; }
