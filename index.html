@@ -63,16 +63,32 @@
 
   /* Logo spark — tapping an empty part of the screen pops a small
      Victory logo icon at the tap point: quick pop-in, gentle rise,
-     then fade. */
+     then it bursts like a bubble (a quick stretch + vanish, timed
+     to match the tiny bubble-burst particles and pop sound fired
+     from JS — see djBubblePop / djPlayBubblePop). */
   @keyframes djLogoSpark {
-    0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3); }
-    18%  { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
-    30%  { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-    100% { opacity: 0; transform: translate(-50%, -50%) translateY(-46px) scale(0.9); }
+    0%   { opacity: 0; transform: translate(-50%, -50%) translateY(0) scale(0.3); }
+    18%  { opacity: 1; transform: translate(-50%, -50%) translateY(0) scale(1.15); }
+    30%  { opacity: 1; transform: translate(-50%, -50%) translateY(-2px) scale(1); }
+    78%  { opacity: 1; transform: translate(-50%, -50%) translateY(-44px) scale(1.06); }
+    85%  { opacity: 1; transform: translate(-50%, -50%) translateY(-48px) scale(1.3); }
+    86%  { opacity: 0; transform: translate(-50%, -50%) translateY(-48px) scale(1.65); }
+    100% { opacity: 0; transform: translate(-50%, -50%) translateY(-48px) scale(1.65); }
   }
   .dj-logo-spark { animation: djLogoSpark 1.4s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
   @media (prefers-reduced-motion: reduce) {
     .dj-logo-spark { animation-duration: 0.01s; }
+  }
+
+  /* Tiny bubbles that burst outward from the pop point, in sync
+     with the logo's pop moment above. */
+  @keyframes djBubblePop {
+    0%   { opacity: 0.95; transform: translate(-50%, -50%) translate(0, 0) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--bx), var(--by)) scale(0.15); }
+  }
+  .dj-bubble-pop { animation: djBubblePop 0.5s cubic-bezier(0.15, 0.7, 0.4, 1) both; }
+  @media (prefers-reduced-motion: reduce) {
+    .dj-bubble-pop { display: none; }
   }
 
   .authInput:focus { border-color: #1F3864; box-shadow: 0 0 0 3px rgba(31,56,100,0.15); }
@@ -467,7 +483,8 @@ function ToastHost() {
 // screen (background, whitespace, card padding — not buttons,
 // links, inputs, or anything with a pointer cursor) pops up a
 // small Victory logo icon at the tap point that gently rises and
-// fades. Purely decorative; never blocks a real tap on something
+// then pops like a bubble (with a little burst of bubbles + a pop
+// sound). Purely decorative; never blocks a real tap on something
 // touchable, and skips entirely while a modal/dialog is open.
 // <LogoSparkHost /> is mounted once at the root.
 // ============================================================
@@ -496,9 +513,58 @@ function djIsTouchableTarget(el) {
   return false;
 }
 
+// Distance (px) the logo rises before it pops — must match the
+// translateY(-48px) used in the djLogoSpark keyframes above, so the
+// bubble burst spawns exactly where the icon vanishes.
+const DJ_SPARK_RISE_PX = 48;
+const DJ_SPARK_DURATION_MS = 1400;
+// The djLogoSpark keyframes start disappearing at 86% — that's the
+// "pop" moment we fire the bubble burst and sound at.
+const DJ_SPARK_POP_FRACTION = 0.86;
+
+// Lazily-created, reused AudioContext for the little pop sound so we
+// don't spin up a new one on every tap (and so it only ever starts
+// from within a real user gesture, satisfying autoplay policies).
+let djAudioCtx = null;
+function djGetAudioCtx() {
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return null;
+  if (!djAudioCtx) djAudioCtx = new Ctx();
+  if (djAudioCtx.state === "suspended") djAudioCtx.resume();
+  return djAudioCtx;
+}
+
+// A short synthesized "bubble pop" — a quick upward-then-downward
+// pitch blip under a fast attack/decay envelope. No audio file
+// needed, so it stays in this single index.html.
+function djPlayBubblePop() {
+  try {
+    const ctx = djGetAudioCtx();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const detune = (Math.random() - 0.5) * 220; // slight variety tap to tap
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(700 + detune, now);
+    osc.frequency.exponentialRampToValueAtTime(1900 + detune, now + 0.045);
+    osc.frequency.exponentialRampToValueAtTime(220, now + 0.1);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.32, now + 0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.14);
+  } catch (err) {
+    // Audio is purely decorative — never let it break the tap effect.
+  }
+}
+
 let logoSparkSeq = 0;
 function LogoSparkHost() {
   const [sparks, setSparks] = useState([]); // { id, x, y }
+  const [bubbles, setBubbles] = useState([]); // { id, groupId, x, y, bx, by, size }
   const lastSparkAtRef = useRef(0);
 
   useEffect(() => {
@@ -521,13 +587,44 @@ function LogoSparkHost() {
       setSparks((prev) => [...prev.slice(-5), { id, x, y }]);
       setTimeout(() => {
         setSparks((prev) => prev.filter((s) => s.id !== id));
-      }, 1400);
+      }, DJ_SPARK_DURATION_MS);
+
+      // Fire the pop — bubble burst + sound — timed to the moment
+      // the risen icon visually vanishes in the CSS keyframes.
+      const reducedMotion =
+        window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const popDelay = reducedMotion ? 0 : DJ_SPARK_DURATION_MS * DJ_SPARK_POP_FRACTION;
+      setTimeout(() => {
+        djPlayBubblePop();
+        if (reducedMotion) return; // skip the little bubble particles too
+        const popX = x;
+        const popY = y - DJ_SPARK_RISE_PX;
+        const count = 6 + Math.floor(Math.random() * 3); // 6-8 little bubbles
+        const groupId = id;
+        const burst = Array.from({ length: count }, (_, i) => {
+          const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.6;
+          const dist = 14 + Math.random() * 22;
+          return {
+            id: `${groupId}-b${i}`,
+            groupId,
+            x: popX,
+            y: popY,
+            bx: Math.cos(angle) * dist,
+            by: Math.sin(angle) * dist - 6, // slight upward bias
+            size: 4 + Math.random() * 6,
+          };
+        });
+        setBubbles((prev) => [...prev.slice(-48), ...burst]);
+        setTimeout(() => {
+          setBubbles((prev) => prev.filter((b) => b.groupId !== groupId));
+        }, 520);
+      }, popDelay);
     };
     window.addEventListener("pointerdown", onPointerDown, true);
     return () => window.removeEventListener("pointerdown", onPointerDown, true);
   }, []);
 
-  if (sparks.length === 0) return null;
+  if (sparks.length === 0 && bubbles.length === 0) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9500, pointerEvents: "none" }}>
       {sparks.map((s) => (
@@ -544,6 +641,25 @@ function LogoSparkHost() {
             height: 28,
             objectFit: "contain",
             filter: "drop-shadow(0 3px 6px rgba(20,18,14,0.35))",
+          }}
+        />
+      ))}
+      {bubbles.map((b) => (
+        <span
+          key={b.id}
+          className="dj-bubble-pop"
+          style={{
+            position: "fixed",
+            left: b.x,
+            top: b.y,
+            width: b.size,
+            height: b.size,
+            borderRadius: "50%",
+            background:
+              "radial-gradient(circle at 35% 30%, rgba(255,255,255,0.95), rgba(255,255,255,0.4) 55%, rgba(190,220,255,0.15) 80%)",
+            boxShadow: "0 0 4px rgba(255,255,255,0.55)",
+            "--bx": `${b.bx}px`,
+            "--by": `${b.by}px`,
           }}
         />
       ))}
