@@ -26,8 +26,12 @@
   .input { width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #D8CFB0; font-size: 14.5px; background: #FFFFFF; }
   .ageHint { font-size: 12px; color: #7A6E4E; margin-top: 5px; }
 
-  .row2 { display: flex; gap: 10px; }
-  .row2 > label { flex: 1; min-width: 0; }
+  /* flex-wrap + a real min-width means that if a field (like the native
+     date picker used for Birthdate, which needs more room than CSS alone
+     can guarantee on iOS) doesn't fit next to its neighbor, it wraps to
+     its own line instead of visually overlapping it. */
+  .row2 { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row2 > label { flex: 1 1 150px; min-width: 150px; }
 
   .submitBtn { width: 100%; padding: 13px; border-radius: 8px; border: none; background: #1F3864; color: #EFE7D3; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 6px; }
   .submitBtn:disabled { opacity: 0.6; cursor: default; }
