@@ -7410,9 +7410,9 @@ const styles = {
   modalOverlay: { position: "fixed", inset: 0, background: "rgba(20,18,14,0.45)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 20 },
   modalCard: { background: "rgba(255,255,255,0.8)", backdropFilter: "blur(22px) saturate(180%)", WebkitBackdropFilter: "blur(22px) saturate(180%)", border: "1px solid rgba(255,255,255,0.6)", borderRadius: 16, maxWidth: 400, width: "100%", padding: "24px 24px 20px", boxShadow: "0 25px 50px -12px rgba(20,18,14,0.5), inset 0 1px 0 rgba(255,255,255,0.5)", animation: "popIn 0.14s ease-out" },
   modalTitle: { fontSize: 18, fontWeight: 700, color: "#23211D", fontFamily: "Georgia, serif", marginBottom: 14 },
-  modalInput: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", fontSize: 14, marginBottom: 8, outline: "none", background: "rgba(255,255,255,0.7)", color: "#23211D", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" },
+  modalInput: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", fontSize: 14, marginBottom: 8, outline: "none", background: "rgba(255,255,255,0.7)", color: "#23211D", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", minWidth: 0 },
   modalDateLabel: { display: "block", fontSize: 12, fontWeight: 600, color: "#7A6E4E", marginBottom: 8 },
-  modalFieldLabel: { display: "block", fontSize: 12, fontWeight: 600, color: "#7A6E4E", marginBottom: 4 },
+  modalFieldLabel: { display: "block", fontSize: 12, fontWeight: 600, color: "#7A6E4E", marginBottom: 4, minWidth: 0 },
   // auto-fit + minmax lets a field (e.g. the native Birthdate date
   // picker, which needs more width than CSS alone can guarantee on iOS)
   // drop to its own line instead of overlapping its neighbor when the
