@@ -64,9 +64,11 @@
   /* Logo spark — tapping an empty part of the screen pops a small
      Victory logo icon at the tap point: quick pop-in, then it stays
      put and vibrates (building up, with a matching charge-up hum
-     from JS) until it explodes — the icon itself shatters into a
-     few pieces with a bright flash and an explosion sound. See
-     djGenerateShatterPieces / djPlayChargeUp / djPlayExplosion. */
+     from JS) until it releases its charge — a bright shine flash plus
+     a burst of small gold sparkles flying outward (like a wand
+     letting off its stored-up power), with a soft bubble-pop sound.
+     The icon itself never breaks apart. See djGenerateSparkles /
+     djPlayChargeUp / djPlayExplosion. */
   @keyframes djLogoSpark {
     0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(0deg); }
     14%  { opacity: 1; transform: translate(-50%, -50%) scale(1.18) rotate(0deg); }
@@ -90,8 +92,9 @@
     .dj-logo-spark { animation-duration: 0.01s; }
   }
 
-  /* A bright warm flash right at the explosion point, so the burst
-     reads clearly even before the eye picks out the flying pieces. */
+  /* A bright, shiny flash right at the release point — like a wand
+     letting its stored power go — so the burst reads clearly even
+     before the eye picks out the flying sparkles. */
   @keyframes djPopFlash {
     0%   { opacity: 0.9; transform: translate(-50%, -50%) scale(0.15); }
     55%  { opacity: 0.6; }
@@ -102,15 +105,17 @@
     .dj-pop-flash { display: none; }
   }
 
-  /* The four quadrants the logo itself shatters into, each flung
-     outward toward its own corner and tumbling as it fades. */
-  @keyframes djShatterPiece {
-    0%   { opacity: 1; transform: translate(-50%, -50%) translate(0, 0) rotate(0deg) scale(1); }
-    100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--bx), var(--by)) rotate(var(--br)) scale(0.5); }
+  /* Small gold sparkle glints that shoot outward from the icon and
+     tumble as they fade — a shine/release effect, not a break. The
+     icon itself stays whole; only the sparkle dust flies off it. */
+  @keyframes djSparkleFly {
+    0%   { opacity: 0; transform: translate(-50%, -50%) translate(0, 0) rotate(0deg) scale(0.2); }
+    22%  { opacity: 1; transform: translate(-50%, -50%) translate(calc(var(--bx) * 0.2), calc(var(--by) * 0.2)) rotate(calc(var(--br) * 0.3)) scale(1.15); }
+    100% { opacity: 0; transform: translate(-50%, -50%) translate(var(--bx), var(--by)) rotate(var(--br)) scale(0.2); }
   }
-  .dj-shatter-piece { animation: djShatterPiece 0.5s cubic-bezier(0.15, 0.7, 0.4, 1) both; }
+  .dj-sparkle { animation: djSparkleFly 0.6s cubic-bezier(0.15, 0.7, 0.4, 1) both; }
   @media (prefers-reduced-motion: reduce) {
-    .dj-shatter-piece { display: none; }
+    .dj-sparkle { display: none; }
   }
 
   .authInput:focus { border-color: #1F3864; box-shadow: 0 0 0 3px rgba(31,56,100,0.15); }
@@ -539,15 +544,14 @@ function djIsTouchableTarget(el) {
 // Duration of the whole logo-spark lifecycle, and the two moments
 // (as fractions of it) that matter: when the vibration build-up
 // starts (matches the djLogoSpark keyframes' 22% wobble-start), and
-// when it peaks and the icon explodes (matches the keyframes'
-// 85%/86% pop). The charge-up hum and the explosion sound/shatter
-// are scheduled off these same fractions so audio and visuals stay
-// in sync, at the same spot the icon appeared (it doesn't move).
+// when it peaks and the icon releases its charge (matches the
+// keyframes' 85%/86% pop). The charge-up hum and the pop sound/shine
+// burst are scheduled off these same fractions so audio and visuals
+// stay in sync, at the same spot the icon appeared (it doesn't move).
 const DJ_SPARK_DURATION_MS = 1400;
 const DJ_SPARK_VIBRATION_START_FRACTION = 0.22;
 const DJ_SPARK_POP_FRACTION = 0.86;
-// Size of the logo-spark icon (px) — also used to slice it into
-// quadrants for the shatter effect, so the pieces line up exactly.
+// Size of the logo-spark icon (px).
 const DJ_ICON_SIZE = 28;
 
 // Lazily-created, reused AudioContext for the sound effects so we
@@ -632,44 +636,39 @@ function djPlayExplosion() {
   }
 }
 
-// Splits the logo icon into its four quadrants, each flung outward
-// toward its own corner — so it reads as the icon itself shattering,
-// not generic sparkle particles. Each piece is a same-size div using
-// the full logo as its background image, offset via backgroundPosition
-// so it shows only its quadrant.
-function djGenerateShatterPieces(groupId, popX, popY) {
-  const half = DJ_ICON_SIZE / 2;
-  const pieces = [];
-  for (let row = 0; row < 2; row++) {
-    for (let col = 0; col < 2; col++) {
-      // Center of this quadrant relative to the icon's own center.
-      const cx = (col === 0 ? -1 : 1) * (half / 2);
-      const cy = (row === 0 ? -1 : 1) * (half / 2);
-      const norm = Math.hypot(cx, cy) || 1;
-      const dist = 26 + Math.random() * 20;
-      const bx = (cx / norm) * dist + (Math.random() - 0.5) * 8;
-      const by = (cy / norm) * dist + (Math.random() - 0.5) * 8 - 4; // slight upward bias
-      const br = (Math.random() - 0.5) * 260; // tumble, degrees
-      pieces.push({
-        id: `${groupId}-p${row}${col}`,
-        groupId,
-        x: popX + cx,
-        y: popY + cy,
-        bgX: -col * half,
-        bgY: -row * half,
-        bx,
-        by,
-        br,
-      });
-    }
+// Generates a small burst of gold sparkle glints flying outward from
+// the pop point in a rough circle, each with its own distance,
+// tumble and size — so it reads as a shiny release of magic dust
+// (like a wand letting off power), not the icon breaking apart.
+function djGenerateSparkles(groupId, popX, popY) {
+  const count = 8 + Math.floor(Math.random() * 5); // 8-12 sparkles
+  const sparkles = [];
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.7;
+    const dist = 24 + Math.random() * 34;
+    const bx = Math.cos(angle) * dist;
+    const by = Math.sin(angle) * dist - 6; // slight upward bias
+    const br = (Math.random() - 0.5) * 240; // tumble, degrees
+    const size = 6 + Math.random() * 8;
+    sparkles.push({
+      id: `${groupId}-s${i}`,
+      groupId,
+      x: popX,
+      y: popY,
+      bx,
+      by,
+      br,
+      size,
+      warm: Math.random() < 0.6, // mix of warm-gold and bright-white glints
+    });
   }
-  return pieces;
+  return sparkles;
 }
 
 let logoSparkSeq = 0;
 function LogoSparkHost() {
   const [sparks, setSparks] = useState([]); // { id, x, y }
-  const [pieces, setPieces] = useState([]); // shatter fragments, { id, groupId, x, y, bgX, bgY, bx, by, br }
+  const [sparkles, setSparkles] = useState([]); // shine glints, { id, groupId, x, y, bx, by, br, size, warm }
   const [flashes, setFlashes] = useState([]); // { id, x, y }
   const lastSparkAtRef = useRef(0);
 
@@ -711,30 +710,30 @@ function LogoSparkHost() {
         setTimeout(() => djPlayChargeUp(chargeDurationSec), vibrationStartDelay);
       }
 
-      // Fire the explosion — shattered icon pieces + flash + sound —
+      // Fire the release — shine flash + gold sparkle burst + sound —
       // timed to the moment the vibration build-up peaks and the icon
       // visually pops in the CSS keyframes.
       const popDelay = reducedMotion ? 0 : DJ_SPARK_DURATION_MS * DJ_SPARK_POP_FRACTION;
       setTimeout(() => {
         djPlayExplosion();
-        if (reducedMotion) return; // skip the shatter pieces + flash too
+        if (reducedMotion) return; // skip the sparkle burst + flash too
         const groupId = id;
         setFlashes((prev) => [...prev.slice(-5), { id: groupId, x, y }]);
         setTimeout(() => {
           setFlashes((prev) => prev.filter((f) => f.id !== groupId));
         }, 420);
-        const burst = djGenerateShatterPieces(groupId, x, y);
-        setPieces((prev) => [...prev.slice(-24), ...burst]);
+        const burst = djGenerateSparkles(groupId, x, y);
+        setSparkles((prev) => [...prev.slice(-48), ...burst]);
         setTimeout(() => {
-          setPieces((prev) => prev.filter((p) => p.groupId !== groupId));
-        }, 520);
+          setSparkles((prev) => prev.filter((p) => p.groupId !== groupId));
+        }, 620);
       }, popDelay);
     };
     window.addEventListener("pointerdown", onPointerDown, true);
     return () => window.removeEventListener("pointerdown", onPointerDown, true);
   }, []);
 
-  if (sparks.length === 0 && pieces.length === 0 && flashes.length === 0) return null;
+  if (sparks.length === 0 && sparkles.length === 0 && flashes.length === 0) return null;
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9500, pointerEvents: "none" }}>
       {sparks.map((s) => (
@@ -770,21 +769,23 @@ function LogoSparkHost() {
           }}
         />
       ))}
-      {pieces.map((p) => (
+      {sparkles.map((p) => (
         <span
           key={p.id}
-          className="dj-shatter-piece"
+          className="dj-sparkle"
           style={{
             position: "fixed",
             left: p.x,
             top: p.y,
-            width: DJ_ICON_SIZE / 2,
-            height: DJ_ICON_SIZE / 2,
-            backgroundImage: `url(${VICTORY_LOGO_DATA_URI})`,
-            backgroundSize: `${DJ_ICON_SIZE}px ${DJ_ICON_SIZE}px`,
-            backgroundPosition: `${p.bgX}px ${p.bgY}px`,
-            backgroundRepeat: "no-repeat",
-            filter: "drop-shadow(0 2px 4px rgba(20,18,14,0.4))",
+            width: p.size,
+            height: p.size,
+            borderRadius: "50%",
+            background: p.warm
+              ? "radial-gradient(circle, #FFF6DC 0%, #F0C860 45%, rgba(229,164,48,0) 75%)"
+              : "radial-gradient(circle, #FFFFFF 0%, #FFE7A8 45%, rgba(255,231,168,0) 75%)",
+            boxShadow: p.warm
+              ? "0 0 6px rgba(229,164,48,0.7)"
+              : "0 0 6px rgba(255,255,255,0.8)",
             "--bx": `${p.bx}px`,
             "--by": `${p.by}px`,
             "--br": `${p.br}deg`,
