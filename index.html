@@ -187,14 +187,6 @@
     .dj-nav { padding: 8px 10px !important; gap: 4px !important; }
     .dj-nav .nav-item { padding: 8px 12px !important; font-size: 12.5px !important; }
     .dj-main { padding: 16px 12px 40px !important; }
-
-    /* The native date-picker control (Birthdate) renders wider than
-       its CSS box allows for on mobile Safari, so in the Birthdate /
-       Gender modalRow2 pair it can still spill into Gender even
-       though the grid itself has room. Capping it below its column
-       width leaves a safety margin so that overflow stays inside its
-       own column instead of overlapping Gender's. */
-    .dj-date-input { max-width: 112px !important; padding: 9px 6px !important; font-size: 12.5px !important; }
   }
 
   @media print {
@@ -888,6 +880,71 @@ const DEFAULT_CLASSES = [
 const LIFE_STAGES = ["Single", "Married", "ENC"];
 const GENDERS = ["Male", "Female"];
 const MEMBER_CATEGORIES = ["Water Baptize", "Transfer"];
+
+const DOB_MONTHS = [
+  ["01", "Jan"], ["02", "Feb"], ["03", "Mar"], ["04", "Apr"],
+  ["05", "May"], ["06", "Jun"], ["07", "Jul"], ["08", "Aug"],
+  ["09", "Sep"], ["10", "Oct"], ["11", "Nov"], ["12", "Dec"],
+];
+
+function daysInMonth(month, year) {
+  return new Date(year, month, 0).getDate();
+}
+
+// Birthdate as Month / Day / Year dropdowns instead of the native
+// <input type="date">, whose calendar-grid picker some mobile browsers
+// render slowly (scrolling year-by-year to reach an older birth year)
+// and can look inconsistent across devices. Plain <select>s scroll
+// instantly everywhere and stay a predictable width next to Gender.
+// Uncontrolled by design: it keeps its own month/day/year state and only
+// reports the composed "YYYY-MM-DD" up via onChange once all three are
+// picked (an empty string while incomplete), so a parent that resets
+// `birthdate` to "" mid-entry doesn't wipe out what's already selected.
+function DobPicker({ value, onChange }) {
+  const initial = useMemo(() => {
+    const [y, m, d] = (value || "").split("-");
+    return { y: y || "", m: m || "", d: d || "" };
+  }, []);
+  const [year, setYear] = useState(initial.y);
+  const [month, setMonth] = useState(initial.m);
+  const [day, setDay] = useState(initial.d);
+
+  const thisYear = new Date().getFullYear();
+  const years = useMemo(() => Array.from({ length: 101 }, (_, i) => thisYear - i), [thisYear]);
+  const maxDay = month ? daysInMonth(Number(month), Number(year) || thisYear) : 31;
+  const dayOptions = useMemo(
+    () => Array.from({ length: maxDay }, (_, i) => String(i + 1).padStart(2, "0")),
+    [maxDay]
+  );
+
+  useEffect(() => {
+    // A previously picked day (e.g. 30) can become invalid after
+    // switching to a shorter month (e.g. Feb) — clear it back to the
+    // placeholder rather than silently keeping an impossible date.
+    if (day && Number(day) > maxDay) setDay("");
+  }, [maxDay]);
+
+  useEffect(() => {
+    onChange(year && month && day ? `${year}-${month}-${day}` : "");
+  }, [year, month, day]);
+
+  return (
+    <div style={styles.dobRow}>
+      <select style={{ ...styles.modalInput, marginBottom: 0, flex: "1.15 1 0", minWidth: 0 }} value={month} onChange={(e) => setMonth(e.target.value)} required aria-label="Birth month">
+        <option value="" disabled>Month</option>
+        {DOB_MONTHS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+      </select>
+      <select style={{ ...styles.modalInput, marginBottom: 0, flex: "0.85 1 0", minWidth: 0 }} value={day} onChange={(e) => setDay(e.target.value)} required aria-label="Birth day">
+        <option value="" disabled>Day</option>
+        {dayOptions.map((dd) => <option key={dd} value={dd}>{Number(dd)}</option>)}
+      </select>
+      <select style={{ ...styles.modalInput, marginBottom: 0, flex: "1.2 1 0", minWidth: 0 }} value={year} onChange={(e) => setYear(e.target.value)} required aria-label="Birth year">
+        <option value="" disabled>Year</option>
+        {years.map((yy) => <option key={yy} value={yy}>{yy}</option>)}
+      </select>
+    </div>
+  );
+}
 
 // Discipleship track statuses — independent of the dynamic "classes"
 // collection above. Each member gets a status per track, defaulting
@@ -3647,7 +3704,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
         <div style={styles.modalRow2}>
           <label style={styles.modalFieldLabel}>
             Birthdate
-            <input className="dj-date-input" style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
+            <DobPicker value={birthdate} onChange={setBirthdate} />
           </label>
           <label style={styles.modalFieldLabel}>
             Gender
@@ -3844,7 +3901,7 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
         <div style={styles.modalRow2}>
           <label style={styles.modalFieldLabel}>
             Birthdate
-            <input className="dj-date-input" style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
+            <DobPicker value={birthdate} onChange={setBirthdate} />
           </label>
           <label style={styles.modalFieldLabel}>
             Gender
@@ -5170,7 +5227,7 @@ function OneOnOneFormModal({ title, initial, submitLabel, members, onClose, onSa
         <div style={styles.modalRow2}>
           <label style={styles.modalFieldLabel}>
             Birthdate
-            <input className="dj-date-input" style={{ ...styles.modalInput, marginBottom: 0 }} type="date" value={birthdate} onChange={(e) => setBirthdate(e.target.value)} required />
+            <DobPicker value={birthdate} onChange={setBirthdate} />
           </label>
           <label style={styles.modalFieldLabel}>
             Gender
@@ -7421,10 +7478,10 @@ const styles = {
   modalInput: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", fontSize: 14, marginBottom: 8, outline: "none", background: "rgba(255,255,255,0.7)", color: "#23211D", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", minWidth: 0 },
   modalDateLabel: { display: "block", fontSize: 12, fontWeight: 600, color: "#7A6E4E", marginBottom: 8 },
   modalFieldLabel: { display: "block", fontSize: 12, fontWeight: 600, color: "#7A6E4E", marginBottom: 4, minWidth: 0 },
-  // auto-fit + minmax lets a field (e.g. the native Birthdate date
-  // picker, which needs more width than CSS alone can guarantee on iOS)
-  // drop to its own line instead of overlapping its neighbor when the
-  // modal is too narrow for both at once.
+  dobRow: { display: "flex", gap: 6 },
+  // auto-fit + minmax lets a field drop to its own line instead of
+  // overlapping its neighbor when the modal is too narrow for both at
+  // once (e.g. Birthdate's three selects beside Gender).
   modalRow2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 8 },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 6 },
   modalCancelBtn: { padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", background: "rgba(255,255,255,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", color: "#4A4230", cursor: "pointer", fontSize: 13.5, fontWeight: 600 },
