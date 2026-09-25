@@ -6364,9 +6364,44 @@ function App() {
   // conducted session into attendance once they're approved.
   const toggleOneOnOneSession = async (person, topicId, conducted) => {
     try {
-      // ONE2ONE is standalone: progress is saved only on the person's own
-      // doc — nothing is written to Disciples, attendance or Classes.
-      await db.collection("oneOnOne").doc(person.id).update({ [`progress.${topicId}`]: { conducted, dateConducted: conducted ? new Date() : null } });
+      const batch = db.batch();
+      batch.update(db.collection("oneOnOne").doc(person.id), { [`progress.${topicId}`]: { conducted, dateConducted: conducted ? new Date() : null } });
+
+      // Once a ONE2ONE person has been approved they're also a real
+      // Disciples member (person.memberId) enrolled in the ONE2ONE
+      // class/track, so from that point on a session check here must
+      // also land in "attendance" and update their track/class status —
+      // exactly like checking/scanning a normal class session does (see
+      // toggleAttendance) — or the Classes tab and their member profile
+      // never see it. Before approval there's no member yet to sync to;
+      // approveOneOnOnePerson replays whatever was checked while pending
+      // into attendance at that point instead.
+      if (person.status === "approved" && person.memberId) {
+        const memberId = person.memberId;
+        batch.set(db.collection("attendance").doc(`${memberId}_${topicId}`), { memberId, topicId, attended: conducted, dateAttended: conducted ? new Date() : null }, { merge: true });
+
+        const member = members.find((m) => m.id === memberId);
+        const track = oneOnOneTrack();
+        const currentStatus = member && ((member.trackStatus && member.trackStatus[track]) || "Not Enrolled");
+        const AUTO_STATUSES = ["Not Enrolled", "Enrolled", "In-Progress", "Completed"];
+        if (member && AUTO_STATUSES.includes(currentStatus)) {
+          const nextDone = oneOnOneSessions.filter((t) => {
+            if (t.id === topicId) return conducted;
+            return isOneOnOneSessionDone(person, t, attendanceByMember);
+          }).length;
+          let nextStatus = oneOnOneStatusFor(nextDone, oneOnOneSessions.length);
+          if (nextDone === 0 && currentStatus === "Not Enrolled") nextStatus = "Not Enrolled";
+          if (nextStatus !== currentStatus) {
+            const nextTrackStatus = { ...(member.trackStatus || {}), [track]: nextStatus };
+            const nextClassStatus = deriveClassStatusFromTracks(classes, nextTrackStatus, member.classStatus);
+            const nextClassIds = Array.isArray(member.classIds) ? [...member.classIds] : [];
+            if (oneOnOneClass && !nextClassIds.includes(oneOnOneClass.id)) nextClassIds.push(oneOnOneClass.id);
+            batch.update(db.collection("members").doc(memberId), { trackStatus: nextTrackStatus, classStatus: nextClassStatus, classIds: nextClassIds });
+          }
+        }
+      }
+
+      await batch.commit();
     } catch (err) {
       showError("Could not save that. Error: " + err.message);
     }
