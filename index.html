@@ -504,11 +504,16 @@ function LogoSparkHost() {
   useEffect(() => {
     const onPointerDown = (e) => {
       if (e.button !== undefined && e.button !== 0) return; // left click / primary touch only
+      // Debounce FIRST, before any expensive DOM work below — rapid
+      // tapping on an empty area used to still run the full ancestor
+      // walk + getComputedStyle on every single tap (only the actual
+      // spark creation was debounced), which could hammer the main
+      // thread hard enough to freeze the app on fast repeated taps.
+      const now = Date.now();
+      if (now - lastSparkAtRef.current < 350) return;
       // Skip while any modal/dialog is open so it never fights with that UI.
       if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
       if (djIsTouchableTarget(e.target)) return;
-      const now = Date.now();
-      if (now - lastSparkAtRef.current < 350) return; // gentle debounce
       lastSparkAtRef.current = now;
       const x = e.clientX ?? (e.touches && e.touches[0] && e.touches[0].clientX) ?? window.innerWidth / 2;
       const y = e.clientY ?? (e.touches && e.touches[0] && e.touches[0].clientY) ?? window.innerHeight / 2;
