@@ -4234,7 +4234,24 @@ function OneOnOneCard({ person, sessions, attendanceByMember, showAdder, onOpen,
   );
 }
 
-function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll }) {
+function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile }) {
+  // A ONE2ONE-only leader who hasn't set up their own profile yet (no
+  // name/photo on their one2oneLeaders doc) sees a create-profile prompt
+  // instead of the member tracker — see updateOneOnOneLeaderProfile's note
+  // about what a "profile" is. Leaders/Managers never pass needsProfile.
+  if (needsProfile) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <div style={styles.lightCard}>
+          <div style={styles.sectionLabel}>Set up your ONE2ONE profile</div>
+          <div style={{ fontSize: 13.5, color: "#4A4230", marginBottom: 14 }}>
+            Create your profile so Leaders and Managers can find you and see the members you've added. It only takes a name and, optionally, a photo.
+          </div>
+          <button style={styles.primaryBtn} onClick={onCreateProfile}>+ Create Profile</button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="stack-mobile" style={styles.toolbar}>
@@ -4313,17 +4330,16 @@ function OneOnOneLeaderCard({ leader, peopleCount, pendingCount, onOpen, onEdit,
   );
 }
 
-function OneOnOneLeaders({ leaders, onOpenLeader, onAddLeader, onEditLeader, onRemoveLeader }) {
+function OneOnOneLeaders({ leaders, onOpenLeader, onEditLeader, onRemoveLeader }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="stack-mobile" style={styles.toolbar}>
         <div style={{ flex: 1, fontSize: 13, color: "#7A6E4E", alignSelf: "center" }}>
-          Open a ONE2ONE leader's profile to see the members they've added.
+          Open a ONE2ONE leader's profile to see the members they've added. Leaders create their own profile the first time they open the ONE2ONE tab.
         </div>
-        <button style={styles.primaryBtn} onClick={onAddLeader}>+ Add ONE2ONE Leader</button>
       </div>
       {leaders.length === 0 ? (
-        <div style={styles.emptyNote}>No ONE2ONE leaders yet. Add one to get started.</div>
+        <div style={styles.emptyNote}>No ONE2ONE leaders yet. Add someone under Settings → ONE2ONE Leaders so they can sign in and create their own profile.</div>
       ) : (
         <div style={styles.classesGrid}>
           {leaders.map((l) => (
@@ -4791,7 +4807,7 @@ function App() {
   // land on a grid of leader cards first — see OneOnOneLeaders — and
   // drill into one leader's profile to see the members they added).
   const [openOneOnOneLeaderEmail, setOpenOneOnOneLeaderEmail] = useState(null);
-  const [addOneOnOneLeaderOpen, setAddOneOnOneLeaderOpen] = useState(false);
+  const [creatingOwnProfile, setCreatingOwnProfile] = useState(false);
   const [editingOneOnOneLeader, setEditingOneOnOneLeader] = useState(null);
 
   useEffect(() => {
@@ -4834,6 +4850,12 @@ function App() {
   const isOneLeader = oneLeaders.some((l) => l.id === currentEmail);
   const isOneOnly = isOneLeader && !isLeader;
   const canUseOneOnOne = isLeader || isOneLeader;
+  // A ONE2ONE-only leader whose one2oneLeaders doc has no name yet
+  // hasn't created their profile — they're shown a create-profile
+  // prompt in the ONE2ONE tab instead of their member tracker until
+  // they do (see the OneOnOne needsProfile prop).
+  const myOneLeaderDoc = oneLeaders.find((l) => l.id === currentEmail);
+  const needsOwnProfile = isOneOnly && !(myOneLeaderDoc && myOneLeaderDoc.name);
 
   const [membersRaw] = useCollection("members", null, authReady && !isOneOnly);
   const [classes] = useCollection("classes", "order", authReady);
@@ -5536,7 +5558,7 @@ function App() {
     if (!isValidEmail(email)) { showError("That doesn't look like a valid email address. Please enter just the email, e.g. name@example.com — don't include \"(you)\" or any extra text."); return; }
     // merge: true so this never wipes out a name/photo already set on
     // this leader's profile from the ONE2ONE tab (see
-    // addOneOnOneLeaderProfile below).
+    // updateOneOnOneLeaderProfile below).
     db.collection("one2oneLeaders").doc(normEmail(email)).set({ addedAt: new Date(), addedBy: currentEmail }, { merge: true })
       .then(() => showNotice("ONE2ONE leader added."))
       .catch((err) => showError("Could not add the ONE2ONE leader. Error: " + err.message));
@@ -5551,17 +5573,14 @@ function App() {
   };
   // A ONE2ONE leader "profile" is just the one2oneLeaders doc with an
   // optional display name/photo layered on — the doc id (email) is
-  // still what grants tab access, this only makes their card in the
-  // ONE2ONE tab look like a Class card instead of a bare email.
-  const addOneOnOneLeaderProfile = ({ email, name, photoUrl }) => {
-    if (!isValidEmail(email)) { showError("That doesn't look like a valid email address. Please enter just the email, e.g. name@example.com — don't include \"(you)\" or any extra text."); return; }
-    db.collection("one2oneLeaders").doc(normEmail(email)).set({ addedAt: new Date(), addedBy: currentEmail, name: name || null, photoUrl: photoUrl || null }, { merge: true })
-      .then(() => { setAddOneOnOneLeaderOpen(false); showNotice("ONE2ONE leader added."); })
-      .catch((err) => showError("Could not add the ONE2ONE leader. Error: " + err.message));
-  };
+  // still what grants tab access (added under Settings → ONE2ONE
+  // Leaders), this only makes their card look like a Class card
+  // instead of a bare email. Leaders create this themselves the first
+  // time they open the ONE2ONE tab (see the needsProfile prompt) or a
+  // Leader/Manager can fill it in for them via the edit (✎) button.
   const updateOneOnOneLeaderProfile = (email, { name, photoUrl }) => {
     db.collection("one2oneLeaders").doc(email).set({ name: name || null, photoUrl: photoUrl || null }, { merge: true })
-      .then(() => { setEditingOneOnOneLeader(null); showNotice("Saved."); })
+      .then(() => { setEditingOneOnOneLeader(null); setCreatingOwnProfile(false); showNotice("Saved."); })
       .catch((err) => showError("Could not save the changes. Error: " + err.message));
   };
   const addAdmin = (email) => {
@@ -5812,6 +5831,8 @@ function App() {
             onEdit={setEditingOneOnOne}
             onDelete={deleteOneOnOnePerson}
             showAll={false}
+            needsProfile={needsOwnProfile}
+            onCreateProfile={() => setCreatingOwnProfile(true)}
           />
         )}
 
@@ -5819,7 +5840,6 @@ function App() {
           <OneOnOneLeaders
             leaders={oneOnOneLeaderProfiles}
             onOpenLeader={setOpenOneOnOneLeaderEmail}
-            onAddLeader={() => setAddOneOnOneLeaderOpen(true)}
             onEditLeader={setEditingOneOnOneLeader}
             onRemoveLeader={removeOneLeader}
           />
@@ -5916,13 +5936,13 @@ function App() {
           onSave={(data) => updateOneOnOnePerson(editingOneOnOne.id, data)}
         />
       )}
-      {addOneOnOneLeaderOpen && (
+      {creatingOwnProfile && (
         <OneOnOneLeaderFormModal
-          title="Add ONE2ONE Leader"
-          isNew
-          submitLabel="Add"
-          onClose={() => setAddOneOnOneLeaderOpen(false)}
-          onSave={addOneOnOneLeaderProfile}
+          title="Create Your ONE2ONE Profile"
+          initialEmail={currentEmail}
+          submitLabel="Create Profile"
+          onClose={() => setCreatingOwnProfile(false)}
+          onSave={(data) => updateOneOnOneLeaderProfile(currentEmail, data)}
         />
       )}
       {editingOneOnOneLeader && (
