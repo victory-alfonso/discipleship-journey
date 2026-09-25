@@ -708,8 +708,12 @@ function LogoSparkHost() {
       // walk + getComputedStyle on every single tap (only the actual
       // spark creation was debounced), which could hammer the main
       // thread hard enough to freeze the app on fast repeated taps.
+      // Kept short on purpose: low enough that quick, repeated taps
+      // each still pop out their own icon right away, but non-zero so
+      // a genuine rapid-fire mash (or multi-touch) can't flood the
+      // main thread with ancestor walks.
       const now = Date.now();
-      if (now - lastSparkAtRef.current < 350) return;
+      if (now - lastSparkAtRef.current < 60) return;
       // Skip while any modal/dialog is open so it never fights with that UI.
       if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
       if (djIsTouchableTarget(e.target)) return;
