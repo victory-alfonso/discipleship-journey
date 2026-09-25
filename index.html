@@ -562,10 +562,11 @@ function djGetAudioCtx() {
   return djAudioCtx;
 }
 
-// A rising, buzzing "charge-up" hum that plays under the icon's
-// vibration build-up — a sawtooth tone sweeping upward with a
+// A rising, gentle "charge-up" hum that plays under the icon's
+// vibration build-up — a soft tone sweeping upward with a light
 // tremolo (amplitude wobble) that itself speeds up over time, so it
-// feels like it's building toward the explosion.
+// feels like it's building toward the explosion, without being loud
+// or harsh.
 function djPlayChargeUp(durationSec) {
   try {
     const ctx = djGetAudioCtx();
@@ -575,16 +576,16 @@ function djPlayChargeUp(durationSec) {
     const gain = ctx.createGain();
     const lfo = ctx.createOscillator();
     const lfoGain = ctx.createGain();
-    osc.type = "sawtooth";
+    osc.type = "triangle";
     osc.frequency.setValueAtTime(80, now);
     osc.frequency.exponentialRampToValueAtTime(260, now + durationSec);
     lfo.type = "sine";
     lfo.frequency.setValueAtTime(6, now);
     lfo.frequency.exponentialRampToValueAtTime(30, now + durationSec); // buzz speeds up
-    lfoGain.gain.setValueAtTime(0.05, now); // modulation depth on the main gain
+    lfoGain.gain.setValueAtTime(0.02, now); // modulation depth on the main gain
     gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.11, now + durationSec * 0.7);
-    gain.gain.exponentialRampToValueAtTime(0.06, now + durationSec);
+    gain.gain.exponentialRampToValueAtTime(0.04, now + durationSec * 0.7);
+    gain.gain.exponentialRampToValueAtTime(0.02, now + durationSec);
     lfo.connect(lfoGain);
     lfoGain.connect(gain.gain); // tremolo: LFO modulates the envelope directly
     osc.connect(gain);
@@ -620,7 +621,7 @@ function djPlayExplosion() {
     noiseFilter.frequency.value = 1200;
     noiseFilter.Q.value = 0.6;
     const noiseGain = ctx.createGain();
-    noiseGain.gain.setValueAtTime(0.5, now);
+    noiseGain.gain.setValueAtTime(0.2, now);
     noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
     noise.connect(noiseFilter);
     noiseFilter.connect(noiseGain);
@@ -632,7 +633,7 @@ function djPlayExplosion() {
     thump.frequency.setValueAtTime(160, now);
     thump.frequency.exponentialRampToValueAtTime(45, now + 0.18);
     thumpGain.gain.setValueAtTime(0.0001, now);
-    thumpGain.gain.exponentialRampToValueAtTime(0.6, now + 0.012);
+    thumpGain.gain.exponentialRampToValueAtTime(0.25, now + 0.012);
     thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
     thump.connect(thumpGain);
     thumpGain.connect(ctx.destination);
@@ -643,7 +644,7 @@ function djPlayExplosion() {
     blip.frequency.setValueAtTime(1500, now);
     blip.frequency.exponentialRampToValueAtTime(300, now + 0.09);
     blipGain.gain.setValueAtTime(0.0001, now);
-    blipGain.gain.exponentialRampToValueAtTime(0.25, now + 0.006);
+    blipGain.gain.exponentialRampToValueAtTime(0.1, now + 0.006);
     blipGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
     blip.connect(blipGain);
     blipGain.connect(ctx.destination);
