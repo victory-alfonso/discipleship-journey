@@ -290,6 +290,12 @@
     .dj-classdetail-body { flex-direction: column !important; overflow-y: auto !important; }
     .dj-classdetail-left { width: 100% !important; overflow-y: visible !important; flex-shrink: 1 !important; }
     .dj-classdetail-right { border-left: none !important; border-top: 1px solid rgba(255,255,255,0.12) !important; overflow-y: visible !important; }
+    /* ONE2ONE leader's own profile card: same idea — the wide
+       cover/profile-left + content-right layout stacks into one
+       column on a phone screen. */
+    .dj-oneown-body { flex-direction: column !important; }
+    .dj-oneown-left { width: 100% !important; }
+    .dj-oneown-right { border-left: none !important; border-top: 1px solid rgba(31,56,100,0.12) !important; }
 
     /* Header: tighten up title + let the sign-out row keep its own
        line without crowding the title (headerUser is already
@@ -5497,8 +5503,8 @@ function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpe
   }, [people, sessions, attendanceByMember]);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="stack-mobile" style={styles.toolbar}>
-        <div style={{ flex: 1, fontSize: 13, color: "#7A6E4E", alignSelf: "center" }}>
+      <div className="stack-mobile" style={{ ...styles.toolbar, justifyContent: "flex-start", alignItems: "center" }}>
+        <div style={{ flex: "1 1 100%", fontSize: 13, color: "#7A6E4E", alignSelf: "center" }}>
           {showAll ? "All ONE2ONE members from every ONE2ONE leader." : "Your own ONE2ONE tracker — only people you've added show up here."}
         </div>
         {leaderEmail && <CopyOneOnOneRegistrationLinkButton leaderEmail={leaderEmail} />}
@@ -5761,12 +5767,18 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
     // sticky header. Rendering it as a plain card right below the
     // header/nav, in normal document flow, means the header can never
     // physically overlap it, whatever height the banner ends up being.
+    // Wide two-column layout (cover/photo on the left, everything else
+    // on the right) instead of one narrow stacked column — the old
+    // 440px-wide single column squeezed the toolbar buttons so much
+    // they wrapped into oversized full-width tiles.
     <div
+      className="dj-oneown-body"
       style={{
         position: "relative",
         width: "100%",
-        maxWidth: 440,
+        maxWidth: 820,
         margin: "0 auto",
+        display: "flex",
         background: "rgba(255,255,255,0.85)",
         backdropFilter: "blur(22px) saturate(180%)",
         WebkitBackdropFilter: "blur(22px) saturate(180%)",
@@ -5777,39 +5789,42 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
         animation: "popIn 0.18s ease-out",
       }}
     >
-      {/* Cover banner — shows the ONE2ONE class's own logo/cover
-          photo (from the Classes tab) when one has been set; falls
-          back to the plain ONE2ONE wordmark, Facebook-style, when
-          it hasn't. The leader's own photo no longer sits here; it
-          shows as a circular profile picture overlapping the
-          bottom of this banner instead. */}
-      <div style={{ position: "relative", width: "100%", height: 92, background: "linear-gradient(135deg, #355896 0%, #1F3864 100%)" }}>
-        {coverPhotoUrl ? (
-          <img src={coverPhotoUrl} alt="ONE2ONE" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
-        ) : (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700, letterSpacing: 3, color: "rgba(255,255,255,0.45)" }}>
-            ONE2ONE
-          </div>
-        )}
-      </div>
-      {/* Profile picture + name — overlaps the banner above it,
-          Facebook-profile style, then sits above the content below. */}
-      <div style={{ position: "relative", padding: "0 16px", marginTop: -46 }}>
-        <div style={{ position: "relative", width: 84, height: 84 }}>
-          <div style={{ width: 84, height: 84, borderRadius: "50%", background: "#fff", padding: 3, boxSizing: "border-box", boxShadow: "0 4px 14px rgba(20,18,14,0.3)" }}>
-            <Avatar name={displayName} photoUrl={leader.photoUrl} size={78} />
-          </div>
-          <button type="button" onClick={onEditProfile} style={{ position: "absolute", bottom: 0, right: 0, background: "#1F3864", border: "2px solid #fff", borderRadius: "50%", width: 26, height: 26, color: "#F5F2E4", fontSize: 12, cursor: "pointer", lineHeight: 1 }} aria-label="Edit" title="Edit name / photo">✎</button>
+      <div className="dj-oneown-left" style={{ width: 260, flexShrink: 0 }}>
+        {/* Cover banner — shows the ONE2ONE class's own logo/cover
+            photo (from the Classes tab) when one has been set; falls
+            back to the plain ONE2ONE wordmark, Facebook-style, when
+            it hasn't. The leader's own photo no longer sits here; it
+            shows as a circular profile picture overlapping the
+            bottom of this banner instead. */}
+        <div style={{ position: "relative", width: "100%", height: 92, background: "linear-gradient(135deg, #355896 0%, #1F3864 100%)" }}>
+          {coverPhotoUrl ? (
+            <img src={coverPhotoUrl} alt="ONE2ONE" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
+          ) : (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700, letterSpacing: 3, color: "rgba(255,255,255,0.45)" }}>
+              ONE2ONE
+            </div>
+          )}
         </div>
-        <div style={{ marginTop: 8, paddingBottom: 4 }}>
-          <div style={{ fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 700, color: "#23211D" }}>{displayName}</div>
-          <div style={{ fontSize: 11.5, color: "#7A6E4E", marginTop: 2 }}>{people.length} member{people.length === 1 ? "" : "s"} added</div>
+        {/* Profile picture + name — overlaps the banner above it,
+            Facebook-profile style, then sits above the content below. */}
+        <div style={{ position: "relative", padding: "0 16px 16px", marginTop: -46 }}>
+          <div style={{ position: "relative", width: 84, height: 84 }}>
+            <div style={{ width: 84, height: 84, borderRadius: "50%", background: "#fff", padding: 3, boxSizing: "border-box", boxShadow: "0 4px 14px rgba(20,18,14,0.3)" }}>
+              <Avatar name={displayName} photoUrl={leader.photoUrl} size={78} />
+            </div>
+            <button type="button" onClick={onEditProfile} style={{ position: "absolute", bottom: 0, right: 0, background: "#1F3864", border: "2px solid #fff", borderRadius: "50%", width: 26, height: 26, color: "#F5F2E4", fontSize: 12, cursor: "pointer", lineHeight: 1 }} aria-label="Edit" title="Edit name / photo">✎</button>
+          </div>
+          <div style={{ marginTop: 8, paddingBottom: 4 }}>
+            <div style={{ fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 700, color: "#23211D" }}>{displayName}</div>
+            <div style={{ fontSize: 11.5, color: "#7A6E4E", marginTop: 2 }}>{people.length} member{people.length === 1 ? "" : "s"} added</div>
+          </div>
         </div>
       </div>
       {/* Everything else — toolbar, summary badges, and the full
-          member grid — now just normal content below the header/pic,
-          scrolling with the page instead of in its own inner scroll box. */}
-      <div style={{ padding: "12px 14px 14px" }}>
+          member grid — now just normal content in its own column,
+          with room to lay the toolbar buttons out in a single
+          compact row instead of stacking into big tiles. */}
+      <div className="dj-oneown-right" style={{ flex: 1, minWidth: 0, padding: "16px 18px 18px", borderLeft: "1px solid rgba(31,56,100,0.12)" }}>
         <OneOnOne
           people={people}
           sessions={sessions}
