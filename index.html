@@ -731,6 +731,25 @@ function openBatchesForClass(classItem, topics) {
   const open = all.filter((b) => !isBatchComplete(classItem, topics || [], b));
   return open.length ? open : all;
 }
+// The batch to surface on the Classes tab card: the newest batch
+// that isn't finished yet (i.e. the one currently being run). Falls
+// back to the newest batch overall once every batch is complete, so
+// a fully-finished class still shows its last batch instead of
+// nothing.
+function latestOngoingBatch(classItem, topics) {
+  const batches = getBatchesForClass(classItem, topics);
+  for (let i = batches.length - 1; i >= 0; i--) {
+    if (!isBatchComplete(classItem, topics, batches[i])) return batches[i];
+  }
+  return batches[batches.length - 1];
+}
+// The next not-yet-conducted session in a batch, in display order —
+// i.e. the session that comes right after whichever one was last
+// marked conducted.
+function nextSessionForBatch(classItem, topics, batch) {
+  const ts = sortTopicsForDisplay(topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === batch));
+  return ts.find((t) => !t.conducted) || null;
+}
 
 // Natural sort so "Session 2" lands before "Session 10" — topic
 // order from the data source isn't always numeric-safe.
@@ -3123,10 +3142,18 @@ const PHOTO_BADGE = {
 function ClassRow({ classItem, topics, members, attendanceByMember, isLeader, onOpen, onDeleteClass, onEditClass, reorderMode, position, isFirst, isLast, onMove }) {
   const ts = topicsForClass(topics, classItem.name);
   const classMembers = getClassMembers(members, classItem.id);
-  const pct = classAttendanceRate(classItem.name, topics, classMembers, attendanceByMember);
-  const badge = pct >= 100 ? PHOTO_BADGE.done : pct > 0 ? PHOTO_BADGE.progress : PHOTO_BADGE.none;
-  const completedCount = classMembers.filter((m) => ((m.classStatus && m.classStatus[classItem.id]) || "Enrolled") === "Completed").length;
-  const inProgressCount = classMembers.filter((m) => ((m.classStatus && m.classStatus[classItem.id]) || "Enrolled") === "In-Progress").length;
+  const activeBatch = latestOngoingBatch(classItem, topics);
+  const batchTs = sortTopicsForDisplay(ts.filter((t) => topicBatch(t) === activeBatch));
+  const batchDone = batchTs.filter((t) => t.conducted).length;
+  const batchComplete = batchTs.length > 0 && batchDone === batchTs.length;
+  const badge = batchComplete ? PHOTO_BADGE.done : batchDone > 0 ? PHOTO_BADGE.progress : PHOTO_BADGE.none;
+  const batchPct = batchTs.length ? Math.round((batchDone / batchTs.length) * 100) : 0;
+  // Only classes matching a Discipleship Track carry a per-member batch
+  // label — for those, count just the members in this batch; a custom
+  // class (no matching track) isn't split by batch, so count everyone.
+  const track = trackNameForClass(classItem.name);
+  const batchMembers = track ? classMembers.filter((m) => ((m.trackBatch && m.trackBatch[track]) || "Batch 1") === activeBatch) : classMembers;
+  const nextSession = nextSessionForBatch(classItem, topics, activeBatch);
   return (
     <div
       className="dj-class-photo-card"
@@ -3136,7 +3163,7 @@ function ClassRow({ classItem, topics, members, attendanceByMember, isLeader, on
       <ClassCoverImage classItem={classItem} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.35) 0%, rgba(20,18,14,0) 32%, rgba(20,18,14,0.88) 100%)" }} />
       <div style={{ position: "absolute", top: 10, left: 10, right: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
-        <span style={{ ...styles.statusBadge, background: badge.background, color: badge.color, border: "none" }}>{pct >= 100 ? "✓ " : ""}{badge.label}</span>
+        <span style={{ ...styles.statusBadge, background: badge.background, color: badge.color, border: "none" }}>{batchComplete ? "✓ " : ""}{activeBatch}</span>
         {reorderMode ? (
           <span style={{ ...styles.statusBadge, background: "rgba(20,18,14,0.65)", color: "#F5F2E4", border: "none", fontSize: 12 }}>#{position}</span>
         ) : isLeader && (
@@ -3170,10 +3197,10 @@ function ClassRow({ classItem, topics, members, attendanceByMember, isLeader, on
       <div style={{ position: "absolute", left: 12, right: 12, bottom: 12 }}>
         <div style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.2 }}>{classItem.name}</div>
         <div style={{ height: 4, borderRadius: 20, background: "rgba(255,255,255,0.25)", marginTop: 9, overflow: "hidden" }}>
-          <div style={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: "100%", background: "#E5A430" }} />
+          <div style={{ width: `${Math.max(0, Math.min(100, batchPct))}%`, height: "100%", background: "#E5A430" }} />
         </div>
-        <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 4 }}>{pct}% overall attendance</div>
-        <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 2 }}>{completedCount} completed · {inProgressCount} in progress</div>
+        <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 4 }}>{activeBatch} · {batchMembers.length} member{batchMembers.length === 1 ? "" : "s"}</div>
+        <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 2 }}>{nextSession ? `Next: ${nextSession.name}` : (batchTs.length ? "All sessions conducted" : "No sessions yet")}</div>
       </div>
     </div>
   );
