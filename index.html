@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<meta name="description" content="Track Disciples Journey class attendance and topics covered for each member at Victory Church." />
+<meta name="description" content="Track Discipleship Journey class attendance and topics covered for each member at Victory Church." />
 <meta name="theme-color" content="#F5F2E4" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Disciples Journey" />
-<title>Disciples Journey</title>
+<meta name="apple-mobile-web-app-title" content="Discipleship Journey" />
+<title>Discipleship Journey</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800;900&display=swap" rel="stylesheet" />
@@ -2784,8 +2784,8 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
   const [categoryFilter, setCategoryFilter] = useState("");
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
-  const [trackChips, setTrackChips] = useState([]); // multi-select na array ng DISCIPLESHIP_TRACKS
-  const [batchChip, setBatchChip] = useState("");      // batch label, kapag iisa lang ang napiling track
+  const [trackChips, setTrackChips] = useState([]); // multi-select array of DISCIPLESHIP_TRACKS
+  const [batchChip, setBatchChip] = useState("");      // batch label, only used when exactly one track is selected
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
   const [csvBusy, setCsvBusy] = useState(false);
@@ -2824,9 +2824,9 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
     setBatchChip("");
   };
 
-  // Distinct batch labels currently in use, pero saklaw lang kapag
-  // iisa ang napiling track (para hindi magulo kung alin ang batch
-  // list na ipapakita kapag maraming track ang naka-select).
+  // Distinct batch labels currently in use, but scoped only to when
+  // exactly one track is selected (to avoid confusion about which
+  // batch list to show when multiple tracks are selected).
   const singleTrackChip = trackChips.length === 1 ? trackChips[0] : null;
   const batchOptionsForTrackChip = singleTrackChip
     ? Array.from(new Set(members.map((m) => (m.trackBatch && m.trackBatch[singleTrackChip]) || "").filter(Boolean)))
@@ -5063,9 +5063,9 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {isLeader && classes.length === 0 && (
         <div style={styles.settingsSection}>
-          <div style={styles.sectionLabel}>Disciples Journey</div>
+          <div style={styles.sectionLabel}>Discipleship Journey</div>
           <div style={styles.pairNote}>Set up the standard track in one click: Spiritual Foundations (1–10 sessions), Making Disciples Class (1–2 sessions), Empowering Leaders Class (1 session).</div>
-          <button style={styles.smallBtn} onClick={onSeedDefaults}>Load Disciples Journey Classes</button>
+          <button style={styles.smallBtn} onClick={onSeedDefaults}>Load Discipleship Journey Classes</button>
         </div>
       )}
 
@@ -6841,7 +6841,7 @@ function App() {
         }
       }
     } catch (err) {
-      showError("Could not load the Disciples Journey classes. Error: " + err.message);
+      showError("Could not load the Discipleship Journey classes. Error: " + err.message);
     }
   };
   const addLeader = (email) => {
@@ -7023,7 +7023,7 @@ function App() {
             <img src={VICTORY_LOGO_DATA_URI} alt="Victory Alfonso" className="dj-header-logo" style={styles.headerLogo} />
             <div>
               <div className="dj-header-line1" style={styles.headerTitleLine1}>Victory Alfonso</div>
-              <div className="dj-header-line2" style={styles.headerTitleLine2}>Disciples Journey</div>
+              <div className="dj-header-line2" style={styles.headerTitleLine2}>Discipleship Journey</div>
             </div>
           </div>
           <div style={styles.headerRight}>
