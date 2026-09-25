@@ -4524,6 +4524,32 @@ function CopyRegistrationLinkButton({ classId, batch }) {
   );
 }
 
+// Same idea as registrationLinkForClass/CopyRegistrationLinkButton, but
+// for a specific ONE2ONE leader — the link is keyed to that leader's
+// email (not a classId), so register.html knows whose ONE2ONE tracker
+// a self-registration should land under (see the "one2one" query param
+// handling in register.html, and the matching Firestore rule that only
+// lets this succeed for an email that already has a one2oneLeaders doc).
+function registrationLinkForOneOnOne(leaderEmail) {
+  const base = window.location.href.replace(/[^/]*$/, "");
+  return `${base}register.html?one2one=${encodeURIComponent(leaderEmail)}`;
+}
+
+function CopyOneOnOneRegistrationLinkButton({ leaderEmail }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    const link = registrationLinkForOneOnOne(leaderEmail);
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch (err) {
+      window.prompt("Copy this registration link:", link);
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return <button style={styles.ghostBtn} onClick={copy}>{copied ? "Copied!" : "Copy Registration Link"}</button>;
+}
+
 function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onReorderTopics }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
@@ -5168,7 +5194,7 @@ function OneOnOneCard({ person, sessions, attendanceByMember, showAdder, onOpen,
   );
 }
 
-function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onViewProfile, onToggleSession }) {
+function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onViewProfile, onToggleSession, leaderEmail }) {
   const [scanOpen, setScanOpen] = useState(false);
   // A ONE2ONE-only leader who hasn't set up their own profile yet (no
   // name/photo on their one2oneLeaders doc) sees a create-profile prompt
@@ -5209,6 +5235,7 @@ function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpe
           {showAll ? "All ONE2ONE members from every ONE2ONE leader." : "Your own ONE2ONE tracker — only people you've added show up here."}
         </div>
         {onViewProfile && <button style={styles.ghostBtn} onClick={onViewProfile}>My Profile</button>}
+        {leaderEmail && <CopyOneOnOneRegistrationLinkButton leaderEmail={leaderEmail} />}
         {!showAll && sessions.length > 0 && <button style={styles.ghostBtn} onClick={() => setScanOpen(true)}>Scan Attendance</button>}
         <button style={styles.primaryBtn} onClick={onAdd}>+ Add Member</button>
       </div>
@@ -5339,6 +5366,10 @@ function OneOnOneLeaderProfile({ leader, people, sessions, attendanceByMember, h
       <div className="stack-mobile" style={styles.toolbar}>
         <button style={styles.ghostBtn} onClick={onBack}>← Back to leaders</button>
         <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: "#23211D", alignSelf: "center" }}>{displayName}</div>
+        {/* A "virtual" card (see oneOnOneLeaderProfiles) has no real
+            one2oneLeaders doc, so a registration link for it would fail
+            the Firestore rule that requires that doc to exist. */}
+        {!leader.virtual && <CopyOneOnOneRegistrationLinkButton leaderEmail={leader.id} />}
         {sessions.length > 0 && <button style={styles.ghostBtn} onClick={() => setScanOpen(true)}>Scan Attendance</button>}
         <button style={styles.primaryBtn} onClick={onAdd}>+ Add Member</button>
       </div>
@@ -5417,7 +5448,7 @@ function OneOnOneLeaderFormModal({ title, initialEmail, initialName, initialPhot
 // OneOnOneOwnProfileModal instead, opened on demand via the "My
 // Profile" button (OneOnOne's onViewProfile) — so the grid and Add
 // Member button show up immediately.
-function OneOnOneOwnProfile({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onViewProfile, onToggleSession }) {
+function OneOnOneOwnProfile({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onViewProfile, onToggleSession, leaderEmail }) {
   return (
     <OneOnOne
       people={people}
@@ -5431,6 +5462,7 @@ function OneOnOneOwnProfile({ people, sessions, attendanceByMember, hasClass, on
       showAll={false}
       onViewProfile={onViewProfile}
       onToggleSession={onToggleSession}
+      leaderEmail={leaderEmail}
     />
   );
 }
@@ -5712,7 +5744,7 @@ function PendingOneOnOneRow({ person, sessions, attendanceByMember, members, onA
         <div>
           <div style={{ fontWeight: 700, color: "#23211D" }}>{person.name}</div>
           <div style={styles.rosterMeta}>
-            Added to ONE2ONE by <strong>{person.createdBy || "unknown"}</strong>
+            {person.selfRegistered ? "Self-registered under" : "Added to ONE2ONE by"} <strong>{person.createdBy || "unknown"}</strong>
             {sessions.length > 0 ? ` · ${done} of ${sessions.length} session${sessions.length === 1 ? "" : "s"} done` : ""}
             {person.createdAt ? ` · Added ${fmtDateTime(person.createdAt)}` : ""}
           </div>
@@ -6968,6 +7000,7 @@ function App() {
             onDelete={deleteOneOnOnePerson}
             onViewProfile={() => setViewingOwnProfile(true)}
             onToggleSession={toggleOneOnOneSession}
+            leaderEmail={currentEmail}
           />
         )}
 
