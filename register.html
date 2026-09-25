@@ -513,8 +513,8 @@ function renderOneOnOneForm(leaderEmail, leaderName, errorMessage) {
         </div>
         <div class="row2">
           <label class="field">
-            <span>Membership</span>
-            <input class="fixedField" value="ONE2ONE Leader" disabled />
+            <span>ONE2ONE Leader</span>
+            <input class="fixedField" value="${esc(leaderName || leaderEmail)}" disabled />
           </label>
           <label class="field">
             <span>Life stage *</span>
