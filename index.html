@@ -869,6 +869,188 @@ const MEMBER_CATEGORIES = ["Water Baptize", "Transfer"];
 // to "Not Enrolled" until a leader sets it.
 const DISCIPLESHIP_TRACKS = ["One2One", "Spiritual Foundations", "Making Disciples", "Empowering Leaders", "Leadership 113"];
 const TRACK_STATUSES = ["Not Enrolled", "Enrolled", "In-Progress", "Incomplete", "Completed", "Cancelled"];
+
+// ============================================================
+// MEMBERS CSV IMPORT / EXPORT — plain client-side CSV (no server
+// component). Export writes one row per member with their core
+// fields plus one status column per discipleship track. Import
+// reads the same shape back and *syncs*: a row is matched to an
+// existing member first by the "ID" column (the Firestore doc id,
+// present on every export), falling back to an exact, case-
+// insensitive name match when no id is given or the id isn't
+// found — otherwise a brand-new member is created. This lets
+// someone export, edit in a spreadsheet, and re-import to update
+// everyone in bulk instead of re-adding people as duplicates.
+// ============================================================
+const MEMBER_CSV_TRACK_HEADERS = DISCIPLESHIP_TRACKS.map((t) => `${t} Status`);
+const MEMBER_CSV_HEADERS = ["ID", "Name", "Birthdate", "Gender", "Life Stage", "Membership", "Contact Number", "Address", "Notes", ...MEMBER_CSV_TRACK_HEADERS];
+
+function csvEscapeCell(value) {
+  const s = value === null || value === undefined ? "" : String(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// Minimal RFC-4180-ish CSV parser: handles quoted fields (with escaped
+// "" quotes inside), commas/newlines inside quotes, and \r\n or \n
+// line endings. Good enough for a spreadsheet export/re-import
+// round-trip without pulling in a library.
+function parseCsvText(text) {
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  const src = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (inQuotes) {
+      if (c === '"') { if (src[i + 1] === '"') { field += '"'; i++; } else inQuotes = false; }
+      else field += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ",") { row.push(field); field = ""; }
+    else if (c === "\n") { row.push(field); rows.push(row); row = []; field = ""; }
+    else field += c;
+  }
+  if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
+  return rows.filter((r) => !(r.length === 1 && r[0].trim() === ""));
+}
+
+function buildMembersCsvText(members) {
+  const lines = [MEMBER_CSV_HEADERS.map(csvEscapeCell).join(",")];
+  (members || []).forEach((m) => {
+    const row = [
+      m.id, m.name || "", m.birthdate || "", m.gender || "", m.lifeStage || "", m.category || "",
+      m.contactNumber || "", m.address || "", m.notes || "",
+      ...DISCIPLESHIP_TRACKS.map((t) => (m.trackStatus && m.trackStatus[t]) || "Not Enrolled"),
+    ];
+    lines.push(row.map(csvEscapeCell).join(","));
+  });
+  return lines.join("\r\n");
+}
+
+function downloadTextFile(filename, text, mime) {
+  const blob = new Blob([text], { type: (mime || "text/csv") + ";charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Parses the raw CSV text into plain row objects. Only the track
+// columns actually present in the file are included in trackStatus —
+// that's what lets a re-import touch just the columns someone edited
+// without silently resetting every other track to "Not Enrolled".
+function parseMembersCsvRows(text) {
+  const rows = parseCsvText(text);
+  if (rows.length === 0) return [];
+  const header = rows[0].map((h) => h.trim());
+  const idx = {};
+  header.forEach((h, i) => { if (!(h in idx)) idx[h] = i; });
+  const trackIdx = {};
+  DISCIPLESHIP_TRACKS.forEach((t) => {
+    const col = `${t} Status`;
+    if (idx[col] !== undefined) trackIdx[t] = idx[col];
+  });
+  const out = [];
+  for (let r = 1; r < rows.length; r++) {
+    const cells = rows[r];
+    if (cells.every((c) => !c || !c.trim())) continue;
+    const get = (col) => (idx[col] !== undefined ? (cells[idx[col]] || "").trim() : "");
+    const trackStatus = {};
+    Object.keys(trackIdx).forEach((t) => {
+      const v = (cells[trackIdx[t]] || "").trim();
+      if (v) trackStatus[t] = TRACK_STATUSES.includes(v) ? v : "Not Enrolled";
+    });
+    out.push({
+      id: get("ID"), name: get("Name"), birthdate: get("Birthdate"), gender: get("Gender"),
+      lifeStage: get("Life Stage"), category: get("Membership"), contactNumber: get("Contact Number"),
+      address: get("Address"), notes: get("Notes"), trackStatus,
+    });
+  }
+  return out;
+}
+
+// Runs the actual sync against Firestore: match-by-id, then
+// match-by-name, then create new. Batched (chunked well under
+// Firestore's 500-op limit) so a big spreadsheet doesn't need one
+// write per row on the UI thread. Returns a summary for the toast.
+async function importMembersCsv(parsedRows, existingMembers, classes) {
+  const byId = new Map(existingMembers.map((m) => [m.id, m]));
+  const byName = new Map();
+  existingMembers.forEach((m) => {
+    const key = (m.name || "").trim().toLowerCase();
+    if (!key) return;
+    if (!byName.has(key)) byName.set(key, []);
+    byName.get(key).push(m);
+  });
+
+  let created = 0, updated = 0, skipped = 0;
+  const resolvedMembers = new Set(); // existing member ids already touched this run
+  const resolvedNewNames = new Set(); // "name key"s already created this run
+  let batch = db.batch();
+  let opsInBatch = 0;
+  const flushIfNeeded = async () => {
+    if (opsInBatch >= 400) {
+      await batch.commit();
+      batch = db.batch();
+      opsInBatch = 0;
+    }
+  };
+
+  for (const row of parsedRows) {
+    if (!row.name) { skipped++; continue; }
+    const key = row.name.toLowerCase();
+    let target = row.id ? byId.get(row.id) : null;
+    if (!target) {
+      const matches = byName.get(key) || [];
+      if (matches.length === 1) target = matches[0];
+      else if (matches.length > 1) { skipped++; continue; } // ambiguous name, needs the ID column
+    }
+
+    if (target) {
+      if (resolvedMembers.has(target.id)) { skipped++; continue; } // duplicate row for same person
+      resolvedMembers.add(target.id);
+      const nextTrackStatus = { ...(target.trackStatus || {}), ...row.trackStatus };
+      const nextClassStatus = deriveClassStatusFromTracks(classes, row.trackStatus, target.classStatus);
+      const nextClassIds = Array.from(new Set([
+        ...(target.classIds || []),
+        ...Object.keys(nextClassStatus).filter((id) => nextClassStatus[id] && nextClassStatus[id] !== "Not Enrolled"),
+      ]));
+      batch.update(db.collection("members").doc(target.id), {
+        name: row.name,
+        birthdate: row.birthdate || target.birthdate || "",
+        gender: row.gender || target.gender || "",
+        lifeStage: row.lifeStage || target.lifeStage || "",
+        category: row.category || target.category || "",
+        contactNumber: row.contactNumber || target.contactNumber || "",
+        address: row.address || target.address || "",
+        notes: row.notes || target.notes || "",
+        trackStatus: nextTrackStatus,
+        classStatus: nextClassStatus,
+        classIds: nextClassIds,
+      });
+      updated++;
+    } else {
+      if (resolvedNewNames.has(key)) { skipped++; continue; } // duplicate new name within this file
+      resolvedNewNames.add(key);
+      const classStatus = deriveClassStatusFromTracks(classes, row.trackStatus, null);
+      const classIds = Object.keys(classStatus).filter((id) => classStatus[id] && classStatus[id] !== "Not Enrolled");
+      batch.set(db.collection("members").doc(), {
+        name: row.name, photoUrl: null,
+        birthdate: row.birthdate || "", gender: row.gender || "", lifeStage: row.lifeStage || "",
+        category: row.category || "", contactNumber: row.contactNumber || "", address: row.address || "",
+        notes: row.notes || "", classIds, classStatus, trackStatus: row.trackStatus, trackBatch: {},
+        dateAdded: new Date(), source: "csv-import",
+      });
+      created++;
+    }
+    opsInBatch++;
+    await flushIfNeeded();
+  }
+  if (opsInBatch > 0) await batch.commit();
+  return { created, updated, skipped };
+}
 // Compact per-track status cell for the disciples list table. The
 // default "Not Enrolled" state (the vast majority of cells) renders
 // as a small muted dot instead of a full text pill, which is what
@@ -2214,6 +2396,36 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
   const [batchChip, setBatchChip] = useState("");      // batch label, kapag iisa lang ang napiling track
   const [sortCol, setSortCol] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
+  const [csvBusy, setCsvBusy] = useState(false);
+  const csvFileInputRef = useRef(null);
+
+  const exportCsv = () => {
+    const text = buildMembersCsvText(members);
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadTextFile(`disciples-${stamp}.csv`, text);
+  };
+  const triggerImportCsv = () => { if (csvFileInputRef.current) csvFileInputRef.current.value = ""; csvFileInputRef.current && csvFileInputRef.current.click(); };
+  const handleCsvFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsedRows = parseMembersCsvRows(text);
+      if (parsedRows.length === 0) { showError("That file doesn't look like a Disciples CSV — no data rows found."); return; }
+      if (!(await askConfirm({
+        title: "Import CSV?",
+        message: `This will sync ${parsedRows.length} row${parsedRows.length === 1 ? "" : "s"}: rows whose ID (or exact name) matches an existing Disciple update them, everything else is added as new. Continue?`,
+        confirmLabel: "Import",
+      }))) return;
+      setCsvBusy(true);
+      const { created, updated, skipped } = await importMembersCsv(parsedRows, members, classes);
+      showNotice(`Imported: ${created} added, ${updated} updated${skipped ? `, ${skipped} skipped` : ""}.`);
+    } catch (err) {
+      showError("Could not import that CSV. Error: " + err.message);
+    } finally {
+      setCsvBusy(false);
+    }
+  };
 
   const toggleTrackChip = (t) => {
     setTrackChips((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
@@ -2289,8 +2501,15 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       <div style={{ background: "rgba(255,255,255,0.5)", backdropFilter: "blur(18px) saturate(160%)", WebkitBackdropFilter: "blur(18px) saturate(160%)", border: "1px solid rgba(31,56,100,0.12)", borderRadius: 16, padding: "14px 14px 10px", marginBottom: 16, boxShadow: "0 10px 30px -18px rgba(35,33,29,0.2)" }}>
       <div className="stack-mobile" style={{ ...styles.toolbar, marginBottom: 12 }}>
         <input style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} placeholder="Search name, contact number, or address…" value={query} onChange={(e) => setQuery(e.target.value)} />
-        <div style={{ display: "flex", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {isLeader && members.length > 0 && <button style={{ ...styles.ghostBtn, flex: 1 }} onClick={() => setPrintAllOpen(true)}>Print QR IDs</button>}
+          {isLeader && members.length > 0 && <button style={{ ...styles.ghostBtn, flex: 1 }} onClick={exportCsv}>Export CSV</button>}
+          {isLeader && (
+            <>
+              <input ref={csvFileInputRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={handleCsvFile} />
+              <button style={{ ...styles.ghostBtn, flex: 1 }} onClick={triggerImportCsv} disabled={csvBusy}>{csvBusy ? "Importing…" : "Import CSV"}</button>
+            </>
+          )}
           {isLeader && <button style={{ ...styles.primaryBtn, flex: 1 }} onClick={onAdd}>+ Add Member</button>}
         </div>
       </div>
