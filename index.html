@@ -6025,7 +6025,8 @@ function App() {
       .then(() => showNotice("ONE2ONE leader added."))
       .catch((err) => showError("Could not add the ONE2ONE leader. Error: " + err.message));
   };
-  const removeOneLeader = (email) => {
+  const removeOneLeader = async (email) => {
+    if (!(await askConfirm({ title: "Remove ONE2ONE leader?", message: `${email} will lose access to the ONE2ONE tab. The members they've already added, and their session progress, are kept.`, confirmLabel: "Remove", danger: true }))) return;
     db.collection("one2oneLeaders").doc(email).delete()
       .then(() => {
         if (openOneOnOneLeaderEmail === email) setOpenOneOnOneLeaderEmail(null);
