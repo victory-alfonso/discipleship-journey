@@ -5896,7 +5896,7 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
                     return (
                       <div key={t.id} style={{ ...detailRow, cursor: "default" }}>
                         <span style={{ ...styles.sessionCheckIcon, fontSize: 15, opacity: conducted ? 1 : 0.3 }}>{conducted ? "✓" : "○"}</span>
-                        <span style={{ flex: 1, fontSize: 14, fontWeight: 600 }}>{t.name}</span>
+                        <span style={{ flex: 1, fontSize: 14, fontWeight: 600, ...(conducted ? { textDecoration: "line-through", opacity: 0.75 } : {}) }}>{t.name}</span>
                         {conducted && (
                           <span style={{ ...styles.statusBadge, ...styles.statusBadgeDoneDark }}>Completed</span>
                         )}
@@ -7754,7 +7754,14 @@ const styles = {
   restrictRow: { display: "flex", alignItems: "center", gap: 12, background: "rgba(255,255,255,0.5)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(31,56,100,0.12)", borderRadius: 8, padding: "8px 12px", fontSize: 13, color: "#23211D" },
   restrictName: { flex: 1, fontWeight: 600 },
 
-  modalOverlay: { position: "fixed", top: "var(--dj-header-h, 180px)", left: 0, right: 0, bottom: 0, background: "rgba(20,18,14,0.45)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 2000, padding: 20, overflowY: "auto" },
+  // alignItems is "flex-start" (not "center") on purpose: a centered
+  // flex item taller than its container gets its overflow split evenly
+  // above and below, and browsers don't let you scroll into that top
+  // overflow — so a tall modal's own top (where its × / edit buttons
+  // live) becomes permanently stuck out of view. Anchoring to the top
+  // means any overflow is only ever at the bottom, where the overlay's
+  // own scroll can always reach it.
+  modalOverlay: { position: "fixed", top: "var(--dj-header-h, 180px)", left: 0, right: 0, bottom: 0, background: "rgba(20,18,14,0.45)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 2000, padding: 20, overflowY: "auto" },
   modalCard: { background: "rgba(255,255,255,0.8)", backdropFilter: "blur(22px) saturate(180%)", WebkitBackdropFilter: "blur(22px) saturate(180%)", border: "1px solid rgba(255,255,255,0.6)", borderRadius: 16, maxWidth: 400, width: "100%", padding: "24px 24px 20px", boxShadow: "0 25px 50px -12px rgba(20,18,14,0.5), inset 0 1px 0 rgba(255,255,255,0.5)", animation: "popIn 0.14s ease-out" },
   modalTitle: { fontSize: 18, fontWeight: 700, color: "#23211D", fontFamily: "Georgia, serif", marginBottom: 14 },
   modalInput: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", fontSize: 14, marginBottom: 8, outline: "none", background: "rgba(255,255,255,0.7)", color: "#23211D", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", minWidth: 0 },
