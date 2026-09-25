@@ -5233,7 +5233,7 @@ function OneOnOneCard({ person, sessions, attendanceByMember, showAdder, onOpen,
   );
 }
 
-function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onViewProfile, onToggleSession, leaderEmail }) {
+function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onToggleSession, leaderEmail }) {
   const [scanOpen, setScanOpen] = useState(false);
   // A ONE2ONE-only leader who hasn't set up their own profile yet (no
   // name/photo on their one2oneLeaders doc) sees a create-profile prompt
@@ -5273,7 +5273,6 @@ function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpe
         <div style={{ flex: 1, fontSize: 13, color: "#7A6E4E", alignSelf: "center" }}>
           {showAll ? "All ONE2ONE members from every ONE2ONE leader." : "Your own ONE2ONE tracker — only people you've added show up here."}
         </div>
-        {onViewProfile && <button style={styles.ghostBtn} onClick={onViewProfile}>My Profile</button>}
         {leaderEmail && <CopyOneOnOneRegistrationLinkButton leaderEmail={leaderEmail} />}
         {!showAll && sessions.length > 0 && <button style={styles.ghostBtn} onClick={() => setScanOpen(true)}>Scan Attendance</button>}
         <button style={styles.primaryBtn} onClick={onAdd}>+ Add Member</button>
@@ -5481,51 +5480,63 @@ function OneOnOneLeaderFormModal({ title, initialEmail, initialName, initialPhot
 }
 
 // The ONE2ONE tab's landing view for a ONE2ONE-only leader who already
-// has a profile. The cover-photo header used to sit inline above the
-// member grid on every visit, which ate most of the screen (especially
-// on mobile) before any member cards were visible. It now lives in
-// OneOnOneOwnProfileModal instead, opened on demand via the "My
-// Profile" button (OneOnOne's onViewProfile) — so the grid and Add
-// Member button show up immediately.
-function OneOnOneOwnProfile({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onViewProfile, onToggleSession, leaderEmail }) {
-  return (
-    <OneOnOne
-      people={people}
-      sessions={sessions}
-      attendanceByMember={attendanceByMember}
-      hasClass={hasClass}
-      onAdd={onAdd}
-      onOpen={onOpen}
-      onEdit={onEditPerson}
-      onDelete={onDelete}
-      showAll={false}
-      onViewProfile={onViewProfile}
-      onToggleSession={onToggleSession}
-      leaderEmail={leaderEmail}
-    />
-  );
-}
-
-// Modal version of the cover-photo header that used to sit inline in
-// OneOnOneOwnProfile — same visuals, just shown on demand.
-function OneOnOneOwnProfileModal({ leader, peopleCount, onClose, onEdit }) {
+// has a profile. This is now a real modal (dimmed/blurred backdrop +
+// a single floating card) instead of a plain inline section — but
+// unlike the old "My Profile" popup, EVERYTHING lives inside that one
+// card: the cover header (name, photo, edit pencil) at the top, and
+// the full toolbar + summary counts + every member you've added
+// scrolling underneath it in the same card. Nothing renders outside
+// the card behind it.
+function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onEditProfile, onToggleSession, leaderEmail }) {
   const displayName = leader.name || leader.id;
-  const roundBtn = { position: "absolute", top: 12, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 32, height: 32, color: "#F5F2E4", fontSize: 18, cursor: "pointer", lineHeight: 1, zIndex: 3 };
+  const roundBtn = { position: "absolute", top: 12, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 32, height: 32, color: "#F5F2E4", fontSize: 15, cursor: "pointer", lineHeight: 1, zIndex: 3 };
   return (
-    <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
+    <div style={{ ...styles.modalOverlay, position: "fixed", background: "rgba(20,18,14,0.45)" }}>
       <div
-        style={{ position: "relative", width: "100%", maxWidth: 480, borderRadius: 20, overflow: "hidden", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", animation: "popIn 0.18s ease-out" }}
-        onClick={(e) => e.stopPropagation()}
+        style={{
+          position: "relative",
+          width: "100%",
+          maxWidth: 560,
+          maxHeight: "88vh",
+          display: "flex",
+          flexDirection: "column",
+          background: "rgba(255,255,255,0.85)",
+          backdropFilter: "blur(22px) saturate(180%)",
+          WebkitBackdropFilter: "blur(22px) saturate(180%)",
+          border: "1px solid rgba(255,255,255,0.6)",
+          borderRadius: 20,
+          boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5), inset 0 1px 0 rgba(255,255,255,0.5)",
+          overflow: "hidden",
+          animation: "popIn 0.18s ease-out",
+        }}
       >
-        <button type="button" onClick={onClose} style={{ ...roundBtn, right: 12 }} aria-label="Close">×</button>
-        <button type="button" onClick={onEdit} style={{ ...roundBtn, right: 52, fontSize: 15 }} aria-label="Edit" title="Edit name / photo">✎</button>
-        <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 7", background: "#23211D" }}>
+        {/* Cover header — stays pinned at the top of the modal card */}
+        <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 7", background: "#23211D", flexShrink: 0 }}>
+          <button type="button" onClick={onEditProfile} style={{ ...roundBtn, right: 12 }} aria-label="Edit" title="Edit name / photo">✎</button>
           <ClassCoverImage classItem={{ name: displayName, photoUrl: leader.photoUrl }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.1) 30%, rgba(20,18,14,0.85) 100%)" }} />
           <div style={{ position: "absolute", left: 20, right: 20, bottom: 14 }}>
             <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700, color: "#F5F2E4" }}>{displayName}</div>
-            <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.8)", marginTop: 3 }}>{peopleCount} member{peopleCount === 1 ? "" : "s"} added</div>
+            <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.8)", marginTop: 3 }}>{people.length} member{people.length === 1 ? "" : "s"} added</div>
           </div>
+        </div>
+        {/* Everything else — toolbar, summary badges, and the full
+            member grid — scrolls INSIDE the same card, below the
+            header, instead of living outside it. */}
+        <div style={{ overflowY: "auto", flex: 1, padding: "16px 20px 20px" }}>
+          <OneOnOne
+            people={people}
+            sessions={sessions}
+            attendanceByMember={attendanceByMember}
+            hasClass={hasClass}
+            onAdd={onAdd}
+            onOpen={onOpen}
+            onEdit={onEditPerson}
+            onDelete={onDelete}
+            showAll={false}
+            onToggleSession={onToggleSession}
+            leaderEmail={leaderEmail}
+          />
         </div>
       </div>
     </div>
@@ -5972,7 +5983,6 @@ function App() {
   // drill into one leader's profile to see the members they added).
   const [openOneOnOneLeaderEmail, setOpenOneOnOneLeaderEmail] = useState(null);
   const [creatingOwnProfile, setCreatingOwnProfile] = useState(false);
-  const [viewingOwnProfile, setViewingOwnProfile] = useState(false);
   const [editingOneOnOneLeader, setEditingOneOnOneLeader] = useState(null);
 
   useEffect(() => {
@@ -7064,6 +7074,7 @@ function App() {
 
         {activeTab === "one2one" && isOneOnly && !needsOwnProfile && (
           <OneOnOneOwnProfile
+            leader={myOneLeaderDoc || { id: currentEmail, name: null, photoUrl: null }}
             people={myOneOnOne}
             sessions={oneOnOneSessions}
             attendanceByMember={attendanceByMember}
@@ -7072,7 +7083,7 @@ function App() {
             onOpen={setOpenOneOnOne}
             onEditPerson={setEditingOneOnOne}
             onDelete={deleteOneOnOnePerson}
-            onViewProfile={() => setViewingOwnProfile(true)}
+            onEditProfile={() => setCreatingOwnProfile(true)}
             onToggleSession={toggleOneOnOneSession}
             leaderEmail={currentEmail}
           />
@@ -7199,14 +7210,6 @@ function App() {
           submitLabel={needsOwnProfile ? "Create Profile" : "Save"}
           onClose={() => setCreatingOwnProfile(false)}
           onSave={(data) => updateOneOnOneLeaderProfile(currentEmail, data)}
-        />
-      )}
-      {viewingOwnProfile && (
-        <OneOnOneOwnProfileModal
-          leader={myOneLeaderDoc || { id: currentEmail, name: null, photoUrl: null }}
-          peopleCount={myOneOnOne.length}
-          onClose={() => setViewingOwnProfile(false)}
-          onEdit={() => { setViewingOwnProfile(false); setCreatingOwnProfile(true); }}
         />
       )}
       {editingOneOnOneLeader && (
