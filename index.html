@@ -7353,7 +7353,11 @@ const styles = {
   modalInput: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", fontSize: 14, marginBottom: 8, outline: "none", background: "rgba(255,255,255,0.7)", color: "#23211D", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" },
   modalDateLabel: { display: "block", fontSize: 12, fontWeight: 600, color: "#7A6E4E", marginBottom: 8 },
   modalFieldLabel: { display: "block", fontSize: 12, fontWeight: 600, color: "#7A6E4E", marginBottom: 4 },
-  modalRow2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 },
+  // auto-fit + minmax lets a field (e.g. the native Birthdate date
+  // picker, which needs more width than CSS alone can guarantee on iOS)
+  // drop to its own line instead of overlapping its neighbor when the
+  // modal is too narrow for both at once.
+  modalRow2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 8 },
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 6 },
   modalCancelBtn: { padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", background: "rgba(255,255,255,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", color: "#4A4230", cursor: "pointer", fontSize: 13.5, fontWeight: 600 },
   modalConfirmBtn: { padding: "9px 18px", borderRadius: 8, border: "none", background: "rgba(31,56,100,0.9)", backdropFilter: "blur(6px)", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 },
