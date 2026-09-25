@@ -4888,10 +4888,30 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
   );
 }
 
-function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, onClose, onEdit, onToggleSession }) {
+function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, onClose, onEdit, onToggleSession, isLeader, leaderOptions, onMove }) {
   const done = oneOnOneDoneCount(person, sessions, attendanceByMember);
   const pct = sessions.length ? Math.round((done / sessions.length) * 100) : 0;
   const roundBtn = { position: "absolute", top: 12, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 32, height: 32, color: "#F5F2E4", fontSize: 18, cursor: "pointer", lineHeight: 1, zIndex: 3 };
+  // Leaders/Managers can reassign a ONE2ONE member to a different
+  // ONE2ONE leader — this just changes whose tracker the person shows
+  // up under (their createdBy field); session progress is untouched.
+  // Only shown to isLeader (full Leaders/Managers); a ONE2ONE-only
+  // leader never sees this modal with isLeader=true, so they can't
+  // move members away from themselves or each other.
+  const currentOwner = normEmail(person.createdBy);
+  const moveChoices = (leaderOptions || []).filter((l) => l.id !== currentOwner);
+  const [moveTarget, setMoveTarget] = useState("");
+  const [moving, setMoving] = useState(false);
+  const doMove = async () => {
+    if (!moveTarget) return;
+    setMoving(true);
+    try {
+      await onMove(person, moveTarget);
+      setMoveTarget("");
+    } finally {
+      setMoving(false);
+    }
+  };
 
   return (
     <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
@@ -4943,6 +4963,34 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
                     </label>
                   );
                 })}
+              </div>
+            )}
+            {isLeader && moveChoices.length > 0 && (
+              <div style={{ marginTop: 22, paddingTop: 16, borderTop: "1px solid rgba(245,242,228,0.2)" }}>
+                <div style={detailLabel}>Move to another ONE2ONE leader</div>
+                <div style={{ fontSize: 12, color: "rgba(245,242,228,0.75)", margin: "4px 0 10px" }}>
+                  Currently with <strong>{currentOwner || "unknown"}</strong>. Moving keeps all their session progress — it only changes whose ONE2ONE tracker they show up under.
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <select
+                    style={{ ...styles.modalInput, marginBottom: 0, flex: 1, minWidth: 180, background: "rgba(255,255,255,0.12)", color: "#F5F2E4", borderColor: "rgba(245,242,228,0.35)" }}
+                    value={moveTarget}
+                    onChange={(e) => setMoveTarget(e.target.value)}
+                  >
+                    <option value="">Select leader…</option>
+                    {moveChoices.map((l) => (
+                      <option key={l.id} value={l.id}>{l.name ? `${l.name} (${l.id})` : l.id}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    style={{ ...styles.modalConfirmBtn, opacity: moveTarget && !moving ? 1 : 0.5 }}
+                    disabled={!moveTarget || moving}
+                    onClick={doMove}
+                  >
+                    {moving ? "Moving…" : "Move"}
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -5644,6 +5692,21 @@ function App() {
       showNotice("Saved.");
     } catch (err) {
       showError("Could not save the changes. Error: " + err.message);
+    }
+  };
+  // Reassigns a ONE2ONE member to a different ONE2ONE leader by
+  // changing createdBy — the field every filter/grouping above keys
+  // off of (myOneOnOne, oneOnOneLeaderProfiles, the leader profile
+  // view). Nothing else about the person or their progress changes.
+  const moveOneOnOnePerson = async (person, newLeaderEmail) => {
+    const target = normEmail(newLeaderEmail);
+    if (!target || target === normEmail(person.createdBy)) return;
+    if (!(await askConfirm({ title: "Move this ONE2ONE member?", message: `${person.name} will move to ${target}'s ONE2ONE tracker. Their session progress stays exactly as is.`, confirmLabel: "Move" }))) return;
+    try {
+      await db.collection("oneOnOne").doc(person.id).update({ createdBy: target });
+      showNotice("Moved.");
+    } catch (err) {
+      showError("Could not move them. Error: " + err.message);
     }
   };
   const deleteOneOnOnePerson = async (id, name) => {
@@ -6399,6 +6462,9 @@ function App() {
           onClose={() => setOpenOneOnOne(null)}
           onEdit={setEditingOneOnOne}
           onToggleSession={toggleOneOnOneSession}
+          isLeader={isLeader}
+          leaderOptions={oneOnOneLeaderProfiles}
+          onMove={moveOneOnOnePerson}
         />
       )}
       {addOneOnOneOpen && (
