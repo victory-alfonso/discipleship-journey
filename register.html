@@ -34,6 +34,19 @@
   .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
   .row2 > label { min-width: 0; }
 
+  /* iOS Safari renders the native date-picker control wider than its
+     CSS box once the row gets tight (it ignores width:100%), so at
+     typical mobile widths it can still spill into the Gender box next
+     to it even though the grid math above says it should fit. Capping
+     the Birthdate input with max-width (instead of width:100%) keeps
+     its rendered box smaller than its grid column, leaving a safety
+     margin so any native overflow stays inside its own column instead
+     of bleeding into Gender's. */
+  .dateInput { width: auto; max-width: 132px; padding: 11px 8px; font-size: 13.5px; }
+  @media (max-width: 380px) {
+    .dateInput { max-width: 112px; padding: 9px 6px; font-size: 12.5px; }
+  }
+
   .submitBtn { width: 100%; padding: 13px; border-radius: 8px; border: none; background: #1F3864; color: #EFE7D3; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 6px; }
   .submitBtn:disabled { opacity: 0.6; cursor: default; }
 
@@ -289,7 +302,7 @@ function renderForm(className, classId, batch, errorMessage) {
         <div class="row2">
           <label class="field">
             <span>Birthdate *</span>
-            <input class="input" name="birthdate" type="date" required max="${new Date().toISOString().slice(0,10)}" autocomplete="bday" />
+            <input class="input dateInput" name="birthdate" type="date" required max="${new Date().toISOString().slice(0,10)}" autocomplete="bday" />
             <div class="ageHint" id="ageHint"></div>
           </label>
           <label class="field">
@@ -501,7 +514,7 @@ function renderOneOnOneForm(leaderEmail, leaderName, errorMessage) {
         <div class="row2">
           <label class="field">
             <span>Birthdate *</span>
-            <input class="input" name="birthdate" type="date" required max="${new Date().toISOString().slice(0,10)}" autocomplete="bday" />
+            <input class="input dateInput" name="birthdate" type="date" required max="${new Date().toISOString().slice(0,10)}" autocomplete="bday" />
             <div class="ageHint" id="ageHint"></div>
           </label>
           <label class="field">
