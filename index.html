@@ -4855,35 +4855,51 @@ function OneOnOneLeaderFormModal({ title, initialEmail, initialName, initialPhot
 }
 
 // The ONE2ONE tab's landing view for a ONE2ONE-only leader who already
-// has a profile: a cover-photo header card (same style Leaders/Managers
-// see for this leader) sits on top, with the member grid and Add Member
-// button listed right below it — no extra click needed to get there.
-function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasClass, onEdit, onAdd, onOpen, onEditPerson, onDelete }) {
-  const displayName = leader.name || leader.id;
+// has a profile. The cover-photo header used to sit inline above the
+// member grid on every visit, which ate most of the screen (especially
+// on mobile) before any member cards were visible. It now lives in
+// OneOnOneOwnProfileModal instead, opened on demand via the "My
+// Profile" button (OneOnOne's onViewProfile) — so the grid and Add
+// Member button show up immediately.
+function OneOnOneOwnProfile({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onViewProfile }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div style={{ position: "relative", width: "100%", borderRadius: 20, overflow: "hidden", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", boxShadow: "0 20px 45px -18px rgba(20,18,14,0.35)" }}>
-        <button type="button" onClick={onEdit} style={{ position: "absolute", top: 12, right: 12, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 32, height: 32, color: "#F5F2E4", fontSize: 15, cursor: "pointer", lineHeight: 1, zIndex: 3 }} aria-label="Edit" title="Edit name / photo">✎</button>
+    <OneOnOne
+      people={people}
+      sessions={sessions}
+      attendanceByMember={attendanceByMember}
+      hasClass={hasClass}
+      onAdd={onAdd}
+      onOpen={onOpen}
+      onEdit={onEditPerson}
+      onDelete={onDelete}
+      showAll={false}
+      onViewProfile={onViewProfile}
+    />
+  );
+}
+
+// Modal version of the cover-photo header that used to sit inline in
+// OneOnOneOwnProfile — same visuals, just shown on demand.
+function OneOnOneOwnProfileModal({ leader, peopleCount, onClose, onEdit }) {
+  const displayName = leader.name || leader.id;
+  const roundBtn = { position: "absolute", top: 12, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 32, height: 32, color: "#F5F2E4", fontSize: 18, cursor: "pointer", lineHeight: 1, zIndex: 3 };
+  return (
+    <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
+      <div
+        style={{ position: "relative", width: "100%", maxWidth: 480, borderRadius: 20, overflow: "hidden", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", animation: "popIn 0.18s ease-out" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button type="button" onClick={onClose} style={{ ...roundBtn, right: 12 }} aria-label="Close">×</button>
+        <button type="button" onClick={onEdit} style={{ ...roundBtn, right: 52, fontSize: 15 }} aria-label="Edit" title="Edit name / photo">✎</button>
         <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 7", background: "#23211D" }}>
           <ClassCoverImage classItem={{ name: displayName, photoUrl: leader.photoUrl }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.1) 30%, rgba(20,18,14,0.85) 100%)" }} />
           <div style={{ position: "absolute", left: 20, right: 20, bottom: 14 }}>
             <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700, color: "#F5F2E4" }}>{displayName}</div>
-            <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.8)", marginTop: 3 }}>{people.length} member{people.length === 1 ? "" : "s"} added</div>
+            <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.8)", marginTop: 3 }}>{peopleCount} member{peopleCount === 1 ? "" : "s"} added</div>
           </div>
         </div>
       </div>
-      <OneOnOne
-        people={people}
-        sessions={sessions}
-        attendanceByMember={attendanceByMember}
-        hasClass={hasClass}
-        onAdd={onAdd}
-        onOpen={onOpen}
-        onEdit={onEditPerson}
-        onDelete={onDelete}
-        showAll={false}
-      />
     </div>
   );
 }
@@ -5318,6 +5334,7 @@ function App() {
   // drill into one leader's profile to see the members they added).
   const [openOneOnOneLeaderEmail, setOpenOneOnOneLeaderEmail] = useState(null);
   const [creatingOwnProfile, setCreatingOwnProfile] = useState(false);
+  const [viewingOwnProfile, setViewingOwnProfile] = useState(false);
   const [editingOneOnOneLeader, setEditingOneOnOneLeader] = useState(null);
 
   useEffect(() => {
@@ -6368,16 +6385,15 @@ function App() {
 
         {activeTab === "one2one" && isOneOnly && !needsOwnProfile && (
           <OneOnOneOwnProfile
-            leader={myOneLeaderDoc || { id: currentEmail, name: null, photoUrl: null }}
             people={myOneOnOne}
             sessions={oneOnOneSessions}
             attendanceByMember={attendanceByMember}
             hasClass={!!oneOnOneClass}
-            onEdit={() => setCreatingOwnProfile(true)}
             onAdd={() => setAddOneOnOneOpen(true)}
             onOpen={setOpenOneOnOne}
             onEditPerson={setEditingOneOnOne}
             onDelete={deleteOneOnOnePerson}
+            onViewProfile={() => setViewingOwnProfile(true)}
           />
         )}
 
@@ -6493,6 +6509,14 @@ function App() {
           submitLabel={needsOwnProfile ? "Create Profile" : "Save"}
           onClose={() => setCreatingOwnProfile(false)}
           onSave={(data) => updateOneOnOneLeaderProfile(currentEmail, data)}
+        />
+      )}
+      {viewingOwnProfile && (
+        <OneOnOneOwnProfileModal
+          leader={myOneLeaderDoc || { id: currentEmail, name: null, photoUrl: null }}
+          peopleCount={myOneOnOne.length}
+          onClose={() => setViewingOwnProfile(false)}
+          onEdit={() => { setViewingOwnProfile(false); setCreatingOwnProfile(true); }}
         />
       )}
       {editingOneOnOneLeader && (
