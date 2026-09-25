@@ -61,14 +61,16 @@
     .dj-notice, .dj-notice.dj-notice-leaving, .dj-notice .dj-notice-icon { animation-duration: 0.01s; }
   }
 
-  /* Logo spark — tapping an empty part of the screen pops a small
-     Victory logo icon at the tap point: quick pop-in, then it stays
-     put and vibrates (building up, with a matching charge-up hum
-     from JS) until it releases its charge — a bright shine flash plus
-     a burst of small gold sparkles flying outward (like a wand
-     letting off its stored-up power), with a soft bubble-pop sound.
-     The icon itself never breaks apart. See djGenerateSparkles /
-     djPlayChargeUp / djPlayExplosion. */
+  /* Logo spark — tapping a genuinely plain/blank part of the screen
+     (not any card, row, section, or anything with writing/details in
+     it — see djIsTouchableTarget) pops a small Victory logo icon at
+     the tap point: quick pop-in, then it stays put and vibrates
+     (building up, silently) until it releases its charge — a bright
+     shine flash plus a burst of small gold sparkles flying outward
+     (like a wand letting off its stored-up power), with a soft
+     bubble-pop sound. The icon itself never breaks apart, and it
+     never fires while a modal/dialog is open. See djGenerateSparkles
+     / djPlayExplosion. */
   @keyframes djLogoSpark {
     0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.3) rotate(0deg); }
     14%  { opacity: 1; transform: translate(-50%, -50%) scale(1.18) rotate(0deg); }
@@ -506,22 +508,27 @@ function ToastHost() {
 }
 
 // ============================================================
-// LOGO SPARK — tapping any empty, non-interactive part of the
-// screen (background, whitespace, card padding — not buttons,
-// links, inputs, or anything with a pointer cursor) pops up a
-// small Victory logo icon at the tap point that pops in, stays put
-// and vibrates (building up) until it pops like a bubble (with a
-// little burst of bubbles + a pop sound). Purely decorative; never
-// blocks a real tap on something touchable, and skips entirely
-// while a modal/dialog is open.
+// LOGO SPARK — tapping any genuinely plain/blank part of the screen
+// (page background, empty whitespace — NOT buttons, links, inputs,
+// anything with a pointer cursor, or any card/row/section that has
+// writing or details in it) pops up a small Victory logo icon at the
+// tap point that pops in, stays put and vibrates silently (building
+// up) until it pops like a bubble (with a little burst of bubbles +
+// a pop sound). Purely decorative; never blocks a real tap on
+// something touchable, and skips entirely while a modal/dialog is
+// open.
 // <LogoSparkHost /> is mounted once at the root.
 // ============================================================
 
 // An element counts as "touchable" (skip the spark) if it, or any
 // ancestor up to <body>, is a natural control, carries an
-// interactive role, or has a pointer cursor — which covers this
-// app's cards, nav items, rows and buttons without needing to tag
-// every one of them individually.
+// interactive role, has a pointer cursor, or sits inside a card or
+// content container — this app's cards, rows, sections and modals
+// all use a translucent "glass" background with a backdrop blur (see
+// the *Card/*Row/*Section entries in the stylesheet), so checking for
+// that blur is a reliable way to catch "any box with writing/details
+// in it" without needing to tag every one of them individually. The
+// spark only ever fires on genuinely plain, blank screen background.
 function djIsTouchableTarget(el) {
   const interactiveTags = new Set(["BUTTON", "A", "INPUT", "SELECT", "TEXTAREA", "LABEL", "OPTION"]);
   let node = el;
@@ -533,7 +540,11 @@ function djIsTouchableTarget(el) {
       if (role && ["button", "link", "dialog", "alertdialog", "checkbox", "tab", "menuitem"].includes(role)) return true;
       if (node.isContentEditable) return true;
       const cs = window.getComputedStyle(node);
-      if (cs && cs.cursor === "pointer") return true;
+      if (cs) {
+        if (cs.cursor === "pointer") return true;
+        const backdrop = cs.backdropFilter || cs.webkitBackdropFilter;
+        if (backdrop && backdrop !== "none") return true;
+      }
     }
     node = node.parentElement;
     hops++;
@@ -541,15 +552,13 @@ function djIsTouchableTarget(el) {
   return false;
 }
 
-// Duration of the whole logo-spark lifecycle, and the two moments
-// (as fractions of it) that matter: when the vibration build-up
-// starts (matches the djLogoSpark keyframes' 22% wobble-start), and
-// when it peaks and the icon releases its charge (matches the
-// keyframes' 85%/86% pop). The charge-up hum and the pop sound/shine
-// burst are scheduled off these same fractions so audio and visuals
-// stay in sync, at the same spot the icon appeared (it doesn't move).
+// Duration of the whole logo-spark lifecycle, and the moment (as a
+// fraction of it) when the vibration build-up peaks and the icon
+// releases its charge (matches the djLogoSpark keyframes' 85%/86%
+// pop). The pop sound/shine burst is scheduled off this same
+// fraction so audio and visuals stay in sync, at the same spot the
+// icon appeared (it doesn't move).
 const DJ_SPARK_DURATION_MS = 1400;
-const DJ_SPARK_VIBRATION_START_FRACTION = 0.22;
 const DJ_SPARK_POP_FRACTION = 0.86;
 // Size of the logo-spark icon (px).
 const DJ_ICON_SIZE = 28;
@@ -564,42 +573,6 @@ function djGetAudioCtx() {
   if (!djAudioCtx) djAudioCtx = new Ctx();
   if (djAudioCtx.state === "suspended") djAudioCtx.resume();
   return djAudioCtx;
-}
-
-// A soft, watery "bubbling" hum that plays under the icon's
-// vibration build-up — a pure sine tone gently rising in pitch with
-// a light wobble (like air bubbling up through water) that speeds up
-// over time, building toward the bubble-pop burst. Quiet on purpose.
-function djPlayChargeUp(durationSec) {
-  try {
-    const ctx = djGetAudioCtx();
-    if (!ctx || durationSec <= 0) return;
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    const lfo = ctx.createOscillator();
-    const lfoGain = ctx.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(120, now);
-    osc.frequency.exponentialRampToValueAtTime(300, now + durationSec);
-    lfo.type = "sine";
-    lfo.frequency.setValueAtTime(5, now);
-    lfo.frequency.exponentialRampToValueAtTime(22, now + durationSec); // wobble speeds up
-    lfoGain.gain.setValueAtTime(0.018, now); // modulation depth on the main gain
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.035, now + durationSec * 0.7);
-    gain.gain.exponentialRampToValueAtTime(0.018, now + durationSec);
-    lfo.connect(lfoGain);
-    lfoGain.connect(gain.gain); // tremolo: LFO modulates the envelope directly
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.start(now);
-    lfo.start(now);
-    osc.stop(now + durationSec + 0.05);
-    lfo.stop(now + durationSec + 0.05);
-  } catch (err) {
-    // Audio is purely decorative — never let it break the tap effect.
-  }
 }
 
 // A little cluster of soft "bubble pop" plinks — several quick sine
@@ -700,15 +673,6 @@ function LogoSparkHost() {
 
       const reducedMotion =
         window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-      // Charge-up hum, synced to the vibration build-up in the CSS
-      // keyframes (skipped when reduced motion also skips the wobble).
-      if (!reducedMotion) {
-        const vibrationStartDelay = DJ_SPARK_DURATION_MS * DJ_SPARK_VIBRATION_START_FRACTION;
-        const chargeDurationSec =
-          (DJ_SPARK_DURATION_MS * (DJ_SPARK_POP_FRACTION - DJ_SPARK_VIBRATION_START_FRACTION)) / 1000;
-        setTimeout(() => djPlayChargeUp(chargeDurationSec), vibrationStartDelay);
-      }
 
       // Fire the release — shine flash + gold sparkle burst + sound —
       // timed to the moment the vibration build-up peaks and the icon
