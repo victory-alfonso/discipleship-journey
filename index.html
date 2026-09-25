@@ -5489,14 +5489,14 @@ function OneOnOneLeaderFormModal({ title, initialEmail, initialName, initialPhot
 // the card behind it.
 function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onEditProfile, onToggleSession, leaderEmail }) {
   const displayName = leader.name || leader.id;
-  const roundBtn = { position: "absolute", top: 12, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 32, height: 32, color: "#F5F2E4", fontSize: 15, cursor: "pointer", lineHeight: 1, zIndex: 3 };
+  const roundBtn = { position: "absolute", top: 10, background: "rgba(20,18,14,0.45)", border: "none", borderRadius: "50%", width: 26, height: 26, color: "#F5F2E4", fontSize: 12.5, cursor: "pointer", lineHeight: 1, zIndex: 3 };
   return (
     <div style={{ ...styles.modalOverlay, position: "fixed", background: "rgba(20,18,14,0.45)" }}>
       <div
         style={{
           position: "relative",
           width: "100%",
-          maxWidth: 560,
+          maxWidth: 440,
           maxHeight: "88vh",
           display: "flex",
           flexDirection: "column",
@@ -5504,26 +5504,26 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
           backdropFilter: "blur(22px) saturate(180%)",
           WebkitBackdropFilter: "blur(22px) saturate(180%)",
           border: "1px solid rgba(255,255,255,0.6)",
-          borderRadius: 20,
+          borderRadius: 16,
           boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5), inset 0 1px 0 rgba(255,255,255,0.5)",
           overflow: "hidden",
           animation: "popIn 0.18s ease-out",
         }}
       >
         {/* Cover header — stays pinned at the top of the modal card */}
-        <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 7", background: "#23211D", flexShrink: 0 }}>
-          <button type="button" onClick={onEditProfile} style={{ ...roundBtn, right: 12 }} aria-label="Edit" title="Edit name / photo">✎</button>
+        <div style={{ position: "relative", width: "100%", aspectRatio: "21 / 9", background: "#23211D", flexShrink: 0 }}>
+          <button type="button" onClick={onEditProfile} style={{ ...roundBtn, right: 10 }} aria-label="Edit" title="Edit name / photo">✎</button>
           <ClassCoverImage classItem={{ name: displayName, photoUrl: leader.photoUrl }} />
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.1) 30%, rgba(20,18,14,0.85) 100%)" }} />
-          <div style={{ position: "absolute", left: 20, right: 20, bottom: 14 }}>
-            <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700, color: "#F5F2E4" }}>{displayName}</div>
-            <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.8)", marginTop: 3 }}>{people.length} member{people.length === 1 ? "" : "s"} added</div>
+          <div style={{ position: "absolute", left: 16, right: 16, bottom: 10 }}>
+            <div style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, color: "#F5F2E4" }}>{displayName}</div>
+            <div style={{ fontSize: 11, color: "rgba(245,242,228,0.8)", marginTop: 2 }}>{people.length} member{people.length === 1 ? "" : "s"} added</div>
           </div>
         </div>
         {/* Everything else — toolbar, summary badges, and the full
             member grid — scrolls INSIDE the same card, below the
             header, instead of living outside it. */}
-        <div style={{ overflowY: "auto", flex: 1, padding: "16px 20px 20px" }}>
+        <div style={{ overflowY: "auto", flex: 1, padding: "12px 14px 14px" }}>
           <OneOnOne
             people={people}
             sessions={sessions}
