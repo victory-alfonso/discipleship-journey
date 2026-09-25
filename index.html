@@ -4270,6 +4270,146 @@ function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpe
   );
 }
 
+// ============================================================
+// ONE2ONE LEADER PROFILES — the ONE2ONE tab's landing view for
+// Leaders/Managers. Instead of one big grid mixing every person
+// from every leader (pending and approved alike), each leader
+// gets their own card here — styled just like a Class card — and
+// newly-added members only ever show up inside that leader's own
+// profile (opened by tapping their card), never in a top-level
+// list. "leaders" is the one2oneLeaders collection; a person who
+// added ONE2ONE members without being in that collection (e.g. a
+// full Leader/Manager who isn't formally listed as a ONE2ONE
+// leader) still gets a card here — see the "virtual" flag set
+// where this list is built in the App component.
+// ============================================================
+
+function OneOnOneLeaderCard({ leader, peopleCount, pendingCount, onOpen, onEdit, onDelete }) {
+  const displayName = leader.name || leader.id;
+  return (
+    <div
+      className="dj-class-photo-card"
+      style={{ position: "relative", aspectRatio: "3 / 4", borderRadius: 18, overflow: "hidden", cursor: "pointer", background: "#23211D", boxShadow: "0 14px 30px -18px rgba(35,33,29,0.5)" }}
+      onClick={() => onOpen(leader)}
+    >
+      <ClassCoverImage classItem={{ name: displayName, photoUrl: leader.photoUrl }} />
+      <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.35) 0%, rgba(20,18,14,0) 32%, rgba(20,18,14,0.88) 100%)" }} />
+      <div style={{ position: "absolute", top: 10, left: 10, right: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
+        {pendingCount > 0 ? (
+          <span style={{ ...styles.statusBadge, background: PHOTO_BADGE.pending.background, color: PHOTO_BADGE.pending.color, border: "none" }}>{pendingCount} pending</span>
+        ) : <span />}
+        <div style={{ display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
+          <button style={styles.iconEdit} onClick={() => onEdit(leader)} title="Edit leader profile">✎</button>
+          {!leader.virtual && (
+            <button style={styles.iconDanger} onClick={() => onDelete(leader.id, displayName)} title="Remove leader">×</button>
+          )}
+        </div>
+      </div>
+      <div style={{ position: "absolute", left: 12, right: 12, bottom: 12 }}>
+        <div style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.2 }}>{displayName}</div>
+        <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 6 }}>{peopleCount} member{peopleCount === 1 ? "" : "s"} added</div>
+      </div>
+    </div>
+  );
+}
+
+function OneOnOneLeaders({ leaders, onOpenLeader, onAddLeader, onEditLeader, onRemoveLeader }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="stack-mobile" style={styles.toolbar}>
+        <div style={{ flex: 1, fontSize: 13, color: "#7A6E4E", alignSelf: "center" }}>
+          Open a ONE2ONE leader's profile to see the members they've added.
+        </div>
+        <button style={styles.primaryBtn} onClick={onAddLeader}>+ Add ONE2ONE Leader</button>
+      </div>
+      {leaders.length === 0 ? (
+        <div style={styles.emptyNote}>No ONE2ONE leaders yet. Add one to get started.</div>
+      ) : (
+        <div style={styles.classesGrid}>
+          {leaders.map((l) => (
+            <OneOnOneLeaderCard
+              key={l.id}
+              leader={l}
+              peopleCount={l.peopleCount}
+              pendingCount={l.pendingCount}
+              onOpen={() => onOpenLeader(l.id)}
+              onEdit={onEditLeader}
+              onDelete={onRemoveLeader}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OneOnOneLeaderProfile({ leader, people, sessions, attendanceByMember, hasClass, onBack, onAdd, onOpen, onEdit, onDelete }) {
+  const displayName = leader.name || leader.id;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="stack-mobile" style={styles.toolbar}>
+        <button style={styles.ghostBtn} onClick={onBack}>← Back to leaders</button>
+        <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: "#23211D", alignSelf: "center" }}>{displayName}</div>
+        <button style={styles.primaryBtn} onClick={onAdd}>+ Add Member</button>
+      </div>
+
+      {!hasClass && (
+        <div style={styles.emptyNote}>No class named ONE2ONE was found in the Classes tab yet. Once a leader creates it and adds its sessions, those sessions will show up here for every member.</div>
+      )}
+
+      {people.length === 0 ? (
+        <div style={styles.emptyNote}>{displayName} hasn't added anyone to ONE2ONE yet.</div>
+      ) : (
+        <div style={styles.classesGrid}>
+          {people.map((p) => (
+            <OneOnOneCard
+              key={p.id}
+              person={p}
+              sessions={sessions}
+              attendanceByMember={attendanceByMember}
+              showAdder={false}
+              onOpen={onOpen}
+              onEdit={onEdit}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OneOnOneLeaderFormModal({ title, initialEmail, initialName, initialPhoto, isNew, submitLabel, onClose, onSave }) {
+  const [email, setEmail] = useState(initialEmail || "");
+  const [name, setName] = useState(initialName || "");
+  const [photoUrl, setPhotoUrl] = useState(initialPhoto || null);
+  const [error, setError] = useState("");
+  const submit = (e) => {
+    e.preventDefault();
+    if (isNew && !email.trim()) { setError("Please enter the leader's email."); return; }
+    onSave({ email: email.trim(), name: name.trim(), photoUrl: photoUrl || null });
+  };
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <form style={{ ...styles.modalCard, maxHeight: "92vh", overflowY: "auto" }} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+        <div style={styles.modalTitle}>{title}</div>
+        {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
+        <ClassPhotoPicker photoUrl={photoUrl} onChange={setPhotoUrl} />
+        {isNew ? (
+          <input style={styles.modalInput} type="email" placeholder="Leader's email (used to sign in)" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus required />
+        ) : (
+          <div style={{ ...styles.pairNote, marginBottom: 12 }}>{initialEmail}</div>
+        )}
+        <input style={styles.modalInput} placeholder="Display name (optional)" value={name} onChange={(e) => setName(e.target.value)} />
+        <div style={styles.modalActions}>
+          <button type="button" style={styles.modalCancelBtn} onClick={onClose}>Cancel</button>
+          <button type="submit" style={styles.modalConfirmBtn}>{submitLabel || "Save"}</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, onClose, onEdit, onToggleSession }) {
   const done = oneOnOneDoneCount(person, sessions, attendanceByMember);
   const pct = sessions.length ? Math.round((done / sessions.length) * 100) : 0;
@@ -4647,6 +4787,12 @@ function App() {
   const [openOneOnOne, setOpenOneOnOne] = useState(null);
   const [addOneOnOneOpen, setAddOneOnOneOpen] = useState(false);
   const [editingOneOnOne, setEditingOneOnOne] = useState(null);
+  // Which ONE2ONE leader's profile is currently open (Leaders/Managers
+  // land on a grid of leader cards first — see OneOnOneLeaders — and
+  // drill into one leader's profile to see the members they added).
+  const [openOneOnOneLeaderEmail, setOpenOneOnOneLeaderEmail] = useState(null);
+  const [addOneOnOneLeaderOpen, setAddOneOnOneLeaderOpen] = useState(false);
+  const [editingOneOnOneLeader, setEditingOneOnOneLeader] = useState(null);
 
   useEffect(() => {
     if (!auth) { setAuthUser(null); return; }
@@ -4728,6 +4874,29 @@ function App() {
   // ONE2ONE leaders are locked to the ONE2ONE tab; anyone with no
   // ONE2ONE access can't land on it either.
   const activeTab = isOneOnly ? "one2one" : (!canUseOneOnOne && tab === "one2one" ? "roster" : tab);
+  // One card per ONE2ONE leader (Leaders/Managers land here first — see
+  // OneOnOneLeaders). Built from the one2oneLeaders collection, plus a
+  // "virtual" entry for anyone who has added ONE2ONE people without
+  // being formally listed there (e.g. a full Leader/Manager using the
+  // tab themselves) so their added members always have a card to live
+  // under too.
+  const oneOnOneLeaderProfiles = useMemo(() => {
+    const map = new Map();
+    oneLeaders.forEach((l) => map.set(l.id, { ...l }));
+    oneOnOneRaw.forEach((p) => {
+      const email = normEmail(p.createdBy);
+      if (email && !map.has(email)) map.set(email, { id: email, name: null, photoUrl: null, virtual: true });
+    });
+    return Array.from(map.values())
+      .map((l) => {
+        const mine = oneOnOneRaw.filter((p) => normEmail(p.createdBy) === l.id);
+        return { ...l, peopleCount: mine.length, pendingCount: mine.filter((p) => p.status === "pending").length };
+      })
+      .sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+  }, [oneLeaders, oneOnOneRaw]);
+  const openOneOnOneLeaderProfile = openOneOnOneLeaderEmail
+    ? (oneOnOneLeaderProfiles.find((l) => l.id === openOneOnOneLeaderEmail) || { id: openOneOnOneLeaderEmail, name: null, photoUrl: null, virtual: true })
+    : null;
   const oneOnOneClass = useMemo(() => findOneOnOneClass(classes), [classes]);
   const oneOnOneSessions = useMemo(() => oneOnOneClassSessions(oneOnOneClass, topics), [oneOnOneClass, topics]);
   const liveOpenOneOnOne = openOneOnOne && canUseOneOnOne ? myOneOnOne.find((p) => p.id === openOneOnOne.id) || null : null;
@@ -4970,9 +5139,9 @@ function App() {
   // shows up for approval. The ONE2ONE leader can still mark sessions
   // while pending (toggleOneOnOneSession handles that case by writing
   // only to this doc), so no progress is lost while waiting.
-  const addOneOnOnePerson = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }) => {
+  const addOneOnOnePerson = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }, createdByOverride) => {
     const personRef = db.collection("oneOnOne").doc();
-    return personRef.set({ name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address, status: "pending", createdBy: currentEmail, createdAt: new Date(), progress: {} })
+    return personRef.set({ name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address, status: "pending", createdBy: createdByOverride || currentEmail, createdAt: new Date(), progress: {} })
       .then(() => { setAddOneOnOneOpen(false); showNotice("Added to ONE2ONE."); })
       .catch((err) => showError("Could not add them. Error: " + err.message));
   };
@@ -5365,14 +5534,35 @@ function App() {
   };
   const addOneLeader = (email) => {
     if (!isValidEmail(email)) { showError("That doesn't look like a valid email address. Please enter just the email, e.g. name@example.com — don't include \"(you)\" or any extra text."); return; }
-    db.collection("one2oneLeaders").doc(normEmail(email)).set({ addedAt: new Date(), addedBy: currentEmail })
+    // merge: true so this never wipes out a name/photo already set on
+    // this leader's profile from the ONE2ONE tab (see
+    // addOneOnOneLeaderProfile below).
+    db.collection("one2oneLeaders").doc(normEmail(email)).set({ addedAt: new Date(), addedBy: currentEmail }, { merge: true })
       .then(() => showNotice("ONE2ONE leader added."))
       .catch((err) => showError("Could not add the ONE2ONE leader. Error: " + err.message));
   };
   const removeOneLeader = (email) => {
     db.collection("one2oneLeaders").doc(email).delete()
-      .then(() => showNotice("ONE2ONE leader removed."))
+      .then(() => {
+        if (openOneOnOneLeaderEmail === email) setOpenOneOnOneLeaderEmail(null);
+        showNotice("ONE2ONE leader removed.");
+      })
       .catch((err) => showError("Could not remove the ONE2ONE leader. Error: " + err.message));
+  };
+  // A ONE2ONE leader "profile" is just the one2oneLeaders doc with an
+  // optional display name/photo layered on — the doc id (email) is
+  // still what grants tab access, this only makes their card in the
+  // ONE2ONE tab look like a Class card instead of a bare email.
+  const addOneOnOneLeaderProfile = ({ email, name, photoUrl }) => {
+    if (!isValidEmail(email)) { showError("That doesn't look like a valid email address. Please enter just the email, e.g. name@example.com — don't include \"(you)\" or any extra text."); return; }
+    db.collection("one2oneLeaders").doc(normEmail(email)).set({ addedAt: new Date(), addedBy: currentEmail, name: name || null, photoUrl: photoUrl || null }, { merge: true })
+      .then(() => { setAddOneOnOneLeaderOpen(false); showNotice("ONE2ONE leader added."); })
+      .catch((err) => showError("Could not add the ONE2ONE leader. Error: " + err.message));
+  };
+  const updateOneOnOneLeaderProfile = (email, { name, photoUrl }) => {
+    db.collection("one2oneLeaders").doc(email).set({ name: name || null, photoUrl: photoUrl || null }, { merge: true })
+      .then(() => { setEditingOneOnOneLeader(null); showNotice("Saved."); })
+      .catch((err) => showError("Could not save the changes. Error: " + err.message));
   };
   const addAdmin = (email) => {
     if (!isValidEmail(email)) { showError("That doesn't look like a valid email address. Please enter just the email, e.g. name@example.com — don't include \"(you)\" or any extra text."); return; }
@@ -5517,7 +5707,7 @@ function App() {
         <nav className="dj-nav" style={styles.nav}>
           {!isOneOnly && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "roster" ? styles.navItemActive : {}) }} onClick={() => { setTab("roster"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); }}>Disciples</button>}
           {!isOneOnly && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "classes" ? styles.navItemActive : {}) }} onClick={() => { setTab("classes"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); }}>Classes</button>}
-          {canUseOneOnOne && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "one2one" ? styles.navItemActive : {}) }} onClick={() => { setTab("one2one"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); setOpenOneOnOne(null); }}>ONE2ONE{oneOnOnePendingCount > 0 ? ` (${oneOnOnePendingCount})` : ""}</button>}
+          {canUseOneOnOne && <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "one2one" ? styles.navItemActive : {}) }} onClick={() => { setTab("one2one"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); setOpenOneOnOne(null); setOpenOneOnOneLeaderEmail(null); }}>ONE2ONE{oneOnOnePendingCount > 0 ? ` (${oneOnOnePendingCount})` : ""}</button>}
           {isLeader && (
             <button className="nav-item" style={{ ...styles.navItem, ...(activeTab === "registrations" ? styles.navItemActive : {}) }} onClick={() => { setTab("registrations"); setOpenMember(null); setOpenMemberTrack(null); setOpenClass(null); setOpenTopic(null); }}>
               Registrations{(pendingRegistrations.length + pendingOneOnOnePeople.length) > 0 ? ` (${pendingRegistrations.length + pendingOneOnOnePeople.length})` : ""}
@@ -5611,7 +5801,7 @@ function App() {
           />
         )}
 
-        {activeTab === "one2one" && (
+        {activeTab === "one2one" && isOneOnly && (
           <OneOnOne
             people={myOneOnOne}
             onAdd={() => setAddOneOnOneOpen(true)}
@@ -5621,7 +5811,32 @@ function App() {
             hasClass={!!oneOnOneClass}
             onEdit={setEditingOneOnOne}
             onDelete={deleteOneOnOnePerson}
-            showAll={isLeader}
+            showAll={false}
+          />
+        )}
+
+        {activeTab === "one2one" && !isOneOnly && !openOneOnOneLeaderProfile && (
+          <OneOnOneLeaders
+            leaders={oneOnOneLeaderProfiles}
+            onOpenLeader={setOpenOneOnOneLeaderEmail}
+            onAddLeader={() => setAddOneOnOneLeaderOpen(true)}
+            onEditLeader={setEditingOneOnOneLeader}
+            onRemoveLeader={removeOneLeader}
+          />
+        )}
+
+        {activeTab === "one2one" && !isOneOnly && openOneOnOneLeaderProfile && (
+          <OneOnOneLeaderProfile
+            leader={openOneOnOneLeaderProfile}
+            people={myOneOnOne.filter((p) => normEmail(p.createdBy) === openOneOnOneLeaderProfile.id)}
+            onAdd={() => setAddOneOnOneOpen(true)}
+            onOpen={setOpenOneOnOne}
+            sessions={oneOnOneSessions}
+            attendanceByMember={attendanceByMember}
+            hasClass={!!oneOnOneClass}
+            onBack={() => setOpenOneOnOneLeaderEmail(null)}
+            onEdit={setEditingOneOnOne}
+            onDelete={deleteOneOnOnePerson}
           />
         )}
 
@@ -5690,7 +5905,7 @@ function App() {
           submitLabel="Add"
           members={members}
           onClose={() => setAddOneOnOneOpen(false)}
-          onSave={addOneOnOnePerson}
+          onSave={(data) => addOneOnOnePerson(data, isOneOnly ? null : openOneOnOneLeaderEmail)}
         />
       )}
       {editingOneOnOne && (
@@ -5699,6 +5914,26 @@ function App() {
           initial={editingOneOnOne}
           onClose={() => setEditingOneOnOne(null)}
           onSave={(data) => updateOneOnOnePerson(editingOneOnOne.id, data)}
+        />
+      )}
+      {addOneOnOneLeaderOpen && (
+        <OneOnOneLeaderFormModal
+          title="Add ONE2ONE Leader"
+          isNew
+          submitLabel="Add"
+          onClose={() => setAddOneOnOneLeaderOpen(false)}
+          onSave={addOneOnOneLeaderProfile}
+        />
+      )}
+      {editingOneOnOneLeader && (
+        <OneOnOneLeaderFormModal
+          title="Edit Leader Profile"
+          initialEmail={editingOneOnOneLeader.id}
+          initialName={editingOneOnOneLeader.name}
+          initialPhoto={editingOneOnOneLeader.photoUrl}
+          submitLabel="Save"
+          onClose={() => setEditingOneOnOneLeader(null)}
+          onSave={(data) => updateOneOnOneLeaderProfile(editingOneOnOneLeader.id, data)}
         />
       )}
       {editingMember && (
