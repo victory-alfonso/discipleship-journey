@@ -1145,14 +1145,14 @@ function isBatchComplete(classItem, topics, batch) {
 }
 // Batches still open for new enrollment — completed batches are
 // dropped so a leader can't enroll or add a member into a batch
-// that's already finished. Falls back to every batch if that would
-// otherwise leave no options at all (e.g. a class whose only batches
-// are all complete).
+// that's already finished. Returns an empty array (not a fallback to
+// every batch) once every batch is complete — a class with nothing
+// left open has nowhere valid for a NEW enrollment to go; see how
+// DiscipleshipTrackFields and AddMemberModal handle that empty case.
 function openBatchesForClass(classItem, topics) {
   if (!classItem) return null;
   const all = getBatchesForClass(classItem, topics || []);
-  const open = all.filter((b) => !isBatchComplete(classItem, topics || [], b));
-  return open.length ? open : all;
+  return all.filter((b) => !isBatchComplete(classItem, topics || [], b));
 }
 // The batch to surface on the Classes tab card: the newest batch
 // that isn't finished yet (i.e. the one currently being run). Falls
@@ -3480,6 +3480,15 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
           // even though it's no longer offered here for new picks.
           const batchOptions = matchingClass ? openBatchesForClass(matchingClass, topics || []) : ["Batch 1"];
           const currentBatch = (trackBatch && trackBatch[track]) || "Batch 1";
+          // Every batch for this track's class has been fully conducted —
+          // there's nowhere valid to put a NEW enrollment. Someone who is
+          // already enrolled (set before the batch finished, or holding a
+          // manual Incomplete/Cancelled status) keeps full control over
+          // their own status here; this only blocks *starting* a fresh
+          // enrollment once nothing is open.
+          const noOpenBatch = !!matchingClass && batchOptions.length === 0;
+          const statusOptions = noOpenBatch && status === "Not Enrolled" ? ["Not Enrolled"] : TRACK_STATUSES;
+          const effectiveBatchOptions = batchOptions.length ? batchOptions : [currentBatch];
           return (
             <div key={track} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
@@ -3489,16 +3498,19 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
                   value={status}
                   onChange={(e) => onChange(track, e.target.value)}
                 >
-                  {TRACK_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
               </label>
+              {noOpenBatch && status === "Not Enrolled" && (
+                <div style={{ fontSize: 11.5, color: "#A6402F" }}>Every session in {track} has already been conducted — no open batch to enroll into.</div>
+              )}
               {status !== "Not Enrolled" && (
                 <select
                   style={{ ...styles.modalInput, marginBottom: 0, fontSize: 13 }}
-                  value={batchOptions.includes(currentBatch) ? currentBatch : batchOptions[0]}
+                  value={effectiveBatchOptions.includes(currentBatch) ? currentBatch : effectiveBatchOptions[0]}
                   onChange={(e) => onBatchChange(track, e.target.value)}
                 >
-                  {batchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
+                  {effectiveBatchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
                 </select>
               )}
             </div>
@@ -3519,14 +3531,24 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
   const [contactNumber, setContactNumber] = useState("");
   const [address, setAddress] = useState("");
   const [notes, setNotes] = useState("");
-  const [trackStatus, setTrackStatus] = useState(() => (initialTrack ? { [initialTrack]: "Enrolled" } : {}));
+  // A leader can land here (via "+ Add Member") already looking at a
+  // specific class/batch — but if that class has no open batch left
+  // (every batch fully conducted), there's nowhere valid to enroll a
+  // brand-new member, so default to "Not Enrolled" instead of silently
+  // enrolling them into a finished batch.
+  const initialOpenBatches = useMemo(() => {
+    if (!initialTrack) return null;
+    const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === initialTrack);
+    return matchingClass ? openBatchesForClass(matchingClass, topics) : null;
+  }, [initialTrack]);
+  const initialTrackHasOpenBatch = !initialOpenBatches || initialOpenBatches.length > 0;
+  const [trackStatus, setTrackStatus] = useState(() => (initialTrack && initialTrackHasOpenBatch ? { [initialTrack]: "Enrolled" } : {}));
   const [trackBatch, setTrackBatch] = useState(() => {
-    if (!initialTrack || !initialBatch) return {};
+    if (!initialTrack || !initialBatch || !initialTrackHasOpenBatch) return {};
     // Don't default into a batch that's already complete (e.g. the
     // leader had a finished batch selected when they hit "+ Add
     // Member") — fall back to the first still-open batch instead.
-    const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === initialTrack);
-    const allowed = matchingClass ? openBatchesForClass(matchingClass, topics) : null;
+    const allowed = initialOpenBatches;
     const batch = allowed && !allowed.includes(initialBatch) ? allowed[0] : initialBatch;
     return { [initialTrack]: batch };
   });
