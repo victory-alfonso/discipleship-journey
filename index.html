@@ -750,6 +750,30 @@ function nextSessionForBatch(classItem, topics, batch) {
   const ts = sortTopicsForDisplay(topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === batch));
   return ts.find((t) => !t.conducted) || null;
 }
+// True for the single ONE2ONE class (same name match findOneOnOneClass
+// uses) — its Classes-tab card shows batch completion counts instead
+// of a "next session" line, since ONE2ONE progress is tracked per
+// member rather than as a group session schedule.
+function isOneOnOneClassName(name) {
+  return (name || "").toLowerCase().replace(/[^a-z0-9]/g, "").startsWith("one2one");
+}
+// A member's own batch's sessions for a class — same rule
+// getEnrolledTopics uses: a class matching a Discipleship Track only
+// counts that member's own batch's sessions; a custom class with no
+// track counts all of them.
+function memberBatchTopics(classItem, topics, member, track) {
+  const ts = topicsForClass(topics, classItem.name);
+  if (!track) return ts;
+  const memberBatch = (member && member.trackBatch && member.trackBatch[track]) || "Batch 1";
+  return ts.filter((t) => topicBatch(t) === memberBatch);
+}
+function memberClassPct(classItem, topics, attendanceByMember, member, track) {
+  const ts = memberBatchTopics(classItem, topics, member, track);
+  if (ts.length === 0) return 0;
+  const att = attendanceByMember[member.id] || {};
+  const done = ts.filter((t) => att[t.id] && att[t.id].attended).length;
+  return Math.round((done / ts.length) * 100);
+}
 
 // Natural sort so "Session 2" lands before "Session 10" — topic
 // order from the data source isn't always numeric-safe.
@@ -3153,6 +3177,19 @@ function ClassRow({ classItem, topics, members, attendanceByMember, isLeader, on
   // class (no matching track) isn't split by batch, so count everyone.
   const track = trackNameForClass(classItem.name);
   const batchMembers = track ? classMembers.filter((m) => ((m.trackBatch && m.trackBatch[track]) || "Batch 1") === activeBatch) : classMembers;
+  const isOneOnOneClass = isOneOnOneClassName(classItem.name);
+  const pct = classAttendanceRate(classItem.name, topics, classMembers, attendanceByMember);
+  let batchCompletedCount = 0, batchInProgressCount = 0, totalCompletedCount = 0, totalInProgressCount = 0;
+  batchMembers.forEach((m) => {
+    const p = memberClassPct(classItem, topics, attendanceByMember, m, track);
+    if (p >= 100) batchCompletedCount++;
+    else if (p > 0) batchInProgressCount++;
+  });
+  classMembers.forEach((m) => {
+    const p = memberClassPct(classItem, topics, attendanceByMember, m, track);
+    if (p >= 100) totalCompletedCount++;
+    else if (p > 0) totalInProgressCount++;
+  });
   const nextSession = nextSessionForBatch(classItem, topics, activeBatch);
   return (
     <div
@@ -3163,7 +3200,14 @@ function ClassRow({ classItem, topics, members, attendanceByMember, isLeader, on
       <ClassCoverImage classItem={classItem} />
       <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.35) 0%, rgba(20,18,14,0) 32%, rgba(20,18,14,0.88) 100%)" }} />
       <div style={{ position: "absolute", top: 10, left: 10, right: 10, display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6 }}>
-        <span style={{ ...styles.statusBadge, background: badge.background, color: badge.color, border: "none" }}>{batchComplete ? "✓ " : ""}{activeBatch}</span>
+        {isOneOnOneClass ? (
+          <span style={{ ...styles.statusBadge, background: badge.background, color: badge.color, border: "none" }}>{batchComplete ? "✓ " : ""}{activeBatch}</span>
+        ) : (
+          <div style={{ ...styles.statusBadge, background: badge.background, color: badge.color, border: "none", display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 2, textTransform: "none", letterSpacing: 0, padding: "6px 10px" }}>
+            <span style={{ fontWeight: 700 }}>{batchComplete ? "✓ " : ""}{activeBatch} - {batchMembers.length} member{batchMembers.length === 1 ? "" : "s"}</span>
+            <span style={{ fontWeight: 600, fontSize: 9.5, opacity: 0.9 }}>{nextSession ? `Next: ${nextSession.name}` : (batchTs.length ? "All sessions conducted" : "No sessions yet")}</span>
+          </div>
+        )}
         {reorderMode ? (
           <span style={{ ...styles.statusBadge, background: "rgba(20,18,14,0.65)", color: "#F5F2E4", border: "none", fontSize: 12 }}>#{position}</span>
         ) : isLeader && (
@@ -3199,8 +3243,17 @@ function ClassRow({ classItem, topics, members, attendanceByMember, isLeader, on
         <div style={{ height: 4, borderRadius: 20, background: "rgba(255,255,255,0.25)", marginTop: 9, overflow: "hidden" }}>
           <div style={{ width: `${Math.max(0, Math.min(100, batchPct))}%`, height: "100%", background: "#E5A430" }} />
         </div>
-        <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 4 }}>{activeBatch} · {batchMembers.length} member{batchMembers.length === 1 ? "" : "s"}</div>
-        <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 2 }}>{nextSession ? `Next: ${nextSession.name}` : (batchTs.length ? "All sessions conducted" : "No sessions yet")}</div>
+        {isOneOnOneClass ? (
+          <>
+            <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 4 }}>{activeBatch} - {batchCompletedCount} Completed - {batchInProgressCount} In progress</div>
+            <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 2 }}>{totalCompletedCount} Completed - {totalInProgressCount} In progress</div>
+          </>
+        ) : (
+          <>
+            <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 4 }}>{pct}% overall attendance</div>
+            <div style={{ fontSize: 11, color: "rgba(245,242,228,0.75)", marginTop: 2 }}>{totalCompletedCount} Completed - {totalInProgressCount} In progress</div>
+          </>
+        )}
       </div>
     </div>
   );
