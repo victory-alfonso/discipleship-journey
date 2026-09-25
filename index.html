@@ -4993,9 +4993,9 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
                     value={moveTarget}
                     onChange={(e) => setMoveTarget(e.target.value)}
                   >
-                    <option value="">Select leader…</option>
+                    <option value="" style={{ color: "#23211D", background: "#FFFFFF" }}>Select leader…</option>
                     {moveChoices.map((l) => (
-                      <option key={l.id} value={l.id}>{l.name ? `${l.name} (${l.id})` : l.id}</option>
+                      <option key={l.id} value={l.id} style={{ color: "#23211D", background: "#FFFFFF" }}>{l.name ? `${l.name} (${l.id})` : l.id}</option>
                     ))}
                   </select>
                   <button
