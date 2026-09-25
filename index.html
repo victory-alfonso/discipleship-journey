@@ -1996,6 +1996,14 @@ function memberQrText(memberId) {
   return `DJMEMBER:${memberId}`;
 }
 
+// ONE2ONE members get their own QR scheme, keyed to their oneOnOne doc
+// id rather than a Disciples memberId — this lets the code work the
+// moment someone registers (see register.html), before any Leader/
+// Manager has approved them into Disciples.
+function oneOnOneQrText(oneOnOneId) {
+  return `DJONE2ONE:${oneOnOneId}`;
+}
+
 function QrCode({ text, size = 220 }) {
   const boxRef = useRef(null);
   const qrRef = useRef(null);
@@ -2067,6 +2075,66 @@ function MemberQrModal({ member, onClose }) {
         </div>
         <div style={{ ...styles.pairNote, textAlign: "center" }}>
           Since members don't have accounts, send or print this QR code for them — they'll show it to the leader at every class.
+        </div>
+        <div style={{ ...styles.modalActions, justifyContent: "center" }} className="no-print">
+          <button style={styles.modalCancelBtn} onClick={shareQr} disabled={shareState === "sharing"}>
+            {shareState === "sharing" ? "Opening…" : "Send to member"}
+          </button>
+          <button style={styles.modalCancelBtn} onClick={() => window.print()}>Print</button>
+          <button style={styles.modalConfirmBtn} onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Same idea as MemberQrModal, but for a ONE2ONE person — the QR
+// encodes their oneOnOne doc id (see oneOnOneQrText) so it works
+// whether or not they've been approved into Disciples yet.
+function OneOnOneQrModal({ person, onClose, title, intro }) {
+  const qrWrapRef = useRef(null);
+  const [shareState, setShareState] = useState("idle"); // idle | sharing | unsupported
+
+  function getCanvas() {
+    return qrWrapRef.current ? qrWrapRef.current.querySelector("canvas") : null;
+  }
+
+  async function shareQr() {
+    const canvas = getCanvas();
+    if (!canvas) return;
+    canvas.toBlob(async (blob) => {
+      if (!blob) return;
+      const file = new File([blob], `${person.name}-QR.png`, { type: "image/png" });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        setShareState("sharing");
+        try {
+          await navigator.share({ files: [file], title: `${person.name} — ONE2ONE Attendance QR` });
+        } catch (err) {
+          // user cancelled — no-op
+        } finally {
+          setShareState("idle");
+        }
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${person.name}-QR.png`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    }, "image/png");
+  }
+
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>{title || `ONE2ONE Attendance QR — ${person.name}`}</div>
+        <div className="qr-print-area" style={{ textAlign: "center", padding: "6px 0 14px" }} ref={qrWrapRef}>
+          <QrCode text={oneOnOneQrText(person.id)} size={220} />
+          <div style={{ marginTop: 10, fontWeight: 700, color: "#23211D" }}>{person.name}</div>
+        </div>
+        <div style={{ ...styles.pairNote, textAlign: "center" }}>
+          {intro || "Send or print this QR code — the leader scans it each session to mark attendance. It works even while approval is still pending."}
         </div>
         <div style={{ ...styles.modalActions, justifyContent: "center" }} className="no-print">
           <button style={styles.modalCancelBtn} onClick={shareQr} disabled={shareState === "sharing"}>
@@ -2372,6 +2440,250 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
         >
           {status.text}
         </div>
+        <div style={{ ...styles.modalActions, justifyContent: "center" }}>
+          <button style={styles.modalConfirmBtn} onClick={onClose}>Done / Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// A ONE2ONE leader's own scanner (ONE2ONE tab → their profile → "Scan
+// Attendance"). Same camera/QR-reading approach as ScanAttendanceModal,
+// but reads the "DJONE2ONE:<id>" codes register.html hands out and
+// only recognizes people in "people" — i.e. only members under this
+// leader (or, when a Leader/Manager opens it from someone else's
+// profile, only that leader's people) — so a code from a different
+// leader's roster doesn't silently get scanned against the wrong
+// tracker. A session must be picked first since attendance here is
+// tracked per ONE2ONE session, not per member.
+function ScanOneOnOneAttendanceModal({ sessions, people, attendanceByMember, onToggleSession, onClose }) {
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const rafRef = useRef(null);
+  const lastScanRef = useRef({ id: null, at: 0 });
+  const [topicId, setTopicId] = useState(sessions[0] ? sessions[0].id : "");
+  const [status, setStatus] = useState({ type: "idle", text: "Point the camera at the member's QR code." });
+  const [error, setError] = useState("");
+  const [toast, setToast] = useState(null);
+  const [toastLeaving, setToastLeaving] = useState(false);
+  const toastTimerRef = useRef(null);
+  const toastLeaveTimerRef = useRef(null);
+
+  const peopleById = useMemo(() => {
+    const map = {};
+    people.forEach((p) => { map[p.id] = p; });
+    return map;
+  }, [people]);
+  const topic = sessions.find((t) => t.id === topicId) || null;
+
+  useEffect(() => {
+    document.body.classList.add("dj-scanning");
+    return () => document.body.classList.remove("dj-scanning");
+  }, []);
+
+  function cameraErrorMessage(err) {
+    if (err && err.name === "NotAllowedError") {
+      return "Camera access was blocked. Allow camera access for this site in your browser settings, then try again.";
+    }
+    if (err && (err.name === "NotFoundError" || err.name === "OverconstrainedError")) {
+      return "No camera was found on this device. You can still mark attendance from the member's detail view instead.";
+    }
+    if (err && err.name === "NotReadableError") {
+      return "The camera is already in use by another app. Close it and try again.";
+    }
+    return "Unable to access the camera. " + ((err && err.message) || "Please try again.");
+  }
+
+  const cancelledRef = useRef(false);
+  const startCamera = useCallback(async () => {
+    setError("");
+    if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+    if (streamRef.current) { streamRef.current.getTracks().forEach((t) => t.stop()); streamRef.current = null; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+      if (cancelledRef.current) { stream.getTracks().forEach((t) => t.stop()); return; }
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+      }
+      tick();
+    } catch (err) {
+      if (!cancelledRef.current) setError(cameraErrorMessage(err));
+    }
+  }, []);
+
+  function tick() {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || typeof jsQR === "undefined") {
+      rafRef.current = requestAnimationFrame(tick);
+      return;
+    }
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height);
+      if (code && code.data) {
+        handleScan(code.data);
+      }
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }
+
+  useEffect(() => {
+    cancelledRef.current = false;
+    startCamera();
+    return () => {
+      cancelledRef.current = true;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function playSuccessBeep() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const notes = [
+        { freq: 1108.73, start: 0, dur: 0.11 },
+        { freq: 1479.98, start: 0.09, dur: 0.16 },
+      ];
+      notes.forEach(({ freq, start, dur }) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.value = freq;
+        const t0 = ctx.currentTime + start;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.55, t0 + 0.015);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + dur + 0.02);
+      });
+      setTimeout(() => ctx.close(), 400);
+    } catch (e) {
+      // Web Audio not available — fail silently.
+    }
+  }
+
+  function showSuccessToast(text) {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    if (toastLeaveTimerRef.current) clearTimeout(toastLeaveTimerRef.current);
+    setToastLeaving(false);
+    setToast(text);
+    toastTimerRef.current = setTimeout(() => {
+      setToastLeaving(true);
+      toastLeaveTimerRef.current = setTimeout(() => {
+        setToast(null);
+        setToastLeaving(false);
+      }, 220);
+    }, 1800);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+      if (toastLeaveTimerRef.current) clearTimeout(toastLeaveTimerRef.current);
+    };
+  }, []);
+
+  function handleScan(text) {
+    if (!text.startsWith("DJONE2ONE:")) return;
+    if (!topic) return;
+    const personId = text.slice("DJONE2ONE:".length);
+    const now = Date.now();
+    if (lastScanRef.current.id === personId && now - lastScanRef.current.at < 3000) return;
+    lastScanRef.current = { id: personId, at: now };
+
+    const person = peopleById[personId];
+    if (!person) {
+      setStatus({ type: "error", text: "Unrecognized QR code. This isn't one of your ONE2ONE members." });
+      return;
+    }
+    const scannedAt = new Date();
+    const already = isOneOnOneSessionDone(person, topic, attendanceByMember);
+    onToggleSession(person, topic.id, true);
+    setStatus({
+      type: "ok",
+      text: already
+        ? `${person.name} — already marked present, ${fmtDateTime(scannedAt)}.`
+        : `${person.name} — marked present, ${fmtDateTime(scannedAt)}.`,
+    });
+    if (navigator.vibrate) navigator.vibrate(120);
+    playSuccessBeep();
+    showSuccessToast(
+      already
+        ? `${person.name} was already marked present.`
+        : `${person.name} has been marked present.`
+    );
+  }
+
+  return (
+    <div style={styles.modalOverlay} onClick={onClose}>
+      <div style={{ ...styles.modalCard, maxWidth: 420 }} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>Scan ONE2ONE Attendance</div>
+        {sessions.length === 0 ? (
+          <div style={styles.pairNote}>No ONE2ONE sessions yet — add them to the ONE2ONE class in the Classes tab first.</div>
+        ) : (
+          <select style={{ ...styles.modalInput, marginBottom: 12 }} value={topicId} onChange={(e) => setTopicId(e.target.value)}>
+            {sessions.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+          </select>
+        )}
+        {sessions.length > 0 && (error ? (
+          <div>
+            <div style={styles.authError}>{error}</div>
+            <div style={{ ...styles.modalActions, justifyContent: "center", marginTop: 0 }}>
+              <button type="button" style={styles.modalConfirmBtn} onClick={startCamera}>Try Again</button>
+            </div>
+          </div>
+        ) : (
+          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000" }}>
+            <video ref={videoRef} playsInline muted style={{ width: "100%", display: "block" }} />
+            <canvas ref={canvasRef} style={{ display: "none" }} />
+            {toast && (
+              <div
+                className={`dj-ios-toast${toastLeaving ? " dj-toast-leaving" : ""}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  position: "absolute", top: "50%", left: "50%", zIndex: 20, width: "min(88%, 340px)",
+                  display: "flex", alignItems: "center", gap: 12, padding: "16px 18px", borderRadius: 18,
+                  background: "rgba(28,28,30,0.92)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)",
+                  boxShadow: "0 10px 30px rgba(0,0,0,0.4), 0 1px 0 rgba(255,255,255,0.06) inset",
+                }}
+              >
+                <div style={{ flex: "0 0 auto", width: 36, height: 36, borderRadius: "50%", background: "#34C759", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 12.5L9.5 18L20 6" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ color: "#fff", fontSize: 17, fontWeight: 800, letterSpacing: 0.1 }}>Attendance Marked</div>
+                  <div style={{ color: "rgba(255,255,255,0.9)", fontSize: 14.5, fontWeight: 600, lineHeight: 1.3 }}>{toast}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {sessions.length > 0 && (
+          <div
+            style={{
+              marginTop: 12, padding: "10px 12px", borderRadius: 8, fontSize: 13.5, fontWeight: 600, textAlign: "center",
+              background: status.type === "ok" ? "#DCE7D4" : status.type === "error" ? "#F3E4DF" : "#F6F1E4",
+              color: status.type === "ok" ? "#385026" : status.type === "error" ? "#A6402F" : "#7A6E4E",
+            }}
+          >
+            {status.text}
+          </div>
+        )}
         <div style={{ ...styles.modalActions, justifyContent: "center" }}>
           <button style={styles.modalConfirmBtn} onClick={onClose}>Done / Close</button>
         </div>
@@ -3990,7 +4302,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
           </div>
 
           <div style={{ padding: "18px 20px 22px", color: "#F5F2E4" }}>
-            {isLeader && (
+            {isLeader && !isOneOnOneClassName(classItem.name) && (
               <div style={{ marginBottom: 18 }}>
                 <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} />
               </div>
@@ -4272,7 +4584,7 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
             {ts.length} session{ts.length === 1 ? "" : "s"} · {classMembers.length} member{classMembers.length === 1 ? "" : "s"}
           </div>
         </div>
-        {isLeader && <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} />}
+        {isLeader && !isOneOnOneClassName(classItem.name) && <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} />}
       </div>
 
       {(batches.length > 1 || isLeader) && (
@@ -4717,8 +5029,16 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
 // with "ONE2ONE") is the single source of truth for sessions: every
 // person added here automatically gets that class's sessions, and
 // their own progress is stored on their doc as progress[topicId].
+// Any class whose name starts with "ONE2ONE" (once punctuation/spacing
+// is stripped) is treated as the ONE2ONE class — used both to find that
+// class and to hide the public self-registration link on it (ONE2ONE
+// members are added by leaders in the ONE2ONE tab instead; see
+// addOneOnOnePerson and the QR handoff that follows it).
+function isOneOnOneClassName(name) {
+  return (name || "").toLowerCase().replace(/[^a-z0-9]/g, "").startsWith("one2one");
+}
 function findOneOnOneClass(classes) {
-  return classes.find((c) => (c.name || "").toLowerCase().replace(/[^a-z0-9]/g, "").startsWith("one2one")) || null;
+  return classes.find((c) => isOneOnOneClassName(c.name)) || null;
 }
 function oneOnOneClassSessions(classItem, topics) {
   if (!classItem) return [];
@@ -4855,7 +5175,8 @@ function OneOnOneCard({ person, sessions, attendanceByMember, showAdder, onOpen,
   );
 }
 
-function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onViewProfile }) {
+function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onViewProfile, onToggleSession }) {
+  const [scanOpen, setScanOpen] = useState(false);
   // A ONE2ONE-only leader who hasn't set up their own profile yet (no
   // name/photo on their one2oneLeaders doc) sees a create-profile prompt
   // instead of the member tracker — see updateOneOnOneLeaderProfile's note
@@ -4895,8 +5216,19 @@ function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpe
           {showAll ? "All ONE2ONE members from every ONE2ONE leader." : "Your own ONE2ONE tracker — only people you've added show up here."}
         </div>
         {onViewProfile && <button style={styles.ghostBtn} onClick={onViewProfile}>My Profile</button>}
+        {!showAll && sessions.length > 0 && <button style={styles.ghostBtn} onClick={() => setScanOpen(true)}>Scan Attendance</button>}
         <button style={styles.primaryBtn} onClick={onAdd}>+ Add Member</button>
       </div>
+
+      {scanOpen && (
+        <ScanOneOnOneAttendanceModal
+          sessions={sessions}
+          people={people}
+          attendanceByMember={attendanceByMember}
+          onToggleSession={onToggleSession}
+          onClose={() => setScanOpen(false)}
+        />
+      )}
 
       {people.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
@@ -5006,15 +5338,27 @@ function OneOnOneLeaders({ leaders, onOpenLeader, onEditLeader, onRemoveLeader }
   );
 }
 
-function OneOnOneLeaderProfile({ leader, people, sessions, attendanceByMember, hasClass, onBack, onAdd, onOpen, onEdit, onDelete }) {
+function OneOnOneLeaderProfile({ leader, people, sessions, attendanceByMember, hasClass, onBack, onAdd, onOpen, onEdit, onDelete, onToggleSession }) {
   const displayName = leader.name || leader.id;
+  const [scanOpen, setScanOpen] = useState(false);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="stack-mobile" style={styles.toolbar}>
         <button style={styles.ghostBtn} onClick={onBack}>← Back to leaders</button>
         <div style={{ flex: 1, fontSize: 15, fontWeight: 700, color: "#23211D", alignSelf: "center" }}>{displayName}</div>
+        {sessions.length > 0 && <button style={styles.ghostBtn} onClick={() => setScanOpen(true)}>Scan Attendance</button>}
         <button style={styles.primaryBtn} onClick={onAdd}>+ Add Member</button>
       </div>
+
+      {scanOpen && (
+        <ScanOneOnOneAttendanceModal
+          sessions={sessions}
+          people={people}
+          attendanceByMember={attendanceByMember}
+          onToggleSession={onToggleSession}
+          onClose={() => setScanOpen(false)}
+        />
+      )}
 
       {!hasClass && (
         <div style={styles.emptyNote}>No class named ONE2ONE was found in the Classes tab yet. Once a leader creates it and adds its sessions, those sessions will show up here for every member.</div>
@@ -5080,7 +5424,7 @@ function OneOnOneLeaderFormModal({ title, initialEmail, initialName, initialPhot
 // OneOnOneOwnProfileModal instead, opened on demand via the "My
 // Profile" button (OneOnOne's onViewProfile) — so the grid and Add
 // Member button show up immediately.
-function OneOnOneOwnProfile({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onViewProfile }) {
+function OneOnOneOwnProfile({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onViewProfile, onToggleSession }) {
   return (
     <OneOnOne
       people={people}
@@ -5093,6 +5437,7 @@ function OneOnOneOwnProfile({ people, sessions, attendanceByMember, hasClass, on
       onDelete={onDelete}
       showAll={false}
       onViewProfile={onViewProfile}
+      onToggleSession={onToggleSession}
     />
   );
 }
@@ -5137,6 +5482,7 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
   const moveChoices = (leaderOptions || []).filter((l) => l.id !== currentOwner);
   const [moveTarget, setMoveTarget] = useState("");
   const [moving, setMoving] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const doMove = async () => {
     if (!moveTarget) return;
     setMoving(true);
@@ -5176,6 +5522,13 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
                 This addition was rejected by a Leader/Manager and was not added to Disciples.
               </div>
             )}
+            <button
+              type="button"
+              onClick={() => setQrOpen(true)}
+              style={{ padding: "9px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(245,242,228,0.4)", background: "rgba(245,242,228,0.1)", color: "#F5F2E4", marginBottom: 16 }}
+            >
+              Attendance QR
+            </button>
             <DetailBar pct={pct} />
             <div style={{ ...detailLabel, marginTop: 20 }}>ONE2ONE Sessions</div>
             {sessions.length === 0 ? (
@@ -5231,6 +5584,7 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
           </div>
         </div>
       </div>
+      {qrOpen && <OneOnOneQrModal person={person} onClose={() => setQrOpen(false)} />}
     </div>
   );
 }
@@ -5547,6 +5901,7 @@ function App() {
   const [renamingBatch, setRenamingBatch] = useState(null); // { classId, oldName }
   const [openOneOnOne, setOpenOneOnOne] = useState(null);
   const [addOneOnOneOpen, setAddOneOnOneOpen] = useState(false);
+  const [justAddedOneOnOne, setJustAddedOneOnOne] = useState(null);
   const [editingOneOnOne, setEditingOneOnOne] = useState(null);
   // Which ONE2ONE leader's profile is currently open (Leaders/Managers
   // land on a grid of leader cards first — see OneOnOneLeaders — and
@@ -5910,7 +6265,13 @@ function App() {
   const addOneOnOnePerson = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }, createdByOverride) => {
     const personRef = db.collection("oneOnOne").doc();
     return personRef.set({ name, photoUrl: photoUrl || null, birthdate, gender, lifeStage, contactNumber, address, status: "pending", createdBy: createdByOverride || currentEmail, createdAt: new Date(), progress: {} })
-      .then(() => { setAddOneOnOneOpen(false); showNotice("Added to ONE2ONE."); })
+      .then(() => {
+        setAddOneOnOneOpen(false);
+        // Immediately hand the leader this person's attendance QR — no
+        // separate step to remember later. The code (see oneOnOneQrText)
+        // works right away, even before a Leader/Manager approves them.
+        setJustAddedOneOnOne({ id: personRef.id, name, photoUrl: photoUrl || null });
+      })
       .catch((err) => showError("Could not add them. Error: " + err.message));
   };
   const updateOneOnOnePerson = async (id, { name, photoUrl, birthdate, gender, lifeStage, contactNumber, address }) => {
@@ -6613,6 +6974,7 @@ function App() {
             onEditPerson={setEditingOneOnOne}
             onDelete={deleteOneOnOnePerson}
             onViewProfile={() => setViewingOwnProfile(true)}
+            onToggleSession={toggleOneOnOneSession}
           />
         )}
 
@@ -6637,6 +6999,7 @@ function App() {
             onBack={() => setOpenOneOnOneLeaderEmail(null)}
             onEdit={setEditingOneOnOne}
             onDelete={deleteOneOnOnePerson}
+            onToggleSession={toggleOneOnOneSession}
           />
         )}
 
@@ -6717,6 +7080,14 @@ function App() {
           initial={editingOneOnOne}
           onClose={() => setEditingOneOnOne(null)}
           onSave={(data) => updateOneOnOnePerson(editingOneOnOne.id, data)}
+        />
+      )}
+      {justAddedOneOnOne && (
+        <OneOnOneQrModal
+          person={justAddedOneOnOne}
+          title={`Added! Give ${justAddedOneOnOne.name} this QR code`}
+          intro={`Provide this to the member — they'll present it at the start of every session so you (or another leader) can scan it here to mark their attendance.`}
+          onClose={() => setJustAddedOneOnOne(null)}
         />
       )}
       {creatingOwnProfile && (
