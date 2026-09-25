@@ -182,7 +182,9 @@
        line without crowding the title (headerUser is already
        hidden on mobile via .hide-mobile). */
     .dj-header { padding: 12px 14px !important; gap: 8px !important; }
-    .dj-header-title { font-size: 15px !important; letter-spacing: 0.3px !important; }
+    .dj-header-logo { width: 26px !important; height: 26px !important; }
+    .dj-header-line1 { font-size: 10.5px !important; letter-spacing: 0.4px !important; }
+    .dj-header-line2 { font-size: 13px !important; letter-spacing: 0.3px !important; }
     .dj-sign-out { padding: 6px 10px !important; font-size: 12px !important; }
     .dj-nav { padding: 8px 10px !important; gap: 4px !important; }
     .dj-nav .nav-item { padding: 8px 12px !important; font-size: 12.5px !important; }
@@ -7014,7 +7016,13 @@ function App() {
       </div>
       <div style={styles.dashboardBar}>
         <header className="dj-header" style={styles.header}>
-          <div className="dj-header-title" style={styles.headerTitle}>Disciples Journey</div>
+          <div className="dj-header-title" style={styles.headerBrand}>
+            <img src={VICTORY_LOGO_DATA_URI} alt="Victory Alfonso" className="dj-header-logo" style={styles.headerLogo} />
+            <div>
+              <div className="dj-header-line1" style={styles.headerTitleLine1}>Victory Alfonso</div>
+              <div className="dj-header-line2" style={styles.headerTitleLine2}>Disciples Journey</div>
+            </div>
+          </div>
           <div style={styles.headerRight}>
             <span style={styles.headerUser} className="hide-mobile">
               {authUser.displayName || authUser.email}
@@ -7376,6 +7384,10 @@ const styles = {
   dashboardBar: { position: "sticky", top: 0, zIndex: 40, background: "linear-gradient(120deg, rgba(255,255,255,0.88) 0%, rgba(248,243,230,0.84) 45%, rgba(239,231,211,0.8) 100%)", backdropFilter: "blur(20px) saturate(180%)", WebkitBackdropFilter: "blur(20px) saturate(180%)", boxShadow: "0 10px 26px -14px rgba(35,33,29,0.2)" },
   header: { color: "#23211D", padding: "14px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8, borderBottom: "1px solid rgba(31,56,100,0.12)" },
   headerTitle: { fontFamily: "Georgia, serif", fontSize: 19, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: "#1F3864" },
+  headerBrand: { display: "flex", alignItems: "center", gap: 10 },
+  headerLogo: { width: 34, height: 34, objectFit: "contain", flexShrink: 0 },
+  headerTitleLine1: { fontFamily: "Georgia, serif", fontSize: 13, fontWeight: 700, letterSpacing: 0.8, textTransform: "uppercase", color: "#1F3864", lineHeight: 1.25 },
+  headerTitleLine2: { fontFamily: "Georgia, serif", fontSize: 15.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: "#1F3864", lineHeight: 1.25 },
   headerRight: { display: "flex", alignItems: "center", gap: 14 },
   headerUser: { fontSize: 12.5, color: "#7A6E4E", display: "flex", alignItems: "center", gap: 8 },
   roleBadge: { fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, padding: "3px 8px", borderRadius: 20, background: "rgba(31,56,100,0.08)", color: "#1F3864", border: "1px solid rgba(31,56,100,0.2)" },
