@@ -284,6 +284,12 @@
     .dj-modal-body { flex-direction: column !important; align-items: center !important; }
     .dj-modal-ring-col { width: 100% !important; }
     .dj-modal-list { max-height: 46vh !important; }
+    /* Class detail modal: the wide two-column layout (cover/batch/
+       progress on the left, sessions/members on the right) doesn't fit
+       a phone screen, so stack it back into one scrollable column. */
+    .dj-classdetail-body { flex-direction: column !important; overflow-y: auto !important; }
+    .dj-classdetail-left { width: 100% !important; overflow-y: visible !important; flex-shrink: 1 !important; }
+    .dj-classdetail-right { border-left: none !important; border-top: 1px solid rgba(255,255,255,0.12) !important; overflow-y: visible !important; }
 
     /* Header: tighten up title + let the sign-out row keep its own
        line without crowding the title (headerUser is already
@@ -4531,7 +4537,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   return (
     <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
       <div
-        style={{ position: "relative", width: "100%", maxWidth: 520, maxHeight: "90vh", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
+        style={{ position: "relative", width: "100%", maxWidth: 900, maxHeight: "84vh", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
         onClick={(e) => e.stopPropagation()}
       >
         <button type="button" onClick={onClose} style={{ ...roundBtn, right: 12 }} aria-label="Close">×</button>
@@ -4539,19 +4545,20 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
           <button type="button" onClick={() => onEditClass(classItem)} style={{ ...roundBtn, right: 52, fontSize: 14 }} aria-label="Edit class" title="Edit class">✎</button>
         )}
 
-        <div style={{ overflowY: "auto", flex: 1 }}>
-          <div style={{ position: "relative", height: 180, background: "#23211D" }}>
-            <ClassCoverImage classItem={classItem} />
-            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(31,56,100,0.55) 60%, rgba(31,56,100,0.98) 100%)" }} />
-            <div style={{ position: "absolute", left: 20, right: 20, bottom: 14 }}>
-              <div style={{ fontFamily: "Georgia, serif", fontSize: 23, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.15 }}>{classItem.name}</div>
-              <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.8)", marginTop: 4 }}>
-                {ts.length} session{ts.length === 1 ? "" : "s"} · {classMembers.length} member{classMembers.length === 1 ? "" : "s"} · {pct}% overall attendance
+        <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
+          <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto" }}>
+            <div style={{ position: "relative", height: 150, background: "#23211D" }}>
+              <ClassCoverImage classItem={classItem} />
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(31,56,100,0.55) 60%, rgba(31,56,100,0.98) 100%)" }} />
+              <div style={{ position: "absolute", left: 20, right: 20, bottom: 14 }}>
+                <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.15 }}>{classItem.name}</div>
+                <div style={{ fontSize: 12, color: "rgba(245,242,228,0.8)", marginTop: 4 }}>
+                  {ts.length} session{ts.length === 1 ? "" : "s"} · {classMembers.length} member{classMembers.length === 1 ? "" : "s"} · {pct}% overall attendance
+                </div>
               </div>
             </div>
-          </div>
 
-          <div style={{ padding: "18px 20px 22px", color: "#F5F2E4" }}>
+            <div style={{ padding: "18px 18px 22px", color: "#F5F2E4" }}>
             {isLeader && !isOneOnOneClassName(classItem.name) && (
               <div style={{ marginBottom: 18 }}>
                 <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} />
@@ -4611,8 +4618,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 20 }}>No data yet — add sessions and members to see progress.</div>
             ) : (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, flexWrap: "wrap", marginBottom: 22 }}>
-                <DemographicsRing segments={segments} total={total} size={170} dark centerLabel={total} centerSub="Members" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 9, minWidth: 150 }}>
+                <DemographicsRing segments={segments} total={total} size={140} dark centerLabel={total} centerSub="Members" />
+                <div style={{ display: "flex", flexDirection: "column", gap: 9, minWidth: 130 }}>
                   {segments.map((sg) => (
                     <div key={sg.label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
                       <span style={{ width: 10, height: 10, borderRadius: "50%", background: sg.color, flexShrink: 0 }} />
@@ -4624,7 +4631,10 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                 </div>
               </div>
             )}
+            </div>
+          </div>
 
+          <div className="dj-classdetail-right" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "18px 20px 22px", color: "#F5F2E4", borderLeft: "1px solid rgba(255,255,255,0.12)" }}>
             <div style={detailLabel}>
               Sessions ({ts.length}) · {activeBatch}
               {batchComplete && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: "#8FCB74" }}>✓ Batch complete</span>}
