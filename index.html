@@ -4543,6 +4543,12 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   // track has no such label yet, so its member list isn't filtered by
   // batch — only its sessions are.
   const track = trackNameForClass(classItem.name);
+  // ONE2ONE's own tab already tracks each session's conducted state per
+  // person (see ScanOneOnOneAttendanceModal / toggleOneOnOneSession) —
+  // showing the class-level "Mark Conducted" toggle here too would be a
+  // second, redundant place to flip the same idea, and ONE2ONE never
+  // really finishes a batch the way the other classes do.
+  const isOneOnOne = isOneOnOneClassName(classItem.name);
   const ts = useMemo(
     () => sortTopicsForDisplay(topicsForClass(topics, classItem.name)).filter((t) => topicBatch(t) === activeBatch),
     [topics, classItem.name, activeBatch]
@@ -4712,7 +4718,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                         <DetailBar pct={tpct} />
                       </div>
                       <span style={{ fontSize: 12.5, fontWeight: 700, color: "#E5C77A" }}>{tpct}%</span>
-                      {isLeader ? (
+                      {!isOneOnOne && (isLeader ? (
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); onToggleConducted(t.id, !t.conducted); }}
@@ -4728,7 +4734,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                         </button>
                       ) : (
                         t.conducted && <span style={{ fontSize: 10.5, fontWeight: 700, color: "#8FCB74", flexShrink: 0 }}>✓ Conducted</span>
-                      )}
+                      ))}
                       {isLeader && (
                         <button style={styles.iconEdit} onClick={(e) => { e.stopPropagation(); onEditTopic(t); }} title="Edit session name">✎</button>
                       )}
