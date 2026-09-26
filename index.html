@@ -3353,7 +3353,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
     <>
       <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onBack}>
         <div
-          style={{ position: "relative", width: "100%", maxWidth: 560, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: dj.card.background, border: dj.card.border, borderRadius: 26, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.6)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
+          style={{ position: "relative", width: "100%", maxWidth: 900, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: dj.card.background, border: dj.card.border, borderRadius: 26, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.6)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -3364,163 +3364,163 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
           >
             ×
           </button>
-          <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
-      <div style={{ ...dj.card, borderRadius: 0, border: "none", boxShadow: "none", background: "transparent" }}>
-        <div style={{ ...dj.headerRow, paddingRight: 34 }}>
-          <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-            {member.photoUrl ? (
-              <img
-                src={member.photoUrl}
-                alt={member.name || ""}
-                style={{ width: 68, height: 68, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid rgba(255,255,255,0.12)" }}
-              />
-            ) : (
-              <div style={dj.avatarWrap}>
-                <span style={dj.avatarInitials}>{initials(member.name)}</span>
-              </div>
-            )}
-            <div>
-              <h2 style={dj.name}>{member.name}</h2>
-              <div style={dj.meta}>
-                {(() => {
-                  const pAge = ageFromBirthdate(member.birthdate);
-                  return [pAge ? `Age ${pAge}` : null, member.gender || null, member.lifeStage || null, member.category || null].filter(Boolean).join(" · ") || "No details";
-                })()}
-              </div>
-              {member.notes && <div style={dj.notes}>{member.notes}</div>}
-            </div>
-          </div>
-          <div style={dj.actionsRow}>
-            <button style={dj.ghostBtnDark} onClick={() => setQrOpen(true)}>QR</button>
-            {isLeader && (
-              <>
-                <button style={dj.ghostBtnDark} onClick={onEdit}>Edit</button>
-                <button style={dj.dangerLinkDark} onClick={async () => { if (await askConfirm({ title: "Remove member?", message: `${member.name} and their attendance records will be removed. This can't be undone.`, confirmLabel: "Remove", danger: true })) onDeleteMember(member.id); }}>Remove</button>
-              </>
-            )}
-          </div>
-        </div>
 
-        <div style={dj.sectionLabel}>Classes</div>
-        {classes.length === 0 && <div style={{ ...styles.emptyNote, color: "#7A8299" }}>No classes have been set up yet.</div>}
-        {classes.length > 0 && enrolledClasses.length === 0 && (
-          <div style={{ ...styles.emptyNote, color: "#7A8299" }}>Not enrolled in any class yet. Edit this member to add them to one.</div>
-        )}
-        <div style={dj.classGrid}>
-          {enrolledClasses.map((c) => {
-            const track = trackNameForClass(c.name);
-            const memberBatch = track ? ((member.trackBatch && member.trackBatch[track]) || "Batch 1") : null;
-            const ts = memberBatch
-              ? topicsForClass(topics, c.name).filter((t) => topicBatch(t) === memberBatch)
-              : topicsForClass(topics, c.name);
-            const sessions = ts.map((t) => ({ id: t.id, attended: !!(att[t.id] && att[t.id].attended) }));
-            const isActive = activeClassId === c.id;
-            return (
-              <div
-                key={c.id}
-                className="card-row"
-                style={{
-                  ...dj.classTile,
-                  background: isActive ? "rgba(255,255,255,0.08)" : dj.classTile.background,
-                }}
-                onClick={() => toggleClassOpen(c.id)}
-              >
-                <SessionRing sessions={sessions} size={104} dark />
-                <div style={dj.className}>{c.name}</div>
-                <div style={dj.classSessions}>{ts.length} session{ts.length === 1 ? "" : "s"}</div>
-                <div style={{ marginTop: 8 }}>
-                  <TrackStatusCell status={(member.classStatus && member.classStatus[c.id]) || "Enrolled"} dark />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div style={dj.tile}>
-          <div style={dj.sectionLabel}>Overall Attendance</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <DonutChart pct={overallPct} size={72} stroke={9} dark />
-            <div style={{ fontSize: 12.5, color: "#8B93A7" }}>{overallPct}% of enrolled classes' topics attended</div>
-          </div>
-        </div>
-
-        {(member.contactNumber || member.address) && (
-          <div style={dj.tile}>
-            <div style={dj.sectionLabel}>Contact</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {member.contactNumber && (
-                <a href={`tel:${member.contactNumber}`} style={{ ...dj.contactRow, textDecoration: "none" }}>
-                  <span style={dj.contactCheckbox} />
-                  {member.contactNumber}
-                </a>
-              )}
-              {member.address && (
-                <div style={dj.contactRow}>
-                  <span style={dj.contactCheckbox} />
-                  {member.address}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {historyByClass.length > 0 && (
-          <div style={dj.tile}>
-            <div style={dj.sectionHeaderRow} onClick={() => setHistorySectionOpen((v) => !v)}>
-              <div style={dj.sectionLabel}>Attendance History</div>
-              <span style={{ ...dj.chevron, ...(historySectionOpen ? dj.chevronOpen : {}) }}>▸</span>
-            </div>
-            {historySectionOpen && historyByClass.map((g, gi) => {
-              const isOpen = !!expandedHistoryClasses[g.classInfo.id];
-              return (
-                <div key={g.classInfo.id} style={{ ...dj.missingGroup, marginBottom: gi === historyByClass.length - 1 ? 0 : 16 }}>
-                  <div style={dj.groupHeaderRow} onClick={() => toggleHistoryClass(g.classInfo.id)}>
-                    <span style={dj.groupTitle}>{g.classInfo.name}</span>
-                    <span style={dj.badge}>{g.items.length} attended</span>
+          <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
+            <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto", padding: "30px 22px 22px" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+                {member.photoUrl ? (
+                  <img
+                    src={member.photoUrl}
+                    alt={member.name || ""}
+                    style={{ width: 92, height: 92, borderRadius: "50%", objectFit: "cover", flexShrink: 0, border: "1px solid rgba(255,255,255,0.12)" }}
+                  />
+                ) : (
+                  <div style={{ ...dj.avatarWrap, width: 92, height: 92 }}>
+                    <span style={{ ...dj.avatarInitials, fontSize: 28 }}>{initials(member.name)}</span>
                   </div>
-                  {isOpen && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {g.items.map((h) => (
-                        <div key={h.topic.id} style={dj.historyRow}>
-                          <span>{h.topic.name}</span>
-                          <span style={dj.historyDate}>{fmtDateTime(h.dateAttended)}</span>
+                )}
+                <h2 style={{ ...dj.name, fontSize: 20, marginTop: 14 }}>{member.name}</h2>
+                <div style={{ ...dj.meta, marginTop: 4 }}>
+                  {(() => {
+                    const pAge = ageFromBirthdate(member.birthdate);
+                    return [pAge ? `Age ${pAge}` : null, member.gender || null, member.lifeStage || null, member.category || null].filter(Boolean).join(" · ") || "No details";
+                  })()}
+                </div>
+                {member.notes && <div style={{ ...dj.notes, marginTop: 4 }}>{member.notes}</div>}
+              </div>
+
+              <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", marginTop: 18 }}>
+                <button style={dj.ghostBtnDark} onClick={() => setQrOpen(true)}>QR</button>
+                {isLeader && (
+                  <>
+                    <button style={dj.ghostBtnDark} onClick={onEdit}>Edit</button>
+                    <button style={dj.dangerLinkDark} onClick={async () => { if (await askConfirm({ title: "Remove member?", message: `${member.name} and their attendance records will be removed. This can't be undone.`, confirmLabel: "Remove", danger: true })) onDeleteMember(member.id); }}>Remove</button>
+                  </>
+                )}
+              </div>
+
+              <div style={{ ...dj.tile, marginTop: 22, marginBottom: 0 }}>
+                <div style={dj.sectionLabel}>Overall Attendance</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <DonutChart pct={overallPct} size={64} stroke={8} dark />
+                  <div style={{ fontSize: 12, color: "#8B93A7" }}>{overallPct}% of enrolled classes' topics attended</div>
+                </div>
+              </div>
+
+              {(member.contactNumber || member.address) && (
+                <div style={{ ...dj.tile, marginTop: 16, marginBottom: 0 }}>
+                  <div style={dj.sectionLabel}>Contact</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {member.contactNumber && (
+                      <a href={`tel:${member.contactNumber}`} style={{ ...dj.contactRow, textDecoration: "none", fontSize: 13.5 }}>
+                        <span style={dj.contactCheckbox} />
+                        {member.contactNumber}
+                      </a>
+                    )}
+                    {member.address && (
+                      <div style={{ ...dj.contactRow, fontSize: 13.5 }}>
+                        <span style={dj.contactCheckbox} />
+                        {member.address}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="dj-classdetail-right" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "26px 24px 22px", borderLeft: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={dj.sectionLabel}>Classes</div>
+              {classes.length === 0 && <div style={{ ...styles.emptyNote, color: "#7A8299" }}>No classes have been set up yet.</div>}
+              {classes.length > 0 && enrolledClasses.length === 0 && (
+                <div style={{ ...styles.emptyNote, color: "#7A8299" }}>Not enrolled in any class yet. Edit this member to add them to one.</div>
+              )}
+              <div style={dj.classGrid}>
+                {enrolledClasses.map((c) => {
+                  const track = trackNameForClass(c.name);
+                  const memberBatch = track ? ((member.trackBatch && member.trackBatch[track]) || "Batch 1") : null;
+                  const ts = memberBatch
+                    ? topicsForClass(topics, c.name).filter((t) => topicBatch(t) === memberBatch)
+                    : topicsForClass(topics, c.name);
+                  const sessions = ts.map((t) => ({ id: t.id, attended: !!(att[t.id] && att[t.id].attended) }));
+                  const isActive = activeClassId === c.id;
+                  return (
+                    <div
+                      key={c.id}
+                      className="card-row"
+                      style={{
+                        ...dj.classTile,
+                        background: isActive ? "rgba(255,255,255,0.08)" : dj.classTile.background,
+                      }}
+                      onClick={() => toggleClassOpen(c.id)}
+                    >
+                      <SessionRing sessions={sessions} size={104} dark />
+                      <div style={dj.className}>{c.name}</div>
+                      <div style={dj.classSessions}>{ts.length} session{ts.length === 1 ? "" : "s"}</div>
+                      <div style={{ marginTop: 8 }}>
+                        <TrackStatusCell status={(member.classStatus && member.classStatus[c.id]) || "Enrolled"} dark />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {historyByClass.length > 0 && (
+                <div style={dj.tile}>
+                  <div style={dj.sectionHeaderRow} onClick={() => setHistorySectionOpen((v) => !v)}>
+                    <div style={dj.sectionLabel}>Attendance History</div>
+                    <span style={{ ...dj.chevron, ...(historySectionOpen ? dj.chevronOpen : {}) }}>▸</span>
+                  </div>
+                  {historySectionOpen && historyByClass.map((g, gi) => {
+                    const isOpen = !!expandedHistoryClasses[g.classInfo.id];
+                    return (
+                      <div key={g.classInfo.id} style={{ ...dj.missingGroup, marginBottom: gi === historyByClass.length - 1 ? 0 : 16 }}>
+                        <div style={dj.groupHeaderRow} onClick={() => toggleHistoryClass(g.classInfo.id)}>
+                          <span style={dj.groupTitle}>{g.classInfo.name}</span>
+                          <span style={dj.badge}>{g.items.length} attended</span>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                        {isOpen && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                            {g.items.map((h) => (
+                              <div key={h.topic.id} style={dj.historyRow}>
+                                <span>{h.topic.name}</span>
+                                <span style={dj.historyDate}>{fmtDateTime(h.dateAttended)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              )}
 
-        {missingByClass.length > 0 && (
-          <div style={{ ...dj.tile, marginBottom: 0 }}>
-            <div style={dj.sectionHeaderRow} onClick={() => setMissingSectionOpen((v) => !v)}>
-              <div style={dj.sectionLabel}>Not Yet Attended</div>
-              <span style={{ ...dj.chevron, ...(missingSectionOpen ? dj.chevronOpen : {}) }}>▸</span>
-            </div>
-            {missingSectionOpen && missingByClass.map((g, gi) => {
-              const isOpen = !!expandedMissingClasses[g.classInfo.id];
-              return (
-                <div key={g.classInfo.id} style={{ ...dj.missingGroup, marginBottom: gi === missingByClass.length - 1 ? 0 : 16 }}>
-                  <div style={dj.groupHeaderRow} onClick={() => toggleMissingClass(g.classInfo.id)}>
-                    <span style={dj.groupTitle}>{g.classInfo.name}</span>
-                    <span style={dj.badge}>{g.items.length} remaining</span>
+              {missingByClass.length > 0 && (
+                <div style={{ ...dj.tile, marginBottom: 0 }}>
+                  <div style={dj.sectionHeaderRow} onClick={() => setMissingSectionOpen((v) => !v)}>
+                    <div style={dj.sectionLabel}>Not Yet Attended</div>
+                    <span style={{ ...dj.chevron, ...(missingSectionOpen ? dj.chevronOpen : {}) }}>▸</span>
                   </div>
-                  {isOpen && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                      {g.items.map((t) => (
-                        <div key={t.id} style={dj.missingRow}>{t.name}</div>
-                      ))}
-                    </div>
-                  )}
+                  {missingSectionOpen && missingByClass.map((g, gi) => {
+                    const isOpen = !!expandedMissingClasses[g.classInfo.id];
+                    return (
+                      <div key={g.classInfo.id} style={{ ...dj.missingGroup, marginBottom: gi === missingByClass.length - 1 ? 0 : 16 }}>
+                        <div style={dj.groupHeaderRow} onClick={() => toggleMissingClass(g.classInfo.id)}>
+                          <span style={dj.groupTitle}>{g.classInfo.name}</span>
+                          <span style={dj.badge}>{g.items.length} remaining</span>
+                        </div>
+                        {isOpen && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {g.items.map((t) => (
+                              <div key={t.id} style={dj.missingRow}>{t.name}</div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -5932,21 +5932,35 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
   return (
     <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
       <div
-        style={{ position: "relative", width: "100%", maxWidth: 480, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
+        style={{ position: "relative", width: "100%", maxWidth: 900, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
         onClick={(e) => e.stopPropagation()}
       >
         <button type="button" onClick={onClose} style={{ ...roundBtn, right: 12 }} aria-label="Close">×</button>
         <button type="button" onClick={() => onEdit(person)} style={{ ...roundBtn, right: 52, fontSize: 15 }} aria-label="Edit" title="Edit name / photo">✎</button>
-        <div style={{ color: "#F5F2E4", overflowY: "auto", flex: 1, minHeight: 0 }}>
-          <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 10", background: "#23211D" }}>
-            <ClassCoverImage classItem={{ name: person.name, photoUrl: person.photoUrl }} />
-            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.1) 30%, rgba(20,18,14,0.85) 100%)" }} />
-            <div style={{ position: "absolute", left: 20, right: 20, bottom: 14 }}>
-              <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700 }}>{person.name}</div>
-              <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.8)", marginTop: 3 }}>{done} of {sessions.length} session{sessions.length === 1 ? "" : "s"} done · {pct}%</div>
+
+        <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0, color: "#F5F2E4" }}>
+          <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto" }}>
+            <div style={{ position: "relative", height: 150, background: "#23211D" }}>
+              <ClassCoverImage classItem={{ name: person.name, photoUrl: person.photoUrl }} />
+              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(31,56,100,0.55) 60%, rgba(31,56,100,0.98) 100%)" }} />
+              <div style={{ position: "absolute", left: 20, right: 20, bottom: 14 }}>
+                <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700 }}>{person.name}</div>
+                <div style={{ fontSize: 12, color: "rgba(245,242,228,0.8)", marginTop: 4 }}>{done} of {sessions.length} session{sessions.length === 1 ? "" : "s"} done · {pct}%</div>
+              </div>
+            </div>
+            <div style={{ padding: "16px 20px 20px" }}>
+              <button
+                type="button"
+                onClick={() => setQrOpen(true)}
+                style={{ width: "100%", padding: "9px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(245,242,228,0.4)", background: "rgba(245,242,228,0.1)", color: "#F5F2E4", marginBottom: 16 }}
+              >
+                Attendance QR
+              </button>
+              <DetailBar pct={pct} />
             </div>
           </div>
-          <div style={{ padding: "16px 22px 22px" }}>
+
+          <div className="dj-classdetail-right" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "18px 20px 22px", color: "#F5F2E4", borderLeft: "1px solid rgba(255,255,255,0.12)" }}>
             {person.status === "pending" && (
               <div style={{ background: "rgba(229,164,48,0.15)", border: "1px solid rgba(229,164,48,0.5)", borderRadius: 10, padding: "10px 12px", fontSize: 12.5, marginBottom: 16 }}>
                 Waiting for a Leader/Manager to approve. You can keep marking sessions below — once approved, everything done so far syncs to Disciples and Classes automatically.
@@ -5957,15 +5971,7 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
                 This addition was rejected by a Leader/Manager and was not added to Disciples.
               </div>
             )}
-            <button
-              type="button"
-              onClick={() => setQrOpen(true)}
-              style={{ padding: "9px 14px", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(245,242,228,0.4)", background: "rgba(245,242,228,0.1)", color: "#F5F2E4", marginBottom: 16 }}
-            >
-              Attendance QR
-            </button>
-            <DetailBar pct={pct} />
-            <div style={{ ...detailLabel, marginTop: 20 }}>ONE2ONE Sessions</div>
+            <div style={detailLabel}>ONE2ONE Sessions</div>
             {sessions.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)" }}>
                 {hasClass ? "The ONE2ONE class has no sessions yet — add them in the Classes tab." : "No ONE2ONE class found in the Classes tab yet."}
