@@ -298,6 +298,12 @@
     .dj-oneown-body { flex-direction: column !important; overflow-y: auto !important; }
     .dj-oneown-left { width: 100% !important; overflow-y: visible !important; flex-shrink: 1 !important; }
     .dj-oneown-right { border-left: none !important; border-top: 1px solid rgba(31,56,100,0.12) !important; overflow-y: visible !important; }
+    /* Add/Edit Member modal: same idea — the wide photo/tracks-left +
+       fields-right layout stacks into one scrollable column on a
+       phone screen. */
+    .dj-membermodal-body { flex-direction: column !important; max-height: calc(100vh - var(--dj-header-h, 180px) - 20px) !important; overflow-y: auto !important; }
+    .dj-membermodal-left { width: 100% !important; border-right: none !important; border-bottom: 1px solid rgba(216,207,176,0.6) !important; overflow-y: visible !important; flex-shrink: 1 !important; }
+    .dj-membermodal-right { overflow-y: visible !important; }
 
     /* Header: tighten up title + let the sign-out row keep its own
        line without crowding the title (headerUser is already
@@ -1055,7 +1061,8 @@ function daysInMonth(month, year) {
 // reports the composed "YYYY-MM-DD" up via onChange once all three are
 // picked (an empty string while incomplete), so a parent that resets
 // `birthdate` to "" mid-entry doesn't wipe out what's already selected.
-function DobPicker({ value, onChange }) {
+function DobPicker({ value, onChange, inputStyle }) {
+  const selStyle = inputStyle || styles.modalInput;
   const initial = useMemo(() => {
     const [y, m, d] = (value || "").split("-");
     return { y: y || "", m: m || "", d: d || "" };
@@ -1085,15 +1092,15 @@ function DobPicker({ value, onChange }) {
 
   return (
     <div style={styles.dobRow}>
-      <select style={{ ...styles.modalInput, marginBottom: 0, flex: "1.15 1 0", minWidth: 0 }} value={month} onChange={(e) => setMonth(e.target.value)} required aria-label="Birth month">
+      <select style={{ ...selStyle, marginBottom: 0, flex: "1.15 1 0", minWidth: 0 }} value={month} onChange={(e) => setMonth(e.target.value)} required aria-label="Birth month">
         <option value="" disabled>Month</option>
         {DOB_MONTHS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
       </select>
-      <select style={{ ...styles.modalInput, marginBottom: 0, flex: "0.85 1 0", minWidth: 0 }} value={day} onChange={(e) => setDay(e.target.value)} required aria-label="Birth day">
+      <select style={{ ...selStyle, marginBottom: 0, flex: "0.85 1 0", minWidth: 0 }} value={day} onChange={(e) => setDay(e.target.value)} required aria-label="Birth day">
         <option value="" disabled>Day</option>
         {dayOptions.map((dd) => <option key={dd} value={dd}>{Number(dd)}</option>)}
       </select>
-      <select style={{ ...styles.modalInput, marginBottom: 0, flex: "1.2 1 0", minWidth: 0 }} value={year} onChange={(e) => setYear(e.target.value)} required aria-label="Birth year">
+      <select style={{ ...selStyle, marginBottom: 0, flex: "1.2 1 0", minWidth: 0 }} value={year} onChange={(e) => setYear(e.target.value)} required aria-label="Birth year">
         <option value="" disabled>Year</option>
         {years.map((yy) => <option key={yy} value={yy}>{yy}</option>)}
       </select>
@@ -2217,7 +2224,7 @@ function DonutChart({ pct, size = 64, stroke = 8, label, sublabel, trackColor, d
 // AVATAR — member photo when present, otherwise initials
 // ============================================================
 
-function Avatar({ name, photoUrl, size = 40, done }) {
+function Avatar({ name, photoUrl, size = 40, done, dark }) {
   if (photoUrl) {
     return (
       <img
@@ -2229,7 +2236,7 @@ function Avatar({ name, photoUrl, size = 40, done }) {
           borderRadius: "50%",
           objectFit: "cover",
           flexShrink: 0,
-          border: done ? "2px solid #385026" : "1px solid #E4DCC6",
+          border: done ? "2px solid #385026" : dark ? "1px solid rgba(180,198,231,0.4)" : "1px solid #E4DCC6",
         }}
       />
     );
@@ -2239,6 +2246,7 @@ function Avatar({ name, photoUrl, size = 40, done }) {
       style={{
         ...styles.avatarCircle,
         ...(done ? styles.avatarCircleDone : {}),
+        ...(dark && !done ? styles.avatarCircleDark : {}),
         width: size,
         height: size,
         fontSize: Math.max(11, Math.round(size * 0.36)),
@@ -3651,17 +3659,15 @@ function PhotoPicker({ name, photoUrl, onChange }) {
   };
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12 }}>
-      <Avatar name={name} photoUrl={photoUrl} size={56} />
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <button type="button" style={styles.ghostBtn} onClick={() => inputRef.current && inputRef.current.click()} disabled={busy}>
-          {busy ? "Processing…" : photoUrl ? "Change photo" : "Upload photo"}
-        </button>
-        {photoUrl && !busy && (
-          <button type="button" style={styles.dangerLink} onClick={() => onChange(null)}>Remove photo</button>
-        )}
-        <input ref={inputRef} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, width: "100%" }}>
+      <Avatar name={name} photoUrl={photoUrl} size={72} />
+      <button type="button" style={styles.memberModalUploadBtn} onClick={() => inputRef.current && inputRef.current.click()} disabled={busy}>
+        {busy ? "Processing…" : photoUrl ? "Change photo" : "Upload photo"}
+      </button>
+      {photoUrl && !busy && (
+        <button type="button" style={styles.memberModalDangerLink} onClick={() => onChange(null)}>Remove photo</button>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
     </div>
   );
 }
@@ -3730,9 +3736,9 @@ function backfillTrackStatusFromClassStatus(classes, trackStatus, classStatus) {
 function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchChange, classes, topics, onlyTrack }) {
   const tracksToShow = onlyTrack ? DISCIPLESHIP_TRACKS.filter((t) => t === onlyTrack) : DISCIPLESHIP_TRACKS;
   return (
-    <>
-      <div style={styles.sectionLabel}>Discipleship tracks</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 10 }}>
+    <div style={{ width: "100%" }}>
+      <div style={styles.memberModalSectionLabel}>Discipleship Tracks</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {tracksToShow.map((track) => {
           const status = trackStatus[track] || "Not Enrolled";
           // The track maps to a real class (by name) when one exists —
@@ -3756,34 +3762,34 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
           const statusOptions = noOpenBatch && status === "Not Enrolled" ? ["Not Enrolled"] : TRACK_STATUSES;
           const effectiveBatchOptions = batchOptions.length ? batchOptions : [currentBatch];
           return (
-            <div key={track} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-                <span style={{ flex: 1, color: "#4A4230" }}>{track}</span>
+            <div key={track} style={styles.memberModalTrackRow}>
+              <span style={styles.memberModalTrackLabel}>{track}</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "0 0 auto", alignItems: "flex-end" }}>
                 <select
-                  style={{ ...styles.modalInput, marginBottom: 0, flex: "0 0 160px" }}
+                  style={{ ...styles.memberModalInput, marginBottom: 0, fontSize: 11.5, padding: "5px 6px", width: 130 }}
                   value={status}
                   onChange={(e) => onChange(track, e.target.value)}
                 >
                   {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
                 </select>
-              </label>
-              {noOpenBatch && status === "Not Enrolled" && (
-                <div style={{ fontSize: 11.5, color: "#A6402F" }}>Every session in {track} has already been conducted — no open batch to enroll into.</div>
-              )}
-              {status !== "Not Enrolled" && (
-                <select
-                  style={{ ...styles.modalInput, marginBottom: 0, fontSize: 13 }}
-                  value={effectiveBatchOptions.includes(currentBatch) ? currentBatch : effectiveBatchOptions[0]}
-                  onChange={(e) => onBatchChange(track, e.target.value)}
-                >
-                  {effectiveBatchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
-                </select>
-              )}
+                {status !== "Not Enrolled" && (
+                  <select
+                    style={{ ...styles.memberModalInput, marginBottom: 0, fontSize: 11.5, padding: "5px 6px", width: 130 }}
+                    value={effectiveBatchOptions.includes(currentBatch) ? currentBatch : effectiveBatchOptions[0]}
+                    onChange={(e) => onBatchChange(track, e.target.value)}
+                  >
+                    {effectiveBatchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
+                  </select>
+                )}
+                {noOpenBatch && status === "Not Enrolled" && (
+                  <div style={{ ...styles.memberModalTrackWarn, width: 130, textAlign: "right" }}>No open batch.</div>
+                )}
+              </div>
             </div>
           );
         })}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -3795,9 +3801,9 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
 function ReviewRow({ label, value }) {
   if (value === null || value === undefined || value === "") return null;
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, padding: "8px 0", borderBottom: "1px solid rgba(31,56,100,0.08)", fontSize: 13.5 }}>
-      <span style={{ color: "#7A6E4E", flexShrink: 0 }}>{label}</span>
-      <span style={{ color: "#23211D", fontWeight: 600, textAlign: "right" }}>{value}</span>
+    <div style={styles.memberModalReviewRow}>
+      <span style={styles.memberModalReviewLabel}>{label}</span>
+      <span style={styles.memberModalReviewValue}>{value}</span>
     </div>
   );
 }
@@ -3814,7 +3820,7 @@ function MemberReviewFields({ name, photoUrl, birthdate, gender, category, lifeS
         <Avatar name={name} photoUrl={photoUrl} size={64} />
       </div>
       {mergeName && (
-        <div style={{ fontSize: 12.5, color: "#A6402F", background: "rgba(166,64,47,0.08)", border: "1px solid rgba(166,64,47,0.25)", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+        <div style={styles.memberModalMergeNote}>
           This will be merged into the existing record for <strong>{mergeName}</strong>.
         </div>
       )}
@@ -3830,7 +3836,7 @@ function MemberReviewFields({ name, photoUrl, birthdate, gender, category, lifeS
       </div>
       {enrolledTracks.length > 0 && (
         <>
-          <div style={styles.sectionLabel}>Discipleship tracks</div>
+          <div style={styles.memberModalSectionLabel}>Discipleship tracks</div>
           {enrolledTracks.map((t) => (
             <ReviewRow key={t} label={t} value={`${trackStatus[t]} · ${(trackBatch && trackBatch[t]) || "Batch 1"}`} />
           ))}
@@ -3950,12 +3956,13 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
 
   const mergeName = mergeId ? (duplicates.find((d) => d.id === mergeId) || {}).name : null;
 
-  return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <form style={styles.modalCard} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
-        <div style={styles.modalTitle}>{confirming ? "Confirm Details" : (title || "Add Member")}</div>
-        {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
-        {confirming ? (
+  if (confirming) {
+    return (
+      <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
+        <form style={styles.memberModalCardSingle} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+          <div style={styles.memberModalTitle}>Confirm Details</div>
+          <div style={styles.memberModalSubtitle}>Please check the details below before saving.</div>
+          {error && <div style={styles.memberModalError}><span>⚠</span><span>{error}</span></div>}
           <MemberReviewFields
             name={name}
             photoUrl={photoUrl}
@@ -3970,79 +3977,85 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
             trackBatch={trackBatch}
             mergeName={mergeName}
           />
-        ) : (
-          <>
-            <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
-            <div style={styles.modalRow2}>
-              <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="First name" value={firstName} onChange={(e) => { setFirstName(e.target.value); setMergeId(""); }} autoFocus required />
-              <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Last name" value={lastName} onChange={(e) => { setLastName(e.target.value); setMergeId(""); }} required />
+          <div style={styles.memberModalActionsFixed}>
+            <button type="button" style={styles.memberModalCancelBtn} onClick={() => setConfirming(false)} disabled={busy}>← Back</button>
+            <button type="submit" style={styles.memberModalConfirmBtn} disabled={busy}>{busy ? "Saving…" : (mergeId ? "Confirm Merge" : "Confirm & Add")}</button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
+      <form className="dj-membermodal-body" style={styles.memberModalCard} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <div className="dj-membermodal-left" style={styles.memberModalLeft}>
+          <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
+          <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
+        </div>
+        <div className="dj-membermodal-right" style={styles.memberModalRight}>
+          <div style={styles.memberModalTitle}>{title || "Add Member"}</div>
+          <div style={styles.memberModalSubtitle}>Fill in this person's details below.</div>
+          {error && <div style={styles.memberModalError}><span>⚠</span><span>{error}</span></div>}
+          <div style={styles.memberModalRow2}>
+            <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="First name" value={firstName} onChange={(e) => { setFirstName(e.target.value); setMergeId(""); }} autoFocus required />
+            <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="Last name" value={lastName} onChange={(e) => { setLastName(e.target.value); setMergeId(""); }} required />
+          </div>
+          {duplicates.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={styles.memberModalSectionLabel}>Possible existing match</div>
+              <div style={styles.memberModalPairNote}>Someone in Disciples already has this exact name. Merge instead of creating a duplicate person, or pick "Add as new person" if it's someone else.</div>
+              <select style={styles.memberModalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
+                <option value="">Add as new person</option>
+                {duplicates.map((d) => (
+                  <option key={d.id} value={d.id}>Merge into existing: {d.name}</option>
+                ))}
+              </select>
             </div>
-            {duplicates.length > 0 && (
-              <div style={{ marginBottom: 12 }}>
-                <div style={styles.sectionLabel}>Possible existing match</div>
-                <div style={styles.pairNote}>Someone in Disciples already has this exact name. Merge instead of creating a duplicate person, or pick "Add as new person" if it's someone else.</div>
-                <select style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
-                  <option value="">Add as new person</option>
-                  {duplicates.map((d) => (
-                    <option key={d.id} value={d.id}>Merge into existing: {d.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div style={styles.modalRow2}>
-              <label style={styles.modalFieldLabel}>
-                Birthdate
-                <DobPicker value={birthdate} onChange={setBirthdate} />
-              </label>
-              <label style={styles.modalFieldLabel}>
-                Gender
-                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
-                  <option value="">Select…</option>
-                  {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
-              </label>
-            </div>
-            <div style={styles.modalRow2}>
-              <label style={styles.modalFieldLabel}>
-                Membership
-                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
-                  <option value="">Select…</option>
-                  {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </label>
-              <label style={styles.modalFieldLabel}>
-                Life stage
-                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
-                  <option value="">Select…</option>
-                  {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
-                </select>
-              </label>
-            </div>
-            <div style={styles.modalRow2}>
-              <label style={styles.modalFieldLabel}>
-                Contact number
-                <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
-              </label>
-              <label style={styles.modalFieldLabel}>
-                Address
-                <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
-              </label>
-            </div>
-            <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
-          </>
-        )}
-        <div style={styles.modalActions}>
-          {confirming ? (
-            <>
-              <button type="button" style={styles.modalCancelBtn} onClick={() => setConfirming(false)} disabled={busy}>← Back</button>
-              <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : (mergeId ? "Confirm Merge" : "Confirm & Add")}</button>
-            </>
-          ) : (
-            <>
-              <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
-              <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{mergeId ? "Merge" : "Add"}</button>
-            </>
           )}
+          <div style={styles.memberModalRow2}>
+            <label style={styles.memberModalFieldLabel}>
+              Birthdate
+              <DobPicker value={birthdate} onChange={setBirthdate} inputStyle={styles.memberModalInput} />
+            </label>
+            <label style={styles.memberModalFieldLabel}>
+              Gender
+              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
+                <option value="">Select…</option>
+                {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </label>
+          </div>
+          <div style={styles.memberModalRow2}>
+            <label style={styles.memberModalFieldLabel}>
+              Membership
+              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
+                <option value="">Select…</option>
+                {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label style={styles.memberModalFieldLabel}>
+              Life stage
+              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
+                <option value="">Select…</option>
+                {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
+              </select>
+            </label>
+          </div>
+          <div style={styles.memberModalRow2}>
+            <label style={styles.memberModalFieldLabel}>
+              Contact number
+              <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
+            </label>
+            <label style={styles.memberModalFieldLabel}>
+              Address
+              <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
+            </label>
+          </div>
+          <div style={styles.memberModalActions}>
+            <button type="button" style={styles.memberModalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
+            <button type="submit" style={styles.memberModalConfirmBtn} disabled={busy}>{mergeId ? "Merge" : "Add"}</button>
+          </div>
         </div>
       </form>
     </div>
@@ -4202,12 +4215,13 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
     setConfirming(true);
   };
 
-  return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <form style={styles.modalCard} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
-        <div style={styles.modalTitle}>{confirming ? "Confirm Details" : "Edit Member"}</div>
-        {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
-        {confirming ? (
+  if (confirming) {
+    return (
+      <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
+        <form style={styles.memberModalCardSingle} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+          <div style={styles.memberModalTitle}>Confirm Details</div>
+          <div style={styles.memberModalSubtitle}>Please check the details below before saving.</div>
+          {error && <div style={styles.memberModalError}><span>⚠</span><span>{error}</span></div>}
           <MemberReviewFields
             name={name}
             photoUrl={photoUrl}
@@ -4221,67 +4235,73 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
             trackStatus={trackStatus}
             trackBatch={trackBatch}
           />
-        ) : (
-          <>
-            <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
-            <div style={styles.modalRow2}>
-              <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoFocus required />
-              <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-            </div>
-            <div style={styles.modalRow2}>
-              <label style={styles.modalFieldLabel}>
-                Birthdate
-                <DobPicker value={birthdate} onChange={setBirthdate} />
-              </label>
-              <label style={styles.modalFieldLabel}>
-                Gender
-                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
-                  <option value="">Select…</option>
-                  {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-                </select>
-              </label>
-            </div>
-            <div style={styles.modalRow2}>
-              <label style={styles.modalFieldLabel}>
-                Membership
-                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
-                  <option value="">Select…</option>
-                  {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </label>
-              <label style={styles.modalFieldLabel}>
-                Life stage
-                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
-                  <option value="">Select…</option>
-                  {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
-                </select>
-              </label>
-            </div>
-            <div style={styles.modalRow2}>
-              <label style={styles.modalFieldLabel}>
-                Contact number
-                <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
-              </label>
-              <label style={styles.modalFieldLabel}>
-                Address
-                <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
-              </label>
-            </div>
-            <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
-          </>
-        )}
-        <div style={styles.modalActions}>
-          {confirming ? (
-            <>
-              <button type="button" style={styles.modalCancelBtn} onClick={() => setConfirming(false)} disabled={busy}>← Back</button>
-              <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Confirm & Save"}</button>
-            </>
-          ) : (
-            <>
-              <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
-              <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>Save</button>
-            </>
-          )}
+          <div style={styles.memberModalActionsFixed}>
+            <button type="button" style={styles.memberModalCancelBtn} onClick={() => setConfirming(false)} disabled={busy}>← Back</button>
+            <button type="submit" style={styles.memberModalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Confirm & Save"}</button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
+      <form className="dj-membermodal-body" style={styles.memberModalCard} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <div className="dj-membermodal-left" style={styles.memberModalLeft}>
+          <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
+          <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
+        </div>
+        <div className="dj-membermodal-right" style={styles.memberModalRight}>
+          <div style={styles.memberModalTitle}>Edit Member</div>
+          <div style={styles.memberModalSubtitle}>Update this person's details below.</div>
+          {error && <div style={styles.memberModalError}><span>⚠</span><span>{error}</span></div>}
+          <div style={styles.memberModalRow2}>
+            <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoFocus required />
+            <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+          </div>
+          <div style={styles.memberModalRow2}>
+            <label style={styles.memberModalFieldLabel}>
+              Birthdate
+              <DobPicker value={birthdate} onChange={setBirthdate} inputStyle={styles.memberModalInput} />
+            </label>
+            <label style={styles.memberModalFieldLabel}>
+              Gender
+              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
+                <option value="">Select…</option>
+                {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </label>
+          </div>
+          <div style={styles.memberModalRow2}>
+            <label style={styles.memberModalFieldLabel}>
+              Membership
+              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
+                <option value="">Select…</option>
+                {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </label>
+            <label style={styles.memberModalFieldLabel}>
+              Life stage
+              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
+                <option value="">Select…</option>
+                {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
+              </select>
+            </label>
+          </div>
+          <div style={styles.memberModalRow2}>
+            <label style={styles.memberModalFieldLabel}>
+              Contact number
+              <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
+            </label>
+            <label style={styles.memberModalFieldLabel}>
+              Address
+              <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
+            </label>
+          </div>
+          <div style={styles.memberModalActions}>
+            <button type="button" style={styles.memberModalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
+            <button type="submit" style={styles.memberModalConfirmBtn} disabled={busy}>Save</button>
+          </div>
         </div>
       </form>
     </div>
@@ -8146,6 +8166,64 @@ const styles = {
   modalActions: { display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 6 },
   modalCancelBtn: { padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", background: "rgba(255,255,255,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", color: "#4A4230", cursor: "pointer", fontSize: 13.5, fontWeight: 600 },
   modalConfirmBtn: { padding: "9px 18px", borderRadius: 8, border: "none", background: "rgba(31,56,100,0.9)", backdropFilter: "blur(6px)", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 },
+
+  // ---------------------------------------------------------------
+  // ADD/EDIT MEMBER MODAL — re-skinned to match the public
+  // self-registration forms (register.html: Class Registration /
+  // ONE2ONE Registration) and the rest of the app's light glass
+  // modalCard look, instead of the old navy/rectangular treatment.
+  // Only AddMemberModal/EditMemberModal (and the sub-components
+  // exclusive to them — PhotoPicker, DiscipleshipTrackFields,
+  // MemberReviewFields/ReviewRow) use these.
+  // ---------------------------------------------------------------
+  memberModalCard: {
+    position: "relative", width: "100%", maxWidth: 760, display: "flex",
+    background: "rgba(255,255,255,0.85)",
+    backdropFilter: "blur(22px) saturate(180%)", WebkitBackdropFilter: "blur(22px) saturate(180%)",
+    border: "1px solid rgba(255,255,255,0.6)", borderRadius: 16,
+    boxShadow: "0 25px 50px -12px rgba(20,18,14,0.5), inset 0 1px 0 rgba(255,255,255,0.5)",
+    maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)",
+    overflow: "hidden", animation: "popIn 0.14s ease-out",
+  },
+  memberModalCardSingle: {
+    position: "relative", width: "100%", maxWidth: 440, display: "flex", flexDirection: "column",
+    background: "rgba(255,255,255,0.85)",
+    backdropFilter: "blur(22px) saturate(180%)", WebkitBackdropFilter: "blur(22px) saturate(180%)",
+    border: "1px solid rgba(255,255,255,0.6)", borderRadius: 16,
+    boxShadow: "0 25px 50px -12px rgba(20,18,14,0.5), inset 0 1px 0 rgba(255,255,255,0.5)",
+    maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", overflowY: "auto",
+    padding: "24px 24px 20px", animation: "popIn 0.14s ease-out",
+  },
+  memberModalLeft: {
+    width: 230, flexShrink: 0, padding: "24px 18px", borderRight: "1px solid rgba(216,207,176,0.6)",
+    background: "rgba(239,231,211,0.35)",
+    display: "flex", flexDirection: "column", alignItems: "center", gap: 14, overflowY: "auto",
+  },
+  memberModalRight: {
+    flex: 1, minWidth: 0, padding: "24px 24px 20px", overflowY: "auto",
+    display: "flex", flexDirection: "column",
+  },
+  memberModalTitle: { fontFamily: "Georgia, serif", fontSize: 19, fontWeight: 700, color: "#1F3864", marginBottom: 4 },
+  memberModalSubtitle: { fontSize: 12.5, color: "#7A6E4E", marginBottom: 14 },
+  memberModalFieldLabel: { display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "#7A6E4E", marginBottom: 5, minWidth: 0 },
+  memberModalInput: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", background: "rgba(255,255,255,0.7)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", color: "#23211D", fontSize: 13.5, outline: "none", minWidth: 0 },
+  memberModalRow2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 10 },
+  memberModalSectionLabel: { fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: "#7A6E4E", margin: "4px 0 8px" },
+  memberModalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: "auto", paddingTop: 14 },
+  memberModalActionsFixed: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 },
+  memberModalCancelBtn: { padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", background: "rgba(255,255,255,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", color: "#4A4230", fontSize: 13.5, fontWeight: 600, cursor: "pointer" },
+  memberModalConfirmBtn: { padding: "9px 18px", borderRadius: 8, border: "none", background: "rgba(31,56,100,0.9)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", color: "#FFFFFF", fontSize: 13.5, fontWeight: 700, cursor: "pointer" },
+  memberModalUploadBtn: { padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", background: "rgba(255,255,255,0.6)", color: "#4A4230", fontSize: 11.5, fontWeight: 600, cursor: "pointer", width: "100%" },
+  memberModalDangerLink: { background: "none", border: "none", color: "#A6402F", fontSize: 11.5, cursor: "pointer", textDecoration: "underline" },
+  memberModalTrackRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, padding: "8px 0", fontSize: 12, width: "100%", borderBottom: "1px solid rgba(216,207,176,0.5)" },
+  memberModalTrackLabel: { color: "#23211D", flex: 1, paddingTop: 6 },
+  memberModalTrackWarn: { fontSize: 10, color: "#A6402F", lineHeight: 1.3 },
+  memberModalError: { display: "flex", alignItems: "flex-start", gap: 8, background: "#F3E4DF", color: "#A6402F", padding: "10px 13px", borderRadius: 8, fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 },
+  memberModalMergeNote: { fontSize: 12.5, color: "#6B5220", background: "#FBF3E1", border: "1px solid #E9D8A6", borderRadius: 10, padding: "10px 12px", marginBottom: 10, lineHeight: 1.5 },
+  memberModalPairNote: { fontSize: 12, color: "#7A6E4E", marginBottom: 10, maxWidth: 560 },
+  memberModalReviewRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, padding: "9px 0", borderBottom: "1px solid #EFE7D3", fontSize: 13.5 },
+  memberModalReviewLabel: { color: "#7A6E4E", flexShrink: 0 },
+  memberModalReviewValue: { color: "#23211D", fontWeight: 600, textAlign: "right" },
 };
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
