@@ -6179,7 +6179,7 @@ function PendingRegistrations({ pendingRegistrations, classes, members, onApprov
 // SETTINGS — leaders / mentors (leader-only)
 // ============================================================
 
-function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeaders, onAddOneLeader, onRemoveOneLeader, admins, isAdmin, onAddAdmin, onRemoveAdmin }) {
+function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeaders, onAddOneLeader, onRemoveOneLeader, onEditOneLeader, admins, isAdmin, onAddAdmin, onRemoveAdmin }) {
   const [newLeaderEmail, setNewLeaderEmail] = useState("");
   const [newOneLeaderEmail, setNewOneLeaderEmail] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
@@ -6216,8 +6216,13 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeade
         <div style={styles.restrictList}>
           {oneLeaders.map((l) => (
             <div key={l.id} style={styles.restrictRow}>
-              <span style={styles.restrictName}>{l.id}{l.id === currentEmail ? " (you)" : ""}</span>
-              {isAdmin && <button style={styles.iconDanger} onClick={() => onRemoveOneLeader(l.id)}>×</button>}
+              <span style={styles.restrictName}>{l.name ? `${l.name} — ` : ""}{l.id}{l.id === currentEmail ? " (you)" : ""}</span>
+              {isAdmin && (
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button style={styles.iconEdit} onClick={() => onEditOneLeader(l)} title="Edit name / photo">✎</button>
+                  <button style={styles.iconDanger} onClick={() => onRemoveOneLeader(l.id)}>×</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -7502,6 +7507,7 @@ function App() {
             oneLeaders={oneLeaders}
             onAddOneLeader={addOneLeader}
             onRemoveOneLeader={removeOneLeader}
+            onEditOneLeader={setEditingOneOnOneLeader}
             admins={admins}
             isAdmin={isAdmin}
             onAddAdmin={addAdmin}
