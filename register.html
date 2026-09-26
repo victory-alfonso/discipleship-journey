@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="description" content="Register yourself for a Disciples Journey class at Victory Church." />
+<meta name="theme-color" content="#23211D" />
+<title>Register — Disciples Journey</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; background: #F6F1E4; font-family: system-ui, sans-serif; color: #2A2620; }
+  input, button, select, textarea { touch-action: manipulation; font-family: inherit; }
+  input:focus, select:focus, textarea:focus { border-color: #1F3864 !important; box-shadow: 0 0 0 3px rgba(31,56,100,0.15) !important; outline: none; }
+
+  .wrap { max-width: 480px; margin: 0 auto; padding: 22px 18px 60px; }
+  .header { background: #23211D; color: #EFE7D3; padding: 18px 20px; text-align: center; }
+  .headerTitle { font-family: Georgia, serif; font-size: 19px; font-weight: 700; }
+  .headerSub { font-size: 12.5px; color: #C9BF9E; margin-top: 2px; }
+
+  .card { background: #FFFFFF; border: 1px solid #E4DCC6; border-radius: 12px; padding: 20px; margin-top: 18px; box-shadow: 0 8px 20px -14px rgba(35,33,29,0.3); }
+  .className { font-family: Georgia, serif; font-size: 21px; color: #1F3864; margin: 0 0 4px; }
+  .classSub { font-size: 13px; color: #7A6E4E; margin-bottom: 14px; }
+
+  label.field { display: block; margin-bottom: 10px; }
+  label.field span { display: block; font-size: 12.5px; font-weight: 700; color: #7A6E4E; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 5px; }
+  .input { width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #D8CFB0; font-size: 14.5px; background: #FFFFFF; min-width: 0; }
+  .ageHint { font-size: 12px; color: #7A6E4E; margin-top: 5px; }
+
+  /* auto-fit + minmax lets a field (like the native date picker used
+     for Birthdate, which needs more room than CSS alone can guarantee
+     on iOS) drop to its own line instead of visually overlapping its
+     neighbor when the row is too narrow for both at once — same fix
+     as index.html's modalRow2. */
+  .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .row2 > label { min-width: 0; }
+
+  /* iOS Safari renders the native date-picker control wider than its
+     CSS box once the row gets tight (it ignores width:100%), so at
+     typical mobile widths it can still spill into the Gender box next
+     to it even though the grid math above says it should fit. Birthdate
+     uses three plain <select>s instead (dobRow/dobSelect below), which
+     don't have this problem and scroll instantly on mobile. */
+  .dobRow { display: flex; gap: 6px; }
+  .dobSelect { min-width: 0; flex: 1; padding: 11px 6px; font-size: 13px; }
+  .dobSelect:nth-child(1) { flex: 1.15; }
+  .dobSelect:nth-child(2) { flex: 0.85; }
+  @media (max-width: 380px) {
+    .dobSelect { padding: 9px 4px; font-size: 12px; }
+  }
+
+  .submitBtn { width: 100%; padding: 13px; border-radius: 8px; border: none; background: #1F3864; color: #EFE7D3; font-weight: 700; font-size: 15px; cursor: pointer; margin-top: 6px; }
+  .submitBtn:disabled { opacity: 0.6; cursor: default; }
+
+  .errorBox { background: #F3E4DF; color: #A6402F; padding: 10px 13px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
+  .noteBox { background: #FBF8F0; border: 1px solid #EFE7D3; color: #6B5E3E; padding: 12px 14px; border-radius: 10px; font-size: 12.5px; margin-top: 16px; }
+  .warnBox { background: #FBF3E1; border: 1px solid #E9D8A6; color: #6B5220; padding: 12px 14px; border-radius: 10px; font-size: 13px; margin-bottom: 14px; line-height: 1.5; }
+
+  .loadingScreen, .msgScreen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 70vh; text-align: center; padding: 20px; color: #7A6E4E; }
+  .msgScreen .big { font-family: Georgia, serif; font-size: 22px; color: #23211D; margin-bottom: 8px; }
+  .msgScreen .sub { font-size: 14px; color: #5C5230; max-width: 340px; line-height: 1.6; }
+  .checkCircle { width: 56px; height: 56px; border-radius: 50%; background: #385026; color: #EFE7D3; display: flex; align-items: center; justify-content: center; font-size: 28px; margin-bottom: 14px; }
+
+  .againBtn { margin-top: 18px; padding: 10px 18px; border-radius: 8px; border: 1px solid #D8CFB0; background: #FFFFFF; color: #4A4230; cursor: pointer; font-size: 13.5px; font-weight: 600; }
+
+  .qrBox { display: inline-block; background: #FFFFFF; padding: 10px; border-radius: 10px; border: 1px solid #E4DCC6; }
+  .fixedField { width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #D8CFB0; font-size: 14.5px; background: #F1ECDA; color: #6B5E3E; }
+</style>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body>
+<div class="header">
+  <div class="headerTitle">Disciples Journey</div>
+  <div class="headerSub">Class Registration</div>
+</div>
+<div class="wrap" id="app">
+  <div class="loadingScreen">Loading…</div>
+</div>
+
+<script>
+// ---- PASTE YOUR FIREBASE CONFIG HERE (same as index.html) ----
+const firebaseConfig = {
+  apiKey: "AIzaSyD-cz-NFG35omoPBN4cG1gM-w8kLjS8G8s",
+  authDomain: "discipleship-journey-cc60b.firebaseapp.com",
+  projectId: "discipleship-journey-cc60b",
+  storageBucket: "discipleship-journey-cc60b.firebasestorage.app",
+  messagingSenderId: "942058852250",
+  appId: "1:942058852250:web:7ae5092a3efbe146283423",
+};
+
+// This public page uses its own named Firebase app so its anonymous sign-in
+// is stored separately from the leaders' saved login in index.html. Before,
+// opening this page in the same browser replaced a leader's session with an
+// anonymous one, which made index.html open in Viewer mode.
+const regApp = firebase.initializeApp(firebaseConfig, "register");
+const db = regApp.firestore();
+const auth = regApp.auth();
+
+const GENDERS = ["Male", "Female"];
+const LIFE_STAGES = ["Single", "Married", "ENC"];
+const MEMBER_CATEGORIES = ["Water Baptize", "Transfer"];
+
+const DOB_MONTHS = [
+  ["01", "Jan"], ["02", "Feb"], ["03", "Mar"], ["04", "Apr"],
+  ["05", "May"], ["06", "Jun"], ["07", "Jul"], ["08", "Aug"],
+  ["09", "Sep"], ["10", "Oct"], ["11", "Nov"], ["12", "Dec"],
+];
+
+function daysInMonthDob(month, year) {
+  return new Date(year, month, 0).getDate();
+}
+
+// Builds the Month / Day / Year Birthdate dropdowns. A plain select
+// scrolls instantly on every device, unlike the native <input
+// type="date"> calendar grid, which some mobile browsers render slowly
+// and inconsistently (especially scrolling year-by-year to reach an
+// older birth year).
+function dobFieldsHTML() {
+  const thisYear = new Date().getFullYear();
+  const months = DOB_MONTHS.map(([v, label]) => `<option value="${v}">${label}</option>`).join("");
+  const years = Array.from({ length: 101 }, (_, i) => thisYear - i)
+    .map((y) => `<option value="${y}">${y}</option>`).join("");
+  return `
+    <div class="dobRow">
+      <select class="input dobSelect" name="birthMonth" required aria-label="Birth month">
+        <option value="" disabled selected>Month</option>
+        ${months}
+      </select>
+      <select class="input dobSelect" name="birthDay" required aria-label="Birth day">
+        <option value="" disabled selected>Day</option>
+      </select>
+      <select class="input dobSelect" name="birthYear" required aria-label="Birth year">
+        <option value="" disabled selected>Year</option>
+        ${years}
+      </select>
+    </div>
+  `;
+}
+
+// Wires up a Birthdate field rendered by dobFieldsHTML(): keeps the Day
+// options in sync with Month/Year (so e.g. Feb never offers day 30) and
+// drives the live age hint. Returns getBirthdate() so the submit handler
+// can read the composed "YYYY-MM-DD" value.
+function wireDobFields(root, ageHintEl) {
+  const monthSel = root.querySelector('select[name="birthMonth"]');
+  const daySel = root.querySelector('select[name="birthDay"]');
+  const yearSel = root.querySelector('select[name="birthYear"]');
+
+  function refreshDays() {
+    const prevValue = daySel.value;
+    const month = monthSel.value ? Number(monthSel.value) : null;
+    const year = yearSel.value ? Number(yearSel.value) : new Date().getFullYear();
+    const count = month ? daysInMonthDob(month, year) : 31;
+    const opts = [`<option value="" disabled${prevValue ? "" : " selected"}>Day</option>`];
+    for (let d = 1; d <= count; d++) {
+      const v = String(d).padStart(2, "0");
+      opts.push(`<option value="${v}">${d}</option>`);
+    }
+    daySel.innerHTML = opts.join("");
+    // Keep a previously picked day if it's still valid for the new
+    // month/year (e.g. switching Mar -> Apr keeps day 30); otherwise it
+    // falls back to the empty placeholder above.
+    if (prevValue && Number(prevValue) <= count) daySel.value = prevValue;
+  }
+
+  function currentBirthdate() {
+    if (!monthSel.value || !daySel.value || !yearSel.value) return "";
+    return `${yearSel.value}-${monthSel.value}-${daySel.value}`;
+  }
+
+  function updateAgeHint() {
+    if (!ageHintEl) return;
+    const bd = currentBirthdate();
+    const age = bd ? computeAge(bd) : null;
+    ageHintEl.textContent = age !== null && age >= 0 ? `Age: ${age}` : "";
+  }
+
+  monthSel.addEventListener("change", () => { refreshDays(); updateAgeHint(); });
+  yearSel.addEventListener("change", () => { refreshDays(); updateAgeHint(); });
+  daySel.addEventListener("change", updateAgeHint);
+
+  refreshDays();
+  return { getBirthdate: currentBirthdate };
+}
+
+const app = document.getElementById("app");
+
+function qs(name) {
+  return new URLSearchParams(window.location.search).get(name);
+}
+
+function statusLinkForReg(regId) {
+  const base = window.location.href.replace(/[^/]*$/, "");
+  return `${base}status.html?regId=${regId}`;
+}
+
+function esc(s) {
+  const d = document.createElement("div");
+  d.textContent = s == null ? "" : String(s);
+  return d.innerHTML;
+}
+
+// Same normalization index.html uses (findPossibleDuplicates) so "Juan
+// Dela Cruz" / "juan  dela cruz" / trailing spaces all match.
+function normName(s) {
+  return (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// Computes age in whole years from a "YYYY-MM-DD" birthdate string.
+// Display-only here — the stored field is the birthdate itself, matching
+// how index.html derives age for regular members via ageFromBirthdate().
+function computeAge(birthdateStr) {
+  if (!birthdateStr) return null;
+  const today = new Date();
+  const dob = new Date(birthdateStr + "T00:00:00");
+  if (isNaN(dob.getTime())) return null;
+  let age = today.getFullYear() - dob.getFullYear();
+  const hasHadBirthdayThisYear =
+    today.getMonth() > dob.getMonth() ||
+    (today.getMonth() === dob.getMonth() && today.getDate() >= dob.getDate());
+  if (!hasHadBirthdayThisYear) age--;
+  return age;
+}
+
+// Looks for an existing member or pending registration under the same
+// name (however it was capitalized/spaced) so the same person can't end
+// up with a separate record per class link. Queries are scoped to an
+// exact name match — NOT a full collection read — but this still
+// requires your Firestore rules to allow anonymous `get`/`where("name","==",...)`
+// reads on "members" and "pendingRegistrations". Keep those reads
+// name-keyed only; don't open broader list/read access on those
+// collections just for this.
+async function findDuplicateContext(name, classId) {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const n = normName(trimmed);
+
+  const [memberSnap, pendingSnap] = await Promise.all([
+    db.collection("members").where("name", "==", trimmed).get(),
+    db.collection("pendingRegistrations").where("name", "==", trimmed).where("status", "==", "pending").get(),
+  ]);
+
+  const memberDoc = memberSnap.docs.find((d) => normName(d.data().name) === n);
+  if (memberDoc) {
+    const data = memberDoc.data();
+    const classIds = Array.isArray(data.classIds) ? data.classIds : [];
+    return { type: "member", sameClass: classIds.includes(classId), classIds };
+  }
+
+  const pendingDoc = pendingSnap.docs.find((d) => normName(d.data().name) === n);
+  if (pendingDoc) {
+    const data = pendingDoc.data();
+    const classIds = Array.isArray(data.classIds) ? data.classIds : [];
+    return { type: "pending", sameClass: classIds.includes(classId), classIds, regId: pendingDoc.id };
+  }
+
+  return null;
+}
+
+async function classNamesFor(ids) {
+  const list = (ids || []).slice(0, 10);
+  if (!list.length) return [];
+  const snap = await db.collection("classes").where(firebase.firestore.FieldPath.documentId(), "in", list).get();
+  return snap.docs.map((d) => (d.data() || {}).name).filter(Boolean);
+}
+
+function renderMissingClass() {
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="big">Link not set up</div>
+      <div class="sub">This registration link is missing a class. Please ask your leader for the correct link, or scan the QR code they shared for your class.</div>
+    </div>
+  `;
+}
+
+// Shown when a "one2one" link's leader can't be found — e.g. the leader
+// was removed from Settings > ONE2ONE Leaders after the link was shared.
+function renderMissingLeader() {
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="big">Link not set up</div>
+      <div class="sub">This ONE2ONE registration link isn't valid anymore. Please ask for a fresh link from your ONE2ONE leader.</div>
+    </div>
+  `;
+}
+
+function renderError(message) {
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="big">Something went wrong</div>
+      <div class="sub">${esc(message)}</div>
+    </div>
+  `;
+}
+
+function renderSuccess(className, classId, batch, regId) {
+  const statusLink = statusLinkForReg(regId);
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="checkCircle">✓</div>
+      <div class="big">Thanks — almost done!</div>
+      <div class="sub">Your registration for <strong>${esc(className)}</strong> has been submitted. A class leader will review it and add you to the roster shortly.</div>
+      <div class="noteBox" style="text-align:left; margin-top:18px;">
+        <strong>Save this link</strong> — it's your personal status page. It'll automatically show your attendance QR code the moment a leader approves you, no need to come back and check manually.
+      </div>
+      <button class="submitBtn" id="viewStatusBtn" style="margin-top:14px;">View My Status &amp; QR Code</button>
+      <button class="againBtn" id="copyLinkBtn" style="margin-top:10px;">Copy My Link</button>
+      <button class="againBtn" id="againBtn" style="margin-top:10px;">Register another person</button>
+    </div>
+  `;
+  document.getElementById("viewStatusBtn").onclick = () => { window.location.href = statusLink; };
+  document.getElementById("copyLinkBtn").onclick = async () => {
+    const btn = document.getElementById("copyLinkBtn");
+    try {
+      await navigator.clipboard.writeText(statusLink);
+      btn.textContent = "Copied!";
+    } catch (err) {
+      window.prompt("Copy this link:", statusLink);
+    }
+    setTimeout(() => { if (btn) btn.textContent = "Copy My Link"; }, 2000);
+  };
+  document.getElementById("againBtn").onclick = () => renderForm(className, classId, batch);
+}
+
+// Name already has a pending registration for THIS class — don't create
+// a second doc, just hand back the link to the one that already exists.
+function renderAlreadyPendingSameClass(className, classId, batch, regId) {
+  const statusLink = statusLinkForReg(regId);
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="checkCircle" style="background:#A9782F;">i</div>
+      <div class="big">Already submitted</div>
+      <div class="sub">Someone already registered for <strong>${esc(className)}</strong> under this exact name, and it's still waiting on a leader's review. If that was you, use the link below instead of submitting again.</div>
+      <button class="submitBtn" id="viewStatusBtn" style="margin-top:18px;">View That Registration's Status</button>
+      <button class="againBtn" id="notMeBtn" style="margin-top:10px;">That wasn't me — register anyway</button>
+    </div>
+  `;
+  document.getElementById("viewStatusBtn").onclick = () => { window.location.href = statusLink; };
+  document.getElementById("notMeBtn").onclick = () => renderForm(className, classId, batch);
+}
+
+// Name is already an approved member of THIS class.
+function renderAlreadyMemberSameClass(className, classId, batch) {
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="checkCircle">✓</div>
+      <div class="big">You're already enrolled</div>
+      <div class="sub">Someone under this exact name is already an active member of <strong>${esc(className)}</strong>. No need to register again — if this isn't you, let a leader know.</div>
+      <button class="againBtn" id="notMeBtn" style="margin-top:18px;">That wasn't me — register anyway</button>
+    </div>
+  `;
+  document.getElementById("notMeBtn").onclick = () => renderForm(className, classId, batch);
+}
+
+// Name already has a record (member or pending) under a DIFFERENT class.
+// This is the "one profile per person" case: don't let self-registration
+// silently create a second, disconnected record for the same person.
+function renderDuplicateOtherClass(className, classId, batch, otherClassNames, onContinueAnyway) {
+  const otherList = otherClassNames.length ? otherClassNames.map(esc).join(", ") : "another class";
+  app.innerHTML = `
+    <div class="card">
+      <div class="className">${esc(className)}</div>
+      <div class="warnBox">
+        <strong>Heads up:</strong> someone under this exact name is already registered for <strong>${otherList}</strong>. To keep one profile per person, please ask that class's leader (or this class's leader) to add <strong>${esc(className)}</strong> to your existing profile instead of registering separately here.
+      </div>
+      <button class="submitBtn" id="backBtn">Okay, I'll ask a leader instead</button>
+      <button class="againBtn" id="continueBtn" style="margin-top:10px;">That's a different person — submit anyway</button>
+    </div>
+  `;
+  document.getElementById("backBtn").onclick = () => renderForm(className, classId, batch);
+  document.getElementById("continueBtn").onclick = onContinueAnyway;
+}
+
+function renderForm(className, classId, batch, errorMessage) {
+  app.innerHTML = `
+    <div class="card">
+      <div class="className">${esc(className)}</div>
+      <div class="classSub">Fill in your details to register for this class.${batch ? ` You'll be added to <strong>${esc(batch)}</strong>.` : ""}</div>
+      ${errorMessage ? `<div class="errorBox">${esc(errorMessage)}</div>` : ""}
+      <form id="regForm">
+        <div class="row2">
+          <label class="field">
+            <input class="input" name="firstName" placeholder="First name *" aria-label="First name" required autofocus autocomplete="given-name" />
+          </label>
+          <label class="field">
+            <input class="input" name="lastName" placeholder="Last name *" aria-label="Last name" required autocomplete="family-name" />
+          </label>
+        </div>
+        <div class="row2">
+          <label class="field">
+            <span>Birthdate *</span>
+            ${dobFieldsHTML()}
+            <div class="ageHint" id="ageHint"></div>
+          </label>
+          <label class="field">
+            <span>Gender *</span>
+            <select class="input" name="gender" required>
+              <option value="" disabled selected>Select…</option>
+              ${GENDERS.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="row2">
+          <label class="field">
+            <span>Membership *</span>
+            <select class="input" name="category" required>
+              <option value="" disabled selected>Select…</option>
+              ${MEMBER_CATEGORIES.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}
+            </select>
+          </label>
+          <label class="field">
+            <span>Life stage *</span>
+            <select class="input" name="lifeStage" required>
+              <option value="" disabled selected>Select…</option>
+              ${LIFE_STAGES.map((ls) => `<option value="${esc(ls)}">${esc(ls)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="row2">
+          <label class="field">
+            <span>Contact number *</span>
+            <input class="input" name="contactNumber" type="tel" placeholder="Contact number" required autocomplete="tel" />
+          </label>
+          <label class="field">
+            <span>Address *</span>
+            <input class="input" name="address" placeholder="Address" required autocomplete="street-address" />
+          </label>
+        </div>
+        <label class="field">
+          <input class="input" name="notes" placeholder="Notes (optional)" aria-label="Notes (optional)" />
+        </label>
+        <button class="submitBtn" type="submit" id="submitBtn">Submit Registration</button>
+      </form>
+      <div class="noteBox">Your registration is reviewed by a class leader before it appears on the roster — this helps keep the list accurate and prevents mistaken or fake sign-ups. If you've registered before, ask a leader to add this class to your existing profile instead so you don't end up with two entries.</div>
+    </div>
+  `;
+
+  const ageHint = document.getElementById("ageHint");
+  const dob = wireDobFields(app, ageHint);
+
+  // "required" alone lets someone through with just a space (HTML's
+  // built-in check only cares that a value exists, not that it's more
+  // than whitespace) — that used to submit silently. Use the browser's
+  // own validation bubble instead of wiping the whole form, since
+  // clearing and re-rendering on every trivial mistake would also
+  // throw away everything else the person already filled in.
+  const blankCheckFields = [
+    ["firstName", "Please enter your first name."],
+    ["lastName", "Please enter your last name."],
+    ["contactNumber", "Please enter a contact number."],
+    ["address", "Please enter an address."],
+  ];
+  blankCheckFields.forEach(([fieldName, message]) => {
+    const input = document.querySelector(`[name="${fieldName}"]`);
+    input.addEventListener("input", () => input.setCustomValidity(""));
+  });
+
+  document.getElementById("regForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = document.getElementById("submitBtn");
+
+    let firstInvalid = null;
+    blankCheckFields.forEach(([fieldName, message]) => {
+      const input = form[fieldName];
+      if (!input.value.trim()) {
+        input.setCustomValidity(message);
+        if (!firstInvalid) firstInvalid = input;
+      } else {
+        input.setCustomValidity("");
+      }
+    });
+    if (firstInvalid) { firstInvalid.reportValidity(); firstInvalid.focus(); return; }
+
+    // The rest of the app (duplicate matching, roster, CSV export, QR
+    // labels) still keys everything off a single "name" string, so
+    // first/last are combined here — this is the only place that joins
+    // them for this form.
+    const name = `${form.firstName.value.trim()} ${form.lastName.value.trim()}`.replace(/\s+/g, " ").trim();
+    const birthdate = dob.getBirthdate();
+    form.birthYear.setCustomValidity("");
+    if (birthdate && birthdate > new Date().toISOString().slice(0, 10)) {
+      form.birthYear.setCustomValidity("Birthdate cannot be in the future.");
+      form.birthYear.reportValidity();
+      form.birthYear.focus();
+      return;
+    }
+
+    const data = {
+      name,
+      photoUrl: null,
+      birthdate,
+      gender: form.gender.value,
+      lifeStage: form.lifeStage.value,
+      category: form.category.value,
+      contactNumber: form.contactNumber.value.trim(),
+      address: form.address.value.trim(),
+      notes: form.notes.value.trim(),
+      classIds: [classId],
+      dateAdded: new Date(),
+      selfRegistered: true,
+      status: "pending",
+      // Only present when this link was copied while a specific batch
+      // was selected in index.html — a leader-controlled default (no
+      // batch, or a class with only "Batch 1") sends no batch at all,
+      // and the approval side falls back to "Batch 1" the same way the
+      // rest of the app already does.
+      ...(batch ? { batch } : {}),
+    };
+
+    const doSubmit = async () => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Submitting…";
+      // Create the doc with a known ID up front (rather than .add()) so
+      // that ID can double as the "regId" in the personal status link
+      // we hand back immediately — no separate lookup step needed.
+      const regRef = db.collection("pendingRegistrations").doc();
+      try {
+        await ensureSignedIn();
+        await regRef.set(data);
+        renderSuccess(className, classId, batch, regRef.id);
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit Registration";
+        renderForm(className, classId, batch, "Couldn't submit your registration. " + (err && err.message ? err.message : "Please try again."));
+      }
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Checking…";
+    try {
+      await ensureSignedIn();
+      const dup = await findDuplicateContext(name, classId);
+      if (dup) {
+        if (dup.sameClass) {
+          if (dup.type === "pending") { renderAlreadyPendingSameClass(className, classId, batch, dup.regId); return; }
+          renderAlreadyMemberSameClass(className, classId, batch);
+          return;
+        }
+        const otherClassNames = await classNamesFor(dup.classIds.filter((id) => id !== classId));
+        renderDuplicateOtherClass(className, classId, batch, otherClassNames, doSubmit);
+        return;
+      }
+    } catch (err) {
+      // If the duplicate check itself fails (e.g. rules not yet updated
+      // to allow it), don't block a real registration on that — fall
+      // through and submit normally.
+    }
+
+    await doSubmit();
+  });
+}
+
+// ============================================================
+// ONE2ONE self-registration — reached via a link copied from a
+// specific ONE2ONE leader's profile in the ONE2ONE tab (see
+// registrationLinkForOneOnOne / CopyOneOnOneRegistrationLinkButton
+// in index.html). Unlike the class flow above, this writes straight
+// to the "oneOnOne" collection under that leader's email instead of
+// "pendingRegistrations", and skips the "Membership" question
+// entirely since ONE2ONE members don't have that field at all (see
+// OneOnOneFormModal in index.html) — the form shows a fixed
+// "ONE2ONE Leader" box in its place instead of a select.
+// ============================================================
+
+// Same scheme index.html's oneOnOneQrText uses, so the leader's
+// scanner (ScanOneOnOneAttendanceModal) recognizes this code right
+// away — it works immediately, even before a Leader/Manager approves
+// the person into Disciples.
+function oneOnOneQrText(oneOnOneId) {
+  return `DJONE2ONE:${oneOnOneId}`;
+}
+
+function renderOneOnOneSuccess(leaderEmail, leaderName, personId, name) {
+  const qrText = oneOnOneQrText(personId);
+  app.innerHTML = `
+    <div class="msgScreen">
+      <div class="checkCircle">✓</div>
+      <div class="big">You're in, ${esc(name)}!</div>
+      <div class="sub">Your ONE2ONE registration has been submitted and is waiting for a leader to approve it into Disciples. This QR code already works for attendance right now — save or screenshot it before you leave this page.</div>
+      <div class="qrBox" id="qrBox" style="margin-top:16px;"></div>
+      <button class="againBtn" id="downloadQrBtn" style="margin-top:14px;">Save QR Code</button>
+      <button class="againBtn" id="againBtn" style="margin-top:10px;">Register another person</button>
+    </div>
+  `;
+  const qrBox = document.getElementById("qrBox");
+  new QRCode(qrBox, { text: qrText, width: 220, height: 220, correctLevel: QRCode.CorrectLevel.M });
+  document.getElementById("downloadQrBtn").onclick = () => {
+    const canvas = qrBox.querySelector("canvas");
+    if (!canvas) return;
+    const a = document.createElement("a");
+    a.href = canvas.toDataURL("image/png");
+    a.download = `${name}-QR.png`;
+    a.click();
+  };
+  document.getElementById("againBtn").onclick = () => renderOneOnOneForm(leaderEmail, leaderName);
+}
+
+function renderOneOnOneForm(leaderEmail, leaderName, errorMessage) {
+  app.innerHTML = `
+    <div class="card">
+      <div class="className">ONE2ONE Registration</div>
+      <div class="classSub">Fill in your details to register under <strong>${esc(leaderName || leaderEmail)}</strong>'s ONE2ONE tracker.</div>
+      ${errorMessage ? `<div class="errorBox">${esc(errorMessage)}</div>` : ""}
+      <form id="regForm">
+        <div class="row2">
+          <label class="field">
+            <input class="input" name="firstName" placeholder="First name *" aria-label="First name" required autofocus autocomplete="given-name" />
+          </label>
+          <label class="field">
+            <input class="input" name="lastName" placeholder="Last name *" aria-label="Last name" required autocomplete="family-name" />
+          </label>
+        </div>
+        <div class="row2">
+          <label class="field">
+            <span>Birthdate *</span>
+            ${dobFieldsHTML()}
+            <div class="ageHint" id="ageHint"></div>
+          </label>
+          <label class="field">
+            <span>Gender *</span>
+            <select class="input" name="gender" required>
+              <option value="" disabled selected>Select…</option>
+              ${GENDERS.map((g) => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="row2">
+          <label class="field">
+            <span>ONE2ONE Leader</span>
+            <input class="fixedField" value="${esc(leaderName || leaderEmail)}" disabled />
+          </label>
+          <label class="field">
+            <span>Life stage *</span>
+            <select class="input" name="lifeStage" required>
+              <option value="" disabled selected>Select…</option>
+              ${LIFE_STAGES.map((ls) => `<option value="${esc(ls)}">${esc(ls)}</option>`).join("")}
+            </select>
+          </label>
+        </div>
+        <div class="row2">
+          <label class="field">
+            <span>Contact number *</span>
+            <input class="input" name="contactNumber" type="tel" placeholder="Contact number" required autocomplete="tel" />
+          </label>
+          <label class="field">
+            <span>Address *</span>
+            <input class="input" name="address" placeholder="Address" required autocomplete="street-address" />
+          </label>
+        </div>
+        <button class="submitBtn" type="submit" id="submitBtn">Submit Registration</button>
+      </form>
+      <div class="noteBox">Your registration is reviewed by a Leader/Manager before it's added to Disciples — but your attendance QR code (shown after you submit) already works right away, so there's nothing extra to wait for on that front.</div>
+    </div>
+  `;
+
+  const ageHint = document.getElementById("ageHint");
+  const dob = wireDobFields(app, ageHint);
+
+  // Same "required alone lets whitespace through" fix as the class form.
+  const blankCheckFields = [
+    ["firstName", "Please enter your first name."],
+    ["lastName", "Please enter your last name."],
+    ["contactNumber", "Please enter a contact number."],
+    ["address", "Please enter an address."],
+  ];
+  blankCheckFields.forEach(([fieldName, message]) => {
+    const input = document.querySelector(`[name="${fieldName}"]`);
+    input.addEventListener("input", () => input.setCustomValidity(""));
+  });
+
+  document.getElementById("regForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const form = e.target;
+    const submitBtn = document.getElementById("submitBtn");
+
+    let firstInvalid = null;
+    blankCheckFields.forEach(([fieldName, message]) => {
+      const input = form[fieldName];
+      if (!input.value.trim()) {
+        input.setCustomValidity(message);
+        if (!firstInvalid) firstInvalid = input;
+      } else {
+        input.setCustomValidity("");
+      }
+    });
+    if (firstInvalid) { firstInvalid.reportValidity(); firstInvalid.focus(); return; }
+
+    const name = `${form.firstName.value.trim()} ${form.lastName.value.trim()}`.replace(/\s+/g, " ").trim();
+    const birthdate = dob.getBirthdate();
+    form.birthYear.setCustomValidity("");
+    if (birthdate && birthdate > new Date().toISOString().slice(0, 10)) {
+      form.birthYear.setCustomValidity("Birthdate cannot be in the future.");
+      form.birthYear.reportValidity();
+      form.birthYear.focus();
+      return;
+    }
+    // No "category"/Membership field here on purpose — ONE2ONE people
+    // never have one (see OneOnOneFormModal / addOneOnOnePerson in
+    // index.html); the fixed "ONE2ONE Leader" box above is display-only.
+    const data = {
+      name,
+      photoUrl: null,
+      birthdate,
+      gender: form.gender.value,
+      lifeStage: form.lifeStage.value,
+      contactNumber: form.contactNumber.value.trim(),
+      address: form.address.value.trim(),
+      createdBy: leaderEmail,
+      status: "pending",
+      selfRegistered: true,
+      createdAt: new Date(),
+      progress: {},
+    };
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Submitting…";
+    // Same known-ID-up-front trick as the class flow, so the id can
+    // double as the QR text (DJONE2ONE:<id>) with no extra lookup.
+    const personRef = db.collection("oneOnOne").doc();
+    try {
+      await ensureSignedIn();
+      await personRef.set(data);
+      renderOneOnOneSuccess(leaderEmail, leaderName, personRef.id, name);
+    } catch (err) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Submit Registration";
+      renderOneOnOneForm(leaderEmail, leaderName, "Couldn't submit your registration. " + (err && err.message ? err.message : "Please try again."));
+    }
+  });
+}
+
+function ensureSignedIn() {
+  if (auth.currentUser) return Promise.resolve(auth.currentUser);
+  return auth.signInAnonymously().then((cred) => cred.user);
+}
+
+async function init() {
+  const one2oneParam = qs("one2one");
+  if (one2oneParam) {
+    const leaderEmail = one2oneParam.trim().toLowerCase();
+    try {
+      await ensureSignedIn();
+      const leaderDoc = await db.collection("one2oneLeaders").doc(leaderEmail).get();
+      if (!leaderDoc.exists) { renderMissingLeader(); return; }
+      const leaderData = leaderDoc.data() || {};
+      renderOneOnOneForm(leaderEmail, leaderData.name || null);
+    } catch (err) {
+      renderError(err && err.message ? err.message : "Couldn't load this link. Please check your connection and try again.");
+    }
+    return;
+  }
+
+  const classId = qs("classId");
+  const batch = qs("batch") || null;
+  if (!classId) { renderMissingClass(); return; }
+  try {
+    await ensureSignedIn();
+    const doc = await db.collection("classes").doc(classId).get();
+    if (!doc.exists) { renderMissingClass(); return; }
+    const classItem = doc.data();
+    renderForm(classItem.name || "Class", classId, batch);
+  } catch (err) {
+    renderError(err && err.message ? err.message : "Couldn't load this class. Please check your connection and try again.");
+  }
+}
+
+init();
+</script>
+</body>
+</html>
