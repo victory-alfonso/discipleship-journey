@@ -3991,7 +3991,6 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
       <form className="dj-membermodal-body" style={styles.memberModalCard} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <div className="dj-membermodal-left" style={styles.memberModalLeft}>
           <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
-          <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
         </div>
         <div className="dj-membermodal-right" style={styles.memberModalRight}>
           <div style={styles.memberModalTitle}>{title || "Add Member"}</div>
@@ -4052,6 +4051,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
               <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
             </label>
           </div>
+          <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
           <div style={styles.memberModalActions}>
             <button type="button" style={styles.memberModalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
             <button type="submit" style={styles.memberModalConfirmBtn} disabled={busy}>{mergeId ? "Merge" : "Add"}</button>
@@ -4249,7 +4249,6 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
       <form className="dj-membermodal-body" style={styles.memberModalCard} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
         <div className="dj-membermodal-left" style={styles.memberModalLeft}>
           <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
-          <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
         </div>
         <div className="dj-membermodal-right" style={styles.memberModalRight}>
           <div style={styles.memberModalTitle}>Edit Member</div>
@@ -4298,6 +4297,7 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
               <input style={{ ...styles.memberModalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
             </label>
           </div>
+          <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
           <div style={styles.memberModalActions}>
             <button type="button" style={styles.memberModalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
             <button type="submit" style={styles.memberModalConfirmBtn} disabled={busy}>Save</button>
