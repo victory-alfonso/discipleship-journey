@@ -302,7 +302,7 @@
        fields-right layout stacks into one scrollable column on a
        phone screen. */
     .dj-membermodal-body { flex-direction: column !important; max-height: calc(100vh - var(--dj-header-h, 180px) - 20px) !important; overflow-y: auto !important; }
-    .dj-membermodal-left { width: 100% !important; border-right: none !important; border-bottom: 1px solid rgba(216,207,176,0.6) !important; overflow-y: visible !important; flex-shrink: 1 !important; }
+    .dj-membermodal-left { width: 100% !important; border-right: none !important; border-bottom: 1px solid rgba(255,255,255,0.15) !important; overflow-y: visible !important; flex-shrink: 1 !important; }
     .dj-membermodal-right { overflow-y: visible !important; }
 
     /* Header: tighten up title + let the sign-out row keep its own
@@ -3660,7 +3660,7 @@ function PhotoPicker({ name, photoUrl, onChange }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8, width: "100%" }}>
-      <Avatar name={name} photoUrl={photoUrl} size={72} />
+      <Avatar name={name} photoUrl={photoUrl} size={72} dark />
       <button type="button" style={styles.memberModalUploadBtn} onClick={() => inputRef.current && inputRef.current.click()} disabled={busy}>
         {busy ? "Processing…" : photoUrl ? "Change photo" : "Upload photo"}
       </button>
@@ -3817,7 +3817,7 @@ function MemberReviewFields({ name, photoUrl, birthdate, gender, category, lifeS
   return (
     <>
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
-        <Avatar name={name} photoUrl={photoUrl} size={64} />
+        <Avatar name={name} photoUrl={photoUrl} size={64} dark />
       </div>
       {mergeName && (
         <div style={styles.memberModalMergeNote}>
@@ -8168,62 +8168,61 @@ const styles = {
   modalConfirmBtn: { padding: "9px 18px", borderRadius: 8, border: "none", background: "rgba(31,56,100,0.9)", backdropFilter: "blur(6px)", color: "#FFFFFF", cursor: "pointer", fontSize: 13.5, fontWeight: 700 },
 
   // ---------------------------------------------------------------
-  // ADD/EDIT MEMBER MODAL — re-skinned to match the public
-  // self-registration forms (register.html: Class Registration /
-  // ONE2ONE Registration) and the rest of the app's light glass
-  // modalCard look, instead of the old navy/rectangular treatment.
-  // Only AddMemberModal/EditMemberModal (and the sub-components
-  // exclusive to them — PhotoPicker, DiscipleshipTrackFields,
+  // ADD/EDIT MEMBER MODAL — colored to match the Class Detail modal
+  // (One2One, Spiritual Foundations, Making Disciples, etc. in the
+  // Classes tab): navy gradient card, cream text, gold accent.
+  // Rectangular (0 border-radius), landscape two-column layout. Only
+  // AddMemberModal/EditMemberModal (and the sub-components exclusive
+  // to them — PhotoPicker, DiscipleshipTrackFields,
   // MemberReviewFields/ReviewRow) use these.
   // ---------------------------------------------------------------
+  avatarCircleDark: { background: "rgba(255,255,255,0.1)", color: "rgba(245,242,228,0.75)" },
+
   memberModalCard: {
     position: "relative", width: "100%", maxWidth: 760, display: "flex",
-    background: "rgba(255,255,255,0.85)",
-    backdropFilter: "blur(22px) saturate(180%)", WebkitBackdropFilter: "blur(22px) saturate(180%)",
-    border: "1px solid rgba(255,255,255,0.6)", borderRadius: 16,
-    boxShadow: "0 25px 50px -12px rgba(20,18,14,0.5), inset 0 1px 0 rgba(255,255,255,0.5)",
+    background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))",
+    border: "1px solid rgba(180,198,231,0.5)", borderRadius: 0,
+    boxShadow: "0 25px 50px -12px rgba(20,18,14,0.5)",
     maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)",
     overflow: "hidden", animation: "popIn 0.14s ease-out",
   },
   memberModalCardSingle: {
     position: "relative", width: "100%", maxWidth: 440, display: "flex", flexDirection: "column",
-    background: "rgba(255,255,255,0.85)",
-    backdropFilter: "blur(22px) saturate(180%)", WebkitBackdropFilter: "blur(22px) saturate(180%)",
-    border: "1px solid rgba(255,255,255,0.6)", borderRadius: 16,
-    boxShadow: "0 25px 50px -12px rgba(20,18,14,0.5), inset 0 1px 0 rgba(255,255,255,0.5)",
+    background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))",
+    border: "1px solid rgba(180,198,231,0.5)", borderRadius: 0,
+    boxShadow: "0 25px 50px -12px rgba(20,18,14,0.5)",
     maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", overflowY: "auto",
-    padding: "24px 24px 20px", animation: "popIn 0.14s ease-out",
+    padding: "22px 22px 18px", animation: "popIn 0.14s ease-out",
   },
   memberModalLeft: {
-    width: 230, flexShrink: 0, padding: "24px 18px", borderRight: "1px solid rgba(216,207,176,0.6)",
-    background: "rgba(239,231,211,0.35)",
+    width: 230, flexShrink: 0, padding: "22px 18px", borderRight: "1px solid rgba(255,255,255,0.15)",
     display: "flex", flexDirection: "column", alignItems: "center", gap: 14, overflowY: "auto",
   },
   memberModalRight: {
-    flex: 1, minWidth: 0, padding: "24px 24px 20px", overflowY: "auto",
+    flex: 1, minWidth: 0, padding: "22px 24px 18px", overflowY: "auto",
     display: "flex", flexDirection: "column",
   },
-  memberModalTitle: { fontFamily: "Georgia, serif", fontSize: 19, fontWeight: 700, color: "#1F3864", marginBottom: 4 },
-  memberModalSubtitle: { fontSize: 12.5, color: "#7A6E4E", marginBottom: 14 },
-  memberModalFieldLabel: { display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "#7A6E4E", marginBottom: 5, minWidth: 0 },
-  memberModalInput: { width: "100%", padding: "10px 12px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", background: "rgba(255,255,255,0.7)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", color: "#23211D", fontSize: 13.5, outline: "none", minWidth: 0 },
+  memberModalTitle: { fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 700, color: "#F5F2E4", marginBottom: 4 },
+  memberModalSubtitle: { fontSize: 12.5, color: "rgba(245,242,228,0.65)", marginBottom: 14 },
+  memberModalFieldLabel: { display: "block", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.4, color: "rgba(245,242,228,0.65)", marginBottom: 5, minWidth: 0 },
+  memberModalInput: { width: "100%", padding: "9px 10px", borderRadius: 0, border: "1px solid rgba(180,198,231,0.35)", background: "rgba(255,255,255,0.08)", color: "#F5F2E4", fontSize: 13.5, outline: "none", minWidth: 0 },
   memberModalRow2: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 8, marginBottom: 10 },
-  memberModalSectionLabel: { fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: "#7A6E4E", margin: "4px 0 8px" },
+  memberModalSectionLabel: { fontSize: 10.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: "rgba(245,242,228,0.65)", margin: "4px 0 8px" },
   memberModalActions: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: "auto", paddingTop: 14 },
   memberModalActionsFixed: { display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 },
-  memberModalCancelBtn: { padding: "9px 16px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", background: "rgba(255,255,255,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", color: "#4A4230", fontSize: 13.5, fontWeight: 600, cursor: "pointer" },
-  memberModalConfirmBtn: { padding: "9px 18px", borderRadius: 8, border: "none", background: "rgba(31,56,100,0.9)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", color: "#FFFFFF", fontSize: 13.5, fontWeight: 700, cursor: "pointer" },
-  memberModalUploadBtn: { padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(216,207,176,0.7)", background: "rgba(255,255,255,0.6)", color: "#4A4230", fontSize: 11.5, fontWeight: 600, cursor: "pointer", width: "100%" },
-  memberModalDangerLink: { background: "none", border: "none", color: "#A6402F", fontSize: 11.5, cursor: "pointer", textDecoration: "underline" },
-  memberModalTrackRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, padding: "8px 0", fontSize: 12, width: "100%", borderBottom: "1px solid rgba(216,207,176,0.5)" },
-  memberModalTrackLabel: { color: "#23211D", flex: 1, paddingTop: 6 },
-  memberModalTrackWarn: { fontSize: 10, color: "#A6402F", lineHeight: 1.3 },
-  memberModalError: { display: "flex", alignItems: "flex-start", gap: 8, background: "#F3E4DF", color: "#A6402F", padding: "10px 13px", borderRadius: 8, fontSize: 12.5, lineHeight: 1.5, marginBottom: 14 },
-  memberModalMergeNote: { fontSize: 12.5, color: "#6B5220", background: "#FBF3E1", border: "1px solid #E9D8A6", borderRadius: 10, padding: "10px 12px", marginBottom: 10, lineHeight: 1.5 },
-  memberModalPairNote: { fontSize: 12, color: "#7A6E4E", marginBottom: 10, maxWidth: 560 },
-  memberModalReviewRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, padding: "9px 0", borderBottom: "1px solid #EFE7D3", fontSize: 13.5 },
-  memberModalReviewLabel: { color: "#7A6E4E", flexShrink: 0 },
-  memberModalReviewValue: { color: "#23211D", fontWeight: 600, textAlign: "right" },
+  memberModalCancelBtn: { padding: "9px 16px", borderRadius: 0, border: "1px solid rgba(180,198,231,0.4)", background: "transparent", color: "#F5F2E4", fontSize: 13, fontWeight: 600, cursor: "pointer" },
+  memberModalConfirmBtn: { padding: "9px 18px", borderRadius: 0, border: "none", background: "#E5A430", color: "#23211D", fontSize: 13, fontWeight: 700, cursor: "pointer" },
+  memberModalUploadBtn: { padding: "7px 12px", borderRadius: 0, border: "1px solid rgba(180,198,231,0.4)", background: "transparent", color: "#F5F2E4", fontSize: 11.5, fontWeight: 600, cursor: "pointer", width: "100%" },
+  memberModalDangerLink: { background: "none", border: "none", color: "#E9A493", fontSize: 11.5, cursor: "pointer", textDecoration: "underline" },
+  memberModalTrackRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, padding: "8px 0", fontSize: 12, width: "100%", borderBottom: "1px solid rgba(255,255,255,0.1)" },
+  memberModalTrackLabel: { color: "#F5F2E4", flex: 1, paddingTop: 6 },
+  memberModalTrackWarn: { fontSize: 10, color: "#E9A493", lineHeight: 1.3 },
+  memberModalError: { display: "flex", alignItems: "flex-start", gap: 8, background: "rgba(166,64,47,0.2)", color: "#F3D9D3", padding: "10px 12px", borderRadius: 0, fontSize: 12.5, lineHeight: 1.5, marginBottom: 14, border: "1px solid rgba(233,164,147,0.4)" },
+  memberModalMergeNote: { fontSize: 12.5, color: "#F3D9D3", background: "rgba(166,64,47,0.2)", border: "1px solid rgba(233,164,147,0.4)", borderRadius: 0, padding: "8px 10px", marginBottom: 10 },
+  memberModalPairNote: { fontSize: 12, color: "rgba(245,242,228,0.65)", marginBottom: 10, maxWidth: 560 },
+  memberModalReviewRow: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, padding: "8px 0", borderBottom: "1px solid rgba(255,255,255,0.12)", fontSize: 13.5 },
+  memberModalReviewLabel: { color: "rgba(245,242,228,0.65)", flexShrink: 0 },
+  memberModalReviewValue: { color: "#F5F2E4", fontWeight: 600, textAlign: "right" },
 };
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
