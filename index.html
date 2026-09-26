@@ -289,9 +289,9 @@
     /* Class detail modal: the wide two-column layout (cover/batch/
        progress on the left, sessions/members on the right) doesn't fit
        a phone screen, so stack it back into one scrollable column. */
-    .dj-classdetail-body { flex-direction: column !important; }
-    .dj-classdetail-left { width: 100% !important; flex-shrink: 1 !important; }
-    .dj-classdetail-right { border-left: none !important; border-top: 1px solid rgba(255,255,255,0.12) !important; }
+    .dj-classdetail-body { flex-direction: column !important; overflow-y: auto !important; }
+    .dj-classdetail-left { width: 100% !important; overflow-y: visible !important; flex-shrink: 1 !important; }
+    .dj-classdetail-right { border-left: none !important; border-top: 1px solid rgba(255,255,255,0.12) !important; overflow-y: visible !important; }
     /* ONE2ONE leader's own profile card: same idea — the wide
        cover/profile-left + content-right layout stacks into one
        column on a phone screen. */
@@ -2417,7 +2417,7 @@ function OneOnOneQrModal({ person, onClose, title, intro }) {
 function PrintAllQrModal({ members, onClose }) {
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={{ ...styles.modalCard, maxWidth: 720 }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...styles.modalCard, maxWidth: 720, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
         <div style={styles.modalTitle} className="no-print">Print QR ID Cards ({members.length})</div>
         <div
           className="qr-print-area"
@@ -3353,7 +3353,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
     <>
       <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onBack}>
         <div
-          style={{ position: "relative", width: "100%", maxWidth: 560, display: "flex", flexDirection: "column", background: dj.card.background, border: dj.card.border, borderRadius: 26, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.6)", animation: "popIn 0.18s ease-out" }}
+          style={{ position: "relative", width: "100%", maxWidth: 560, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: dj.card.background, border: dj.card.border, borderRadius: 26, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.6)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -3364,7 +3364,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
           >
             ×
           </button>
-          <div style={{ flex: 1 }}>
+          <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>
       <div style={{ ...dj.card, borderRadius: 0, border: "none", boxShadow: "none", background: "transparent" }}>
         <div style={{ ...dj.headerRow, paddingRight: 34 }}>
           <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
@@ -3547,6 +3547,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
                 position: "relative",
                 width: "100%",
                 maxWidth: 560,
+                maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)",
                 background: "linear-gradient(155deg, rgba(53,88,150,0.38), rgba(31,56,100,0.42))",
                 backdropFilter: "blur(18px) saturate(160%)",
                 WebkitBackdropFilter: "blur(18px) saturate(160%)",
@@ -3556,6 +3557,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
                 padding: "26px 24px 22px",
                 display: "flex",
                 gap: 22,
+                overflow: "hidden",
                 animation: "popIn 0.18s ease-out",
               }}
               onClick={(e) => e.stopPropagation()}
@@ -3575,7 +3577,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
                 <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.8)", marginTop: 2 }}>{ts.length} session{ts.length === 1 ? "" : "s"}</div>
               </div>
 
-              <div className="dj-modal-list" style={{ flex: 1, minWidth: 0, paddingRight: 2, paddingTop: 6 }}>
+              <div className="dj-modal-list" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto", paddingRight: 2, paddingTop: 6 }}>
                 {ts.length === 0 ? (
                   <div style={{ ...styles.emptyNote, color: "rgba(245,242,228,0.7)" }}>No topics added for this class yet.</div>
                 ) : (
@@ -4378,7 +4380,7 @@ function ClassFormModal({ title, initialName, initialPhoto, submitLabel, namePla
   };
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
-      <form style={{ ...styles.modalCard }} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+      <form style={{ ...styles.modalCard, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", overflowY: "auto" }} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
         <div style={styles.modalTitle}>{title}</div>
         <ClassPhotoPicker photoUrl={photoUrl} onChange={setPhotoUrl} />
         <input style={styles.modalInput} placeholder={namePlaceholder || "Class name"} value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
@@ -4595,7 +4597,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   return (
     <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
       <div
-        style={{ position: "relative", width: "100%", maxWidth: 900, display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
+        style={{ position: "relative", width: "100%", maxWidth: 900, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
         onClick={(e) => e.stopPropagation()}
       >
         <button type="button" onClick={onClose} style={{ ...roundBtn, right: 12 }} aria-label="Close">×</button>
@@ -4604,7 +4606,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
         )}
 
         <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
-          <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0 }}>
+          <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto" }}>
             <div style={{ position: "relative", height: 150, background: "#23211D" }}>
               <ClassCoverImage classItem={classItem} />
               <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(31,56,100,0.55) 60%, rgba(31,56,100,0.98) 100%)" }} />
@@ -4692,7 +4694,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
             </div>
           </div>
 
-          <div className="dj-classdetail-right" style={{ flex: 1, minWidth: 0, padding: "18px 20px 22px", color: "#F5F2E4", borderLeft: "1px solid rgba(255,255,255,0.12)" }}>
+          <div className="dj-classdetail-right" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "18px 20px 22px", color: "#F5F2E4", borderLeft: "1px solid rgba(255,255,255,0.12)" }}>
             <div style={detailLabel}>
               Sessions ({ts.length}) · {activeBatch}
               {batchComplete && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: "#8FCB74" }}>✓ Batch complete</span>}
@@ -5134,7 +5136,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
     <div style={{ ...styles.modalOverlay, paddingTop: "calc(var(--dj-header-h, 180px) + 5vh)", paddingBottom: "5vh" }} onClick={onClose}>
       <div
         style={{
-          position: "relative", width: "100%", maxWidth: 560, display: "flex", flexDirection: "column",
+          position: "relative", width: "100%", maxWidth: 560, maxHeight: "calc(90vh - var(--dj-header-h, 180px) - 10px)", display: "flex", flexDirection: "column",
           background: "linear-gradient(160deg, #FBF8EE 0%, #F1EAD6 100%)", border: "1px solid rgba(255,255,255,0.6)",
           borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out",
         }}
@@ -5146,7 +5148,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
           style={{ position: "absolute", top: 12, right: 12, zIndex: 3, background: "rgba(31,56,100,0.08)", border: "none", borderRadius: "50%", width: 30, height: 30, color: "#1F3864", fontSize: 16, cursor: "pointer", lineHeight: 1 }}
           aria-label="Close"
         >×</button>
-        <div style={{ flex: 1, padding: "20px 22px 24px" }}>
+        <div style={{ overflowY: "auto", flex: 1, minHeight: 0, padding: "20px 22px 24px" }}>
           <a style={styles.backLink} onClick={onClose}>&larr; Back to {topic.class}</a>
 
       <div style={styles.profileHeader}>
@@ -5438,7 +5440,7 @@ function OneOnOneFormModal({ title, initial, submitLabel, members, onClose, onSa
 
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
-      <form style={{ ...styles.modalCard }} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+      <form style={{ ...styles.modalCard, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", overflowY: "auto" }} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
         <div style={styles.modalTitle}>{title}</div>
         {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
         {!initial && (
@@ -5788,7 +5790,7 @@ function OneOnOneLeaderFormModal({ title, initialEmail, initialName, initialPhot
   };
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
-      <form style={{ ...styles.modalCard }} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
+      <form style={{ ...styles.modalCard, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", overflowY: "auto" }} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
         <div style={styles.modalTitle}>{title}</div>
         {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
         <AvatarPhotoPicker name={name || initialEmail} photoUrl={photoUrl} onChange={setPhotoUrl} />
