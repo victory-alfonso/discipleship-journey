@@ -6392,6 +6392,16 @@ function App() {
   // itself just below the header instead of covering it. Re-measures
   // on mount, on resize, and whenever the header's own size changes
   // (ResizeObserver), so it stays correct across breakpoints.
+  //
+  // The very first measurement can come out too tall (leaving too much
+  // of the page undimmed under a modal) if it runs before the layout
+  // has fully settled — e.g. before web fonts swap in, or before an
+  // async badge like the ONE2ONE pending count changes the nav's
+  // wrapping. ResizeObserver only fires on a *later* size change, so a
+  // stale oversized value from that first paint can otherwise stick
+  // around forever. To avoid that we re-measure again after the next
+  // paint (double rAF) and once web fonts finish loading, on top of
+  // the existing mount/resize/ResizeObserver triggers.
   const headerBarRef = useRef(null);
   useEffect(() => {
     const el = headerBarRef.current;
@@ -6400,6 +6410,10 @@ function App() {
       document.documentElement.style.setProperty("--dj-header-h", `${el.offsetHeight}px`);
     };
     setHeaderVar();
+    requestAnimationFrame(() => requestAnimationFrame(setHeaderVar));
+    if (document.fonts && document.fonts.ready) {
+      document.fonts.ready.then(setHeaderVar).catch(() => {});
+    }
     const ro = new ResizeObserver(setHeaderVar);
     ro.observe(el);
     window.addEventListener("resize", setHeaderVar);
