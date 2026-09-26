@@ -6412,10 +6412,15 @@ function App() {
   const authReady = !!authUser && !authUser.isAnonymous;
   // Roles come first so the shared collections below can be skipped
   // for ONE2ONE-only leaders (they never see Disciples/Classes).
-  const [leaders] = useCollection("leaders", null, authReady);
-  const [admins] = useCollection("admins", null, authReady);
-  const [seniorPastors] = useCollection("seniorPastors", null, authReady);
-  const [oneLeaders] = useCollection("one2oneLeaders", null, authReady);
+  const [leaders, leadersLoading] = useCollection("leaders", null, authReady);
+  const [admins, adminsLoading] = useCollection("admins", null, authReady);
+  const [seniorPastors, seniorPastorsLoading] = useCollection("seniorPastors", null, authReady);
+  const [oneLeaders, oneLeadersLoading] = useCollection("one2oneLeaders", null, authReady);
+  // While signed in but these four role lists haven't resolved yet,
+  // we can't tell an unauthorized account apart from one that's simply
+  // still loading — so hold off on the not-authorized screen below
+  // until every list has come back at least once.
+  const rolesLoading = authReady && (leadersLoading || adminsLoading || seniorPastorsLoading || oneLeadersLoading);
 
   // A manager (in "admins") gets full edit access even if they were
   // never separately added to "leaders" — managers aren't a subset of
@@ -7425,6 +7430,36 @@ function App() {
   }
   if (!authUser || authUser.isAnonymous) {
     return <AuthScreen />;
+  }
+  if (rolesLoading) {
+    return <div style={styles.loadingScreen}>Loading…</div>;
+  }
+  // Signed in, but this email isn't in any of the Settings role lists
+  // (leaders, admins, seniorPastors, one2oneLeaders) — no more silent
+  // "Viewer" access to everyone's data. Block with a clear warning
+  // instead of rendering the app.
+  if (!isLeader && !isOneLeader) {
+    return (
+      <div style={styles.authWrap}>
+        <div style={styles.watermark} className="dj-watermark" aria-hidden="true">
+          <img src={WATERMARK_IMG} alt="" style={styles.watermarkImg} />
+        </div>
+        <div style={styles.authCard}>
+          <div style={styles.authTopBar} />
+          <div style={styles.authLogoWrap}>
+            <img src={VICTORY_LOGO_DATA_URI} alt="Victory Alfonso" style={styles.authLogo} />
+          </div>
+          <h1 style={styles.authTitle}>No Access Yet</h1>
+          <p style={styles.authBody}>
+            <strong>{currentEmail}</strong> isn't registered as a Leader, ONE2ONE Leader, or Admin yet.
+            Ask a Developer or Leader to add this email in Settings, then sign in again.
+          </p>
+          <button style={{ ...styles.authSubmit, marginTop: 18 }} onClick={() => auth.signOut()}>
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
