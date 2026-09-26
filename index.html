@@ -60,7 +60,16 @@
      placeholder gray, which is nearly invisible on that dark
      background. This makes empty fields readable without changing
      what a typed value looks like. */
-  .dj-membermodal-body input::placeholder { color: rgba(245,242,228,0.55); opacity: 1; }
+   .dj-membermodal-body input::placeholder { color: rgba(245,242,228,0.55); opacity: 1; }
+
+  .dj-membermodal-body select {
+    color: #F5F2E4;
+  }
+
+  .dj-membermodal-body select option {
+    color: #2A2620;
+    background: #FFFFFF;
+  }
 
   @keyframes popIn { from { opacity: 0; transform: translateY(-6px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
   @keyframes djRingWedgeIn { from { opacity: 0; transform: scale(0.3) rotate(-8deg); } to { opacity: 1; transform: scale(1) rotate(0deg); } }
