@@ -4870,7 +4870,7 @@ function registrationLinkForOneOnOne(leaderEmail) {
   return `${base}register.html?one2one=${encodeURIComponent(leaderEmail)}`;
 }
 
-function CopyOneOnOneRegistrationLinkButton({ leaderEmail }) {
+function CopyOneOnOneRegistrationLinkButton({ leaderEmail, dark }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     const link = registrationLinkForOneOnOne(leaderEmail);
@@ -4882,7 +4882,10 @@ function CopyOneOnOneRegistrationLinkButton({ leaderEmail }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-  return <button style={styles.ghostBtn} onClick={copy}>{copied ? "Copied!" : "Copy Registration Link"}</button>;
+  const btnStyle = dark
+    ? { ...styles.ghostBtn, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4", backdropFilter: "none", WebkitBackdropFilter: "none" }
+    : styles.ghostBtn;
+  return <button style={btnStyle} onClick={copy}>{copied ? "Copied!" : "Copy Registration Link"}</button>;
 }
 
 function ClassOverview({ classItem, topics, members, attendanceByMember, isLeader, onBack, onOpenSession, onAddTopic, onDeleteTopic, onEditClass, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onReorderTopics }) {
@@ -5551,8 +5554,16 @@ function OneOnOneCard({ person, sessions, attendanceByMember, showAdder, onOpen,
   );
 }
 
-function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onToggleSession, leaderEmail }) {
+function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onToggleSession, leaderEmail, dark }) {
   const [scanOpen, setScanOpen] = useState(false);
+  const descColor = dark ? "rgba(245,242,228,0.75)" : "#7A6E4E";
+  const ghostBtnStyle = dark
+    ? { ...styles.ghostBtn, border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4", backdropFilter: "none", WebkitBackdropFilter: "none" }
+    : styles.ghostBtn;
+  const primaryBtnStyle = dark
+    ? { ...styles.primaryBtn, background: "#E5A430", color: "#23211D" }
+    : styles.primaryBtn;
+  const emptyNoteStyle = dark ? { ...styles.emptyNote, color: "rgba(245,242,228,0.7)" } : styles.emptyNote;
   // A ONE2ONE-only leader who hasn't set up their own profile yet (no
   // name/photo on their one2oneLeaders doc) sees a create-profile prompt
   // instead of the member tracker — see updateOneOnOneLeaderProfile's note
@@ -5588,12 +5599,12 @@ function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpe
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="stack-mobile" style={{ ...styles.toolbar, justifyContent: "flex-start", alignItems: "center" }}>
-        <div style={{ flex: "1 1 100%", fontSize: 13, color: "#7A6E4E", alignSelf: "center" }}>
+        <div style={{ flex: "1 1 100%", fontSize: 13, color: descColor, alignSelf: "center" }}>
           {showAll ? "All ONE2ONE members from every ONE2ONE leader." : "Your own ONE2ONE tracker — only people you've added show up here."}
         </div>
-        {leaderEmail && <CopyOneOnOneRegistrationLinkButton leaderEmail={leaderEmail} />}
-        {!showAll && sessions.length > 0 && <button style={styles.ghostBtn} onClick={() => setScanOpen(true)}>Scan Attendance</button>}
-        <button style={styles.primaryBtn} onClick={onAdd}>+ Add Member</button>
+        {leaderEmail && <CopyOneOnOneRegistrationLinkButton leaderEmail={leaderEmail} dark={dark} />}
+        {!showAll && sessions.length > 0 && <button style={ghostBtnStyle} onClick={() => setScanOpen(true)}>Scan Attendance</button>}
+        <button style={primaryBtnStyle} onClick={onAdd}>+ Add Member</button>
       </div>
 
       {scanOpen && (
@@ -5617,11 +5628,11 @@ function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpe
       )}
 
       {!hasClass && (
-        <div style={styles.emptyNote}>No class named ONE2ONE was found in the Classes tab yet. Once a leader creates it and adds its sessions, those sessions will show up here for every member.</div>
+        <div style={emptyNoteStyle}>No class named ONE2ONE was found in the Classes tab yet. Once a leader creates it and adds its sessions, those sessions will show up here for every member.</div>
       )}
 
       {people.length === 0 ? (
-        <div style={styles.emptyNote}>{showAll ? "No one has been added to ONE2ONE yet." : "You haven't added anyone to ONE2ONE yet."}</div>
+        <div style={emptyNoteStyle}>{showAll ? "No one has been added to ONE2ONE yet." : "You haven't added anyone to ONE2ONE yet."}</div>
       ) : (
         <div className="dj-classes-grid" style={styles.classesGrid}>
           {people.map((p) => (
@@ -5856,60 +5867,72 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
     // 440px-wide single column squeezed the toolbar buttons so much
     // they wrapped into oversized full-width tiles.
     <div
-      className="dj-oneown-body"
+      className="dj-classdetail-body"
       style={{
         position: "relative",
         width: "100%",
-        maxWidth: 820,
+        maxWidth: 900,
         maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)",
         margin: "0 auto",
         display: "flex",
-        background: "rgba(255,255,255,0.85)",
-        backdropFilter: "blur(22px) saturate(180%)",
-        WebkitBackdropFilter: "blur(22px) saturate(180%)",
-        border: "1px solid rgba(255,255,255,0.6)",
-        borderRadius: 16,
-        boxShadow: "0 16px 40px -18px rgba(20,18,14,0.35), inset 0 1px 0 rgba(255,255,255,0.5)",
+        background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))",
+        border: "1px solid rgba(180,198,231,0.5)",
+        borderRadius: 20,
+        boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)",
         overflow: "hidden",
         animation: "popIn 0.18s ease-out",
       }}
     >
-      <div className="dj-oneown-left" style={{ width: 260, flexShrink: 0, overflowY: "auto" }}>
+      <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto" }}>
         {/* Cover banner — shows the ONE2ONE class's own logo/cover
             photo (from the Classes tab) when one has been set; falls
-            back to the plain ONE2ONE wordmark, Facebook-style, when
-            it hasn't. The leader's own photo no longer sits here; it
-            shows as a circular profile picture overlapping the
-            bottom of this banner instead. */}
-        <div style={{ position: "relative", width: "100%", height: 92, background: "linear-gradient(135deg, #355896 0%, #1F3864 100%)" }}>
+            back to the plain ONE2ONE wordmark. Styled the same way as
+            the Classes / member detail modals (dark gradient overlay,
+            name pinned bottom-left) so every detail panel in the app
+            reads as one consistent shape. The leader's own circular
+            avatar sits inline with their name, overlapping the banner
+            slightly, instead of the old big Facebook-style overlap. */}
+        <div style={{ position: "relative", height: 150, background: "#23211D" }}>
           {coverPhotoUrl ? (
             <img src={coverPhotoUrl} alt="ONE2ONE" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
           ) : (
-            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700, letterSpacing: 3, color: "rgba(255,255,255,0.45)" }}>
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(135deg, #355896 0%, #1F3864 100%)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Georgia, serif", fontSize: 24, fontWeight: 700, letterSpacing: 3, color: "rgba(255,255,255,0.35)" }}>
               ONE2ONE
             </div>
           )}
-        </div>
-        {/* Profile picture + name — overlaps the banner above it,
-            Facebook-profile style, then sits above the content below. */}
-        <div style={{ position: "relative", padding: "0 16px 16px", marginTop: -46 }}>
-          <div style={{ position: "relative", width: 84, height: 84 }}>
-            <div style={{ width: 84, height: 84, borderRadius: "50%", background: "#fff", padding: 3, boxSizing: "border-box", boxShadow: "0 4px 14px rgba(20,18,14,0.3)" }}>
-              <Avatar name={displayName} photoUrl={leader.photoUrl} size={78} />
+          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(31,56,100,0.55) 60%, rgba(31,56,100,0.98) 100%)" }} />
+          <div style={{ position: "absolute", left: 20, right: 20, bottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ position: "relative", width: 52, height: 52, flexShrink: 0 }}>
+              <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#1F3864", padding: 2, boxSizing: "border-box", boxShadow: "0 4px 14px rgba(20,18,14,0.4)" }}>
+                <Avatar name={displayName} photoUrl={leader.photoUrl} size={48} />
+              </div>
+              <button type="button" onClick={onEditProfile} style={{ position: "absolute", bottom: -2, right: -2, background: "#E5A430", border: "2px solid #1F3864", borderRadius: "50%", width: 20, height: 20, color: "#23211D", fontSize: 10, cursor: "pointer", lineHeight: 1 }} aria-label="Edit" title="Edit name / photo">✎</button>
             </div>
-            <button type="button" onClick={onEditProfile} style={{ position: "absolute", bottom: 0, right: 0, background: "#1F3864", border: "2px solid #fff", borderRadius: "50%", width: 26, height: 26, color: "#F5F2E4", fontSize: 12, cursor: "pointer", lineHeight: 1 }} aria-label="Edit" title="Edit name / photo">✎</button>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontFamily: "Georgia, serif", fontSize: 18, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</div>
+              <div style={{ fontSize: 12, color: "rgba(245,242,228,0.8)", marginTop: 3 }}>{people.length} member{people.length === 1 ? "" : "s"} added</div>
+            </div>
           </div>
-          <div style={{ marginTop: 8, paddingBottom: 4 }}>
-            <div style={{ fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 700, color: "#23211D" }}>{displayName}</div>
-            <div style={{ fontSize: 11.5, color: "#7A6E4E", marginTop: 2 }}>{people.length} member{people.length === 1 ? "" : "s"} added</div>
+        </div>
+        <div style={{ padding: "18px 18px 22px", color: "#F5F2E4" }}>
+          <div style={detailLabel}>ONE2ONE Leader</div>
+          <div style={{ fontSize: 13, color: "rgba(245,242,228,0.75)", lineHeight: 1.5, marginBottom: 14 }}>
+            This is your own ONE2ONE tracker. Only the members you've personally added show up here.
           </div>
+          <button
+            type="button"
+            onClick={onEditProfile}
+            style={{ padding: "8px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4" }}
+          >
+            ✎ Edit Profile
+          </button>
         </div>
       </div>
       {/* Everything else — toolbar, summary badges, and the full
           member grid — now just normal content in its own column,
           with room to lay the toolbar buttons out in a single
           compact row instead of stacking into big tiles. */}
-      <div className="dj-oneown-right" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto", padding: "16px 18px 18px", borderLeft: "1px solid rgba(31,56,100,0.12)" }}>
+      <div className="dj-classdetail-right" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto", padding: "18px 20px 22px", color: "#F5F2E4", borderLeft: "1px solid rgba(255,255,255,0.12)" }}>
         <OneOnOne
           people={people}
           sessions={sessions}
@@ -5922,6 +5945,7 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
           showAll={false}
           onToggleSession={onToggleSession}
           leaderEmail={leaderEmail}
+          dark
         />
       </div>
     </div>
