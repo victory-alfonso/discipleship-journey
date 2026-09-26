@@ -295,9 +295,9 @@
     /* ONE2ONE leader's own profile card: same idea — the wide
        cover/profile-left + content-right layout stacks into one
        column on a phone screen. */
-    .dj-oneown-body { flex-direction: column !important; }
-    .dj-oneown-left { width: 100% !important; }
-    .dj-oneown-right { border-left: none !important; border-top: 1px solid rgba(31,56,100,0.12) !important; }
+    .dj-oneown-body { flex-direction: column !important; overflow-y: auto !important; }
+    .dj-oneown-left { width: 100% !important; overflow-y: visible !important; flex-shrink: 1 !important; }
+    .dj-oneown-right { border-left: none !important; border-top: 1px solid rgba(31,56,100,0.12) !important; overflow-y: visible !important; }
 
     /* Header: tighten up title + let the sign-out row keep its own
        line without crowding the title (headerUser is already
@@ -4533,6 +4533,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
+  const [membersCollapsed, setMembersCollapsed] = useState(false);
   const batches = useMemo(() => getBatchesForClass(classItem, topics), [classItem, topics]);
   const [selectedBatch, setSelectedBatch] = useState(null);
   // Default to the last (newest, by natural sort) batch so a leader
@@ -4762,7 +4763,14 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
             )}
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 24, flexWrap: "wrap" }}>
-              <div style={detailLabel}>Members ({classMembers.length}) · {activeBatch}</div>
+              <div
+                onClick={() => setMembersCollapsed((v) => !v)}
+                style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none" }}
+                title={membersCollapsed ? "Expand members" : "Collapse members"}
+              >
+                <span style={{ fontSize: 10, color: "rgba(245,242,228,0.65)", transition: "transform 0.15s ease", display: "inline-block", transform: membersCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+                <div style={{ ...detailLabel, marginBottom: 0 }}>Members ({classMembers.length}) · {activeBatch}</div>
+              </div>
               {isLeader && onAddMember && (
                 <button
                   type="button"
@@ -4773,12 +4781,12 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                 </button>
               )}
             </div>
-            {classMembers.length === 0 ? (
-              <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)" }}>{allClassMembers.length === 0 ? "No members enrolled in this class yet." : `No members in ${activeBatch} yet.`}</div>
+            {!membersCollapsed && (classMembers.length === 0 ? (
+              <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginTop: 10 }}>{allClassMembers.length === 0 ? "No members enrolled in this class yet." : `No members in ${activeBatch} yet.`}</div>
             ) : ts.length === 0 ? (
-              <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)" }}>Add sessions to this class to start tracking attendance.</div>
+              <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginTop: 10 }}>Add sessions to this class to start tracking attendance.</div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
                 {memberRows.map(({ member, done, total: totalSessions, pct: mpct }) => (
                   <div key={member.id} className="dj-detail-row" style={detailRow} onClick={() => openMember(member)}>
                     <Avatar name={member.name} photoUrl={member.photoUrl} size={38} />
@@ -4794,7 +4802,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                   </div>
                 ))}
               </div>
-            )}
+            ))}
           </div>
         </div>
       </div>
@@ -5082,6 +5090,8 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
 function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, onClose, onToggleAttendance, onSetAttendanceDate, onEditTopic, onOpenMember, onToggleConducted }) {
   const [scanOpen, setScanOpen] = useState(false);
   const [editUnlocked, setEditUnlocked] = useState(false);
+  const [attendedCollapsed, setAttendedCollapsed] = useState(false);
+  const [notAttendedCollapsed, setNotAttendedCollapsed] = useState(false);
   const classForTopic = useMemo(() => (classes || []).find((c) => c.name === topic.class), [classes, topic.class]);
   const classMembers = useMemo(
     () => (classForTopic ? getClassMembers(members, classForTopic.id) : members),
@@ -5236,25 +5246,39 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
             </div>
           )}
           <div style={styles.lightCard}>
-            <div style={{ ...styles.sectionLabel, color: "#5CDB9B" }}>Attended ({attended.length})</div>
-            {attended.length === 0 ? (
+            <div
+              onClick={() => setAttendedCollapsed((v) => !v)}
+              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none", marginBottom: attendedCollapsed ? 0 : 12 }}
+              title={attendedCollapsed ? "Expand attended" : "Collapse attended"}
+            >
+              <span style={{ fontSize: 10, color: "#5CDB9B", transition: "transform 0.15s ease", display: "inline-block", transform: attendedCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+              <div style={{ ...styles.sectionLabel, color: "#5CDB9B", marginBottom: 0 }}>Attended ({attended.length})</div>
+            </div>
+            {!attendedCollapsed && (attended.length === 0 ? (
               <div style={styles.emptyNote}>No attendees yet.</div>
             ) : (
               <div style={styles.sessionList}>
                 {attended.map((m) => <MemberRow key={m.id} m={m} done={true} />)}
               </div>
-            )}
+            ))}
           </div>
 
           <div style={styles.lightCard}>
-            <div style={{ ...styles.sectionLabel, color: "#FF8A7A" }}>Not Attended ({notAttended.length})</div>
-            {notAttended.length === 0 ? (
+            <div
+              onClick={() => setNotAttendedCollapsed((v) => !v)}
+              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none", marginBottom: notAttendedCollapsed ? 0 : 12 }}
+              title={notAttendedCollapsed ? "Expand not attended" : "Collapse not attended"}
+            >
+              <span style={{ fontSize: 10, color: "#FF8A7A", transition: "transform 0.15s ease", display: "inline-block", transform: notAttendedCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+              <div style={{ ...styles.sectionLabel, color: "#FF8A7A", marginBottom: 0 }}>Not Attended ({notAttended.length})</div>
+            </div>
+            {!notAttendedCollapsed && (notAttended.length === 0 ? (
               <div style={styles.emptyNote}>Complete.</div>
             ) : (
               <div style={styles.sessionList}>
                 {notAttended.map((m) => <MemberRow key={m.id} m={m} done={false} />)}
               </div>
-            )}
+            ))}
           </div>
         </>
       )}
@@ -5837,6 +5861,7 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
         position: "relative",
         width: "100%",
         maxWidth: 820,
+        maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)",
         margin: "0 auto",
         display: "flex",
         background: "rgba(255,255,255,0.85)",
@@ -5849,7 +5874,7 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
         animation: "popIn 0.18s ease-out",
       }}
     >
-      <div className="dj-oneown-left" style={{ width: 260, flexShrink: 0 }}>
+      <div className="dj-oneown-left" style={{ width: 260, flexShrink: 0, overflowY: "auto" }}>
         {/* Cover banner — shows the ONE2ONE class's own logo/cover
             photo (from the Classes tab) when one has been set; falls
             back to the plain ONE2ONE wordmark, Facebook-style, when
@@ -5884,7 +5909,7 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
           member grid — now just normal content in its own column,
           with room to lay the toolbar buttons out in a single
           compact row instead of stacking into big tiles. */}
-      <div className="dj-oneown-right" style={{ flex: 1, minWidth: 0, padding: "16px 18px 18px", borderLeft: "1px solid rgba(31,56,100,0.12)" }}>
+      <div className="dj-oneown-right" style={{ flex: 1, minWidth: 0, minHeight: 0, overflowY: "auto", padding: "16px 18px 18px", borderLeft: "1px solid rgba(31,56,100,0.12)" }}>
         <OneOnOne
           people={people}
           sessions={sessions}
