@@ -64,6 +64,22 @@
 
   .qrBox { display: inline-block; background: #FFFFFF; padding: 10px; border-radius: 10px; border: 1px solid #E4DCC6; }
   .fixedField { width: 100%; padding: 11px 13px; border-radius: 8px; border: 1px solid #D8CFB0; font-size: 14.5px; background: #F1ECDA; color: #6B5E3E; }
+
+  /* Review screen shown between "Submit" and the actual Firestore
+     write — lets someone check what they typed before it goes to a
+     leader, and go back to fix a mistake without losing anything
+     they'd already filled in (the original form stays in the DOM,
+     just hidden, while this is showing). */
+  .reviewTitle { font-family: Georgia, serif; font-size: 17px; color: #23211D; margin: 0 0 4px; }
+  .reviewSub { font-size: 12.5px; color: #7A6E4E; margin-bottom: 14px; }
+  .reviewRow { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; padding: 9px 0; border-bottom: 1px solid #EFE7D3; font-size: 13.5px; }
+  .reviewRow:last-child { border-bottom: none; }
+  .reviewLabel { color: #7A6E4E; flex-shrink: 0; }
+  .reviewValue { color: #23211D; font-weight: 600; text-align: right; }
+  .reviewActions { display: flex; gap: 10px; margin-top: 18px; }
+  .reviewBackBtn { flex: 0 0 auto; padding: 13px 18px; border-radius: 8px; border: 1px solid #D8CFB0; background: #FFFFFF; color: #4A4230; cursor: pointer; font-size: 14px; font-weight: 600; }
+  .reviewConfirmBtn { flex: 1; padding: 13px; border-radius: 8px; border: none; background: #1F3864; color: #EFE7D3; font-weight: 700; font-size: 15px; cursor: pointer; }
+  .reviewConfirmBtn:disabled { opacity: 0.6; cursor: default; }
 </style>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
@@ -264,6 +280,62 @@ async function classNamesFor(ids) {
   if (!list.length) return [];
   const snap = await db.collection("classes").where(firebase.firestore.FieldPath.documentId(), "in", list).get();
   return snap.docs.map((d) => (d.data() || {}).name).filter(Boolean);
+}
+
+// Builds and wires the "review your details" step shown after a form
+// passes validation, before anything is written to Firestore. The
+// original .card (with the filled-in form still inside it) is just
+// hidden rather than destroyed, so tapping "Back" restores it exactly
+// as the person left it — nothing they typed is lost.
+// rows: array of [label, escapedValueHtml] pairs; falsy values are
+// skipped automatically.
+function showReview({ cardEl, title, subtitle, rows, confirmLabel, onConfirm, onBack }) {
+  let reviewEl = document.getElementById("reviewBox");
+  if (!reviewEl) {
+    reviewEl = document.createElement("div");
+    reviewEl.id = "reviewBox";
+    reviewEl.className = "card";
+    cardEl.parentNode.insertBefore(reviewEl, cardEl.nextSibling);
+  }
+  const rowsHTML = rows
+    .filter(([, value]) => value)
+    .map(([label, value]) => `<div class="reviewRow"><span class="reviewLabel">${esc(label)}</span><span class="reviewValue">${value}</span></div>`)
+    .join("");
+  reviewEl.innerHTML = `
+    <div class="reviewTitle">${esc(title)}</div>
+    <div class="reviewSub">Please check your details before submitting.${subtitle ? ` ${subtitle}` : ""}</div>
+    ${rowsHTML}
+    <div class="reviewActions">
+      <button type="button" class="reviewBackBtn" id="reviewBackBtn">← Back</button>
+      <button type="button" class="reviewConfirmBtn" id="reviewConfirmBtn">${esc(confirmLabel || "Confirm & Submit")}</button>
+    </div>
+  `;
+  cardEl.style.display = "none";
+  reviewEl.style.display = "";
+  reviewEl.scrollIntoView({ behavior: "smooth", block: "start" });
+
+  document.getElementById("reviewBackBtn").onclick = () => {
+    reviewEl.style.display = "none";
+    cardEl.style.display = "";
+    if (onBack) onBack();
+  };
+  document.getElementById("reviewConfirmBtn").onclick = async () => {
+    const confirmBtn = document.getElementById("reviewConfirmBtn");
+    const backBtn = document.getElementById("reviewBackBtn");
+    confirmBtn.disabled = true;
+    backBtn.disabled = true;
+    confirmBtn.textContent = "Submitting…";
+    try {
+      await onConfirm();
+    } catch (err) {
+      // onConfirm's own catch handles user-facing errors and
+      // re-rendering; just make sure the review buttons aren't left
+      // stuck disabled if something unexpected slips through.
+      confirmBtn.disabled = false;
+      backBtn.disabled = false;
+      confirmBtn.textContent = confirmLabel || "Confirm & Submit";
+    }
+  };
 }
 
 function renderMissingClass() {
@@ -511,8 +583,6 @@ function renderForm(className, classId, batch, errorMessage) {
     };
 
     const doSubmit = async () => {
-      submitBtn.disabled = true;
-      submitBtn.textContent = "Submitting…";
       // Create the doc with a known ID up front (rather than .add()) so
       // that ID can double as the "regId" in the personal status link
       // we hand back immediately — no separate lookup step needed.
@@ -528,28 +598,46 @@ function renderForm(className, classId, batch, errorMessage) {
       }
     };
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Checking…";
-    try {
-      await ensureSignedIn();
-      const dup = await findDuplicateContext(name, classId);
-      if (dup) {
-        if (dup.sameClass) {
-          if (dup.type === "pending") { renderAlreadyPendingSameClass(className, classId, batch, dup.regId); return; }
-          renderAlreadyMemberSameClass(className, classId, batch);
+    const checkAndSubmit = async () => {
+      try {
+        await ensureSignedIn();
+        const dup = await findDuplicateContext(name, classId);
+        if (dup) {
+          if (dup.sameClass) {
+            if (dup.type === "pending") { renderAlreadyPendingSameClass(className, classId, batch, dup.regId); return; }
+            renderAlreadyMemberSameClass(className, classId, batch);
+            return;
+          }
+          const otherClassNames = await classNamesFor(dup.classIds.filter((id) => id !== classId));
+          renderDuplicateOtherClass(className, classId, batch, otherClassNames, doSubmit);
           return;
         }
-        const otherClassNames = await classNamesFor(dup.classIds.filter((id) => id !== classId));
-        renderDuplicateOtherClass(className, classId, batch, otherClassNames, doSubmit);
-        return;
+      } catch (err) {
+        // If the duplicate check itself fails (e.g. rules not yet updated
+        // to allow it), don't block a real registration on that — fall
+        // through and submit normally.
       }
-    } catch (err) {
-      // If the duplicate check itself fails (e.g. rules not yet updated
-      // to allow it), don't block a real registration on that — fall
-      // through and submit normally.
-    }
+      await doSubmit();
+    };
 
-    await doSubmit();
+    const age = birthdate ? computeAge(birthdate) : null;
+    showReview({
+      cardEl: form.closest(".card"),
+      title: className,
+      subtitle: batch ? `You'll be added to <strong>${esc(batch)}</strong>.` : "",
+      confirmLabel: "Confirm & Submit",
+      rows: [
+        ["Name", esc(name)],
+        ["Birthdate", `${esc(birthdate)}${age !== null && age >= 0 ? ` (Age ${age})` : ""}`],
+        ["Gender", esc(data.gender)],
+        ["Membership", esc(data.category)],
+        ["Life stage", esc(data.lifeStage)],
+        ["Contact number", esc(data.contactNumber)],
+        ["Address", esc(data.address)],
+        ["Notes", data.notes ? esc(data.notes) : ""],
+      ],
+      onConfirm: checkAndSubmit,
+    });
   });
 }
 
@@ -715,20 +803,38 @@ function renderOneOnOneForm(leaderEmail, leaderName, errorMessage) {
       progress: {},
     };
 
-    submitBtn.disabled = true;
-    submitBtn.textContent = "Submitting…";
-    // Same known-ID-up-front trick as the class flow, so the id can
-    // double as the QR text (DJONE2ONE:<id>) with no extra lookup.
-    const personRef = db.collection("oneOnOne").doc();
-    try {
-      await ensureSignedIn();
-      await personRef.set(data);
-      renderOneOnOneSuccess(leaderEmail, leaderName, personRef.id, name);
-    } catch (err) {
-      submitBtn.disabled = false;
-      submitBtn.textContent = "Submit Registration";
-      renderOneOnOneForm(leaderEmail, leaderName, "Couldn't submit your registration. " + (err && err.message ? err.message : "Please try again."));
-    }
+    const doSubmit = async () => {
+      // Same known-ID-up-front trick as the class flow, so the id can
+      // double as the QR text (DJONE2ONE:<id>) with no extra lookup.
+      const personRef = db.collection("oneOnOne").doc();
+      try {
+        await ensureSignedIn();
+        await personRef.set(data);
+        renderOneOnOneSuccess(leaderEmail, leaderName, personRef.id, name);
+      } catch (err) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Submit Registration";
+        renderOneOnOneForm(leaderEmail, leaderName, "Couldn't submit your registration. " + (err && err.message ? err.message : "Please try again."));
+      }
+    };
+
+    const age = birthdate ? computeAge(birthdate) : null;
+    showReview({
+      cardEl: form.closest(".card"),
+      title: "ONE2ONE Registration",
+      subtitle: `Under <strong>${esc(leaderName || leaderEmail)}</strong>'s ONE2ONE tracker.`,
+      confirmLabel: "Confirm & Submit",
+      rows: [
+        ["Name", esc(name)],
+        ["Birthdate", `${esc(birthdate)}${age !== null && age >= 0 ? ` (Age ${age})` : ""}`],
+        ["Gender", esc(data.gender)],
+        ["ONE2ONE Leader", esc(leaderName || leaderEmail)],
+        ["Life stage", esc(data.lifeStage)],
+        ["Contact number", esc(data.contactNumber)],
+        ["Address", esc(data.address)],
+      ],
+      onConfirm: doSubmit,
+    });
   });
 }
 
