@@ -3787,6 +3787,59 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
   );
 }
 
+// A single label/value row for the "review your details" step shown
+// between "Add"/"Save" and the actual write — lets a leader check what
+// they entered before it's saved, with a Back option that returns to
+// the still-filled-in form (nothing is cleared) instead of committing
+// immediately.
+function ReviewRow({ label, value }) {
+  if (value === null || value === undefined || value === "") return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 14, padding: "8px 0", borderBottom: "1px solid rgba(31,56,100,0.08)", fontSize: 13.5 }}>
+      <span style={{ color: "#7A6E4E", flexShrink: 0 }}>{label}</span>
+      <span style={{ color: "#23211D", fontWeight: 600, textAlign: "right" }}>{value}</span>
+    </div>
+  );
+}
+
+// Shared review body for AddMemberModal/EditMemberModal — a summary of
+// every field about to be saved, plus whichever discipleship tracks
+// are enrolled.
+function MemberReviewFields({ name, photoUrl, birthdate, gender, category, lifeStage, contactNumber, address, notes, trackStatus, trackBatch, mergeName }) {
+  const age = birthdate ? ageFromBirthdate(birthdate) : null;
+  const enrolledTracks = Object.keys(trackStatus || {}).filter((t) => trackStatus[t] && trackStatus[t] !== "Not Enrolled");
+  return (
+    <>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+        <Avatar name={name} photoUrl={photoUrl} size={64} />
+      </div>
+      {mergeName && (
+        <div style={{ fontSize: 12.5, color: "#A6402F", background: "rgba(166,64,47,0.08)", border: "1px solid rgba(166,64,47,0.25)", borderRadius: 8, padding: "8px 10px", marginBottom: 10 }}>
+          This will be merged into the existing record for <strong>{mergeName}</strong>.
+        </div>
+      )}
+      <div style={{ marginBottom: enrolledTracks.length ? 14 : 4 }}>
+        <ReviewRow label="Name" value={name} />
+        <ReviewRow label="Birthdate" value={birthdate ? `${birthdate}${age !== null ? ` (Age ${age})` : ""}` : ""} />
+        <ReviewRow label="Gender" value={gender} />
+        <ReviewRow label="Membership" value={category} />
+        <ReviewRow label="Life stage" value={lifeStage} />
+        <ReviewRow label="Contact number" value={contactNumber} />
+        <ReviewRow label="Address" value={address} />
+        <ReviewRow label="Notes" value={notes} />
+      </div>
+      {enrolledTracks.length > 0 && (
+        <>
+          <div style={styles.sectionLabel}>Discipleship tracks</div>
+          {enrolledTracks.map((t) => (
+            <ReviewRow key={t} label={t} value={`${trackStatus[t]} · ${(trackBatch && trackBatch[t]) || "Batch 1"}`} />
+          ))}
+        </>
+      )}
+    </>
+  );
+}
+
 function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrack, initialBatch, title }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -3822,6 +3875,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   // Same "merge instead of creating a duplicate person" check used when
   // approving registrations — catches the same person being re-added
   // here by name before a second Disciples record gets created.
@@ -3852,11 +3906,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
     return "";
   }
 
-  const submit = async (e) => {
-    e.preventDefault();
-    const problem = validate();
-    if (problem) { setError(problem); return; }
-    setError("");
+  const doSave = async () => {
     const classStatus = deriveClassStatusFromTracks(classes, trackStatus, null);
     const classIds = Object.keys(classStatus).filter((id) => classStatus[id] && classStatus[id] !== "Not Enrolled");
     setBusy(true);
@@ -3886,71 +3936,113 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
     }
   };
 
+  // First submit just validates and shows a review of everything
+  // entered; the actual save only happens once the leader taps
+  // "Confirm" on that review step (see doSave above).
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (confirming) { doSave(); return; }
+    const problem = validate();
+    if (problem) { setError(problem); return; }
+    setError("");
+    setConfirming(true);
+  };
+
+  const mergeName = mergeId ? (duplicates.find((d) => d.id === mergeId) || {}).name : null;
+
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
-      <form style={styles.modalCard} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <div style={styles.modalTitle}>{title || "Add Member"}</div>
+      <form style={styles.modalCard} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <div style={styles.modalTitle}>{confirming ? "Confirm Details" : (title || "Add Member")}</div>
         {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
-        <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
-        <div style={styles.modalRow2}>
-          <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="First name" value={firstName} onChange={(e) => { setFirstName(e.target.value); setMergeId(""); }} autoFocus required />
-          <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Last name" value={lastName} onChange={(e) => { setLastName(e.target.value); setMergeId(""); }} required />
-        </div>
-        {duplicates.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <div style={styles.sectionLabel}>Possible existing match</div>
-            <div style={styles.pairNote}>Someone in Disciples already has this exact name. Merge instead of creating a duplicate person, or pick "Add as new person" if it's someone else.</div>
-            <select style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
-              <option value="">Add as new person</option>
-              {duplicates.map((d) => (
-                <option key={d.id} value={d.id}>Merge into existing: {d.name}</option>
-              ))}
-            </select>
-          </div>
+        {confirming ? (
+          <MemberReviewFields
+            name={name}
+            photoUrl={photoUrl}
+            birthdate={birthdate}
+            gender={gender}
+            category={category}
+            lifeStage={lifeStage}
+            contactNumber={contactNumber}
+            address={address}
+            notes={notes}
+            trackStatus={trackStatus}
+            trackBatch={trackBatch}
+            mergeName={mergeName}
+          />
+        ) : (
+          <>
+            <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
+            <div style={styles.modalRow2}>
+              <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="First name" value={firstName} onChange={(e) => { setFirstName(e.target.value); setMergeId(""); }} autoFocus required />
+              <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Last name" value={lastName} onChange={(e) => { setLastName(e.target.value); setMergeId(""); }} required />
+            </div>
+            {duplicates.length > 0 && (
+              <div style={{ marginBottom: 12 }}>
+                <div style={styles.sectionLabel}>Possible existing match</div>
+                <div style={styles.pairNote}>Someone in Disciples already has this exact name. Merge instead of creating a duplicate person, or pick "Add as new person" if it's someone else.</div>
+                <select style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
+                  <option value="">Add as new person</option>
+                  {duplicates.map((d) => (
+                    <option key={d.id} value={d.id}>Merge into existing: {d.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div style={styles.modalRow2}>
+              <label style={styles.modalFieldLabel}>
+                Birthdate
+                <DobPicker value={birthdate} onChange={setBirthdate} />
+              </label>
+              <label style={styles.modalFieldLabel}>
+                Gender
+                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
+                  <option value="">Select…</option>
+                  {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </label>
+            </div>
+            <div style={styles.modalRow2}>
+              <label style={styles.modalFieldLabel}>
+                Membership
+                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
+                  <option value="">Select…</option>
+                  {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label style={styles.modalFieldLabel}>
+                Life stage
+                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
+                  <option value="">Select…</option>
+                  {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
+                </select>
+              </label>
+            </div>
+            <div style={styles.modalRow2}>
+              <label style={styles.modalFieldLabel}>
+                Contact number
+                <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
+              </label>
+              <label style={styles.modalFieldLabel}>
+                Address
+                <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
+              </label>
+            </div>
+            <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
+          </>
         )}
-        <div style={styles.modalRow2}>
-          <label style={styles.modalFieldLabel}>
-            Birthdate
-            <DobPicker value={birthdate} onChange={setBirthdate} />
-          </label>
-          <label style={styles.modalFieldLabel}>
-            Gender
-            <select style={{ ...styles.modalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
-              <option value="">Select…</option>
-              {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </label>
-        </div>
-        <div style={styles.modalRow2}>
-          <label style={styles.modalFieldLabel}>
-            Membership
-            <select style={{ ...styles.modalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
-              <option value="">Select…</option>
-              {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
-          <label style={styles.modalFieldLabel}>
-            Life stage
-            <select style={{ ...styles.modalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
-              <option value="">Select…</option>
-              {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
-            </select>
-          </label>
-        </div>
-        <div style={styles.modalRow2}>
-          <label style={styles.modalFieldLabel}>
-            Contact number
-            <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
-          </label>
-          <label style={styles.modalFieldLabel}>
-            Address
-            <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
-          </label>
-        </div>
-        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
         <div style={styles.modalActions}>
-          <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : (mergeId ? "Merge" : "Add")}</button>
+          {confirming ? (
+            <>
+              <button type="button" style={styles.modalCancelBtn} onClick={() => setConfirming(false)} disabled={busy}>← Back</button>
+              <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : (mergeId ? "Confirm Merge" : "Confirm & Add")}</button>
+            </>
+          ) : (
+            <>
+              <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
+              <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{mergeId ? "Merge" : "Add"}</button>
+            </>
+          )}
         </div>
       </form>
     </div>
@@ -3977,6 +4069,7 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
   const [trackBatch, setTrackBatch] = useState(member.trackBatch || {});
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   // Tracks (by name) the leader just confirmed to auto-complete —
   // { [track]: classId } — so submit() knows which classes need every
   // session marked attended once the status change itself is saved.
@@ -4058,11 +4151,7 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
     return "";
   }
 
-  const submit = async (e) => {
-    e.preventDefault();
-    const problem = validate();
-    if (problem) { setError(problem); return; }
-    setError("");
+  const doSave = async () => {
     // Class enrollment/status is derived from the discipleship track
     // statuses above; a class with no matching track (custom/legacy)
     // keeps whatever status it already had on this member.
@@ -4101,59 +4190,98 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
     }
   };
 
+  // First submit just validates and shows a review of everything
+  // entered; the actual save only happens once the leader taps
+  // "Confirm" on that review step (see doSave above).
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (confirming) { doSave(); return; }
+    const problem = validate();
+    if (problem) { setError(problem); return; }
+    setError("");
+    setConfirming(true);
+  };
+
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
-      <form style={styles.modalCard} onClick={(e) => e.stopPropagation()} onSubmit={submit}>
-        <div style={styles.modalTitle}>Edit Member</div>
+      <form style={styles.modalCard} onClick={(e) => e.stopPropagation()} onSubmit={handleSubmit}>
+        <div style={styles.modalTitle}>{confirming ? "Confirm Details" : "Edit Member"}</div>
         {error && <div style={styles.authError}><span>⚠</span><span>{error}</span></div>}
-        <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
-        <div style={styles.modalRow2}>
-          <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoFocus required />
-          <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-        </div>
-        <div style={styles.modalRow2}>
-          <label style={styles.modalFieldLabel}>
-            Birthdate
-            <DobPicker value={birthdate} onChange={setBirthdate} />
-          </label>
-          <label style={styles.modalFieldLabel}>
-            Gender
-            <select style={{ ...styles.modalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
-              <option value="">Select…</option>
-              {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </label>
-        </div>
-        <div style={styles.modalRow2}>
-          <label style={styles.modalFieldLabel}>
-            Membership
-            <select style={{ ...styles.modalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
-              <option value="">Select…</option>
-              {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </label>
-          <label style={styles.modalFieldLabel}>
-            Life stage
-            <select style={{ ...styles.modalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
-              <option value="">Select…</option>
-              {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
-            </select>
-          </label>
-        </div>
-        <div style={styles.modalRow2}>
-          <label style={styles.modalFieldLabel}>
-            Contact number
-            <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
-          </label>
-          <label style={styles.modalFieldLabel}>
-            Address
-            <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
-          </label>
-        </div>
-        <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
+        {confirming ? (
+          <MemberReviewFields
+            name={name}
+            photoUrl={photoUrl}
+            birthdate={birthdate}
+            gender={gender}
+            category={category}
+            lifeStage={lifeStage}
+            contactNumber={contactNumber}
+            address={address}
+            notes={notes}
+            trackStatus={trackStatus}
+            trackBatch={trackBatch}
+          />
+        ) : (
+          <>
+            <PhotoPicker name={name} photoUrl={photoUrl} onChange={setPhotoUrl} />
+            <div style={styles.modalRow2}>
+              <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="First name" value={firstName} onChange={(e) => setFirstName(e.target.value)} autoFocus required />
+              <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Last name" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
+            </div>
+            <div style={styles.modalRow2}>
+              <label style={styles.modalFieldLabel}>
+                Birthdate
+                <DobPicker value={birthdate} onChange={setBirthdate} />
+              </label>
+              <label style={styles.modalFieldLabel}>
+                Gender
+                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
+                  <option value="">Select…</option>
+                  {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
+                </select>
+              </label>
+            </div>
+            <div style={styles.modalRow2}>
+              <label style={styles.modalFieldLabel}>
+                Membership
+                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
+                  <option value="">Select…</option>
+                  {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </label>
+              <label style={styles.modalFieldLabel}>
+                Life stage
+                <select style={{ ...styles.modalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
+                  <option value="">Select…</option>
+                  {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
+                </select>
+              </label>
+            </div>
+            <div style={styles.modalRow2}>
+              <label style={styles.modalFieldLabel}>
+                Contact number
+                <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Contact number" type="tel" value={contactNumber} onChange={(e) => setContactNumber(e.target.value)} required />
+              </label>
+              <label style={styles.modalFieldLabel}>
+                Address
+                <input style={{ ...styles.modalInput, marginBottom: 0 }} placeholder="Address" value={address} onChange={(e) => setAddress(e.target.value)} required />
+              </label>
+            </div>
+            <DiscipleshipTrackFields trackStatus={trackStatus} trackBatch={trackBatch} onChange={setTrack} onBatchChange={setBatch} classes={classes} topics={topics} onlyTrack={initialTrack} />
+          </>
+        )}
         <div style={styles.modalActions}>
-          <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Save"}</button>
+          {confirming ? (
+            <>
+              <button type="button" style={styles.modalCancelBtn} onClick={() => setConfirming(false)} disabled={busy}>← Back</button>
+              <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>{busy ? "Saving…" : "Confirm & Save"}</button>
+            </>
+          ) : (
+            <>
+              <button type="button" style={styles.modalCancelBtn} onClick={onClose} disabled={busy}>Cancel</button>
+              <button type="submit" style={styles.modalConfirmBtn} disabled={busy}>Save</button>
+            </>
+          )}
         </div>
       </form>
     </div>
