@@ -2897,7 +2897,7 @@ function ScanOneOnOneAttendanceModal({ sessions, people, attendanceByMember, onT
     };
   }, []);
 
-  function handleScan(text) {
+  async function handleScan(text) {
     if (!text.startsWith("DJONE2ONE:")) return;
     const currentTopic = topicRef.current;
     if (!currentTopic) return;
@@ -2913,7 +2913,13 @@ function ScanOneOnOneAttendanceModal({ sessions, people, attendanceByMember, onT
     }
     const scannedAt = new Date();
     const already = isOneOnOneSessionDone(person, currentTopic, attendanceByMember);
-    onToggleSession(person, currentTopic.id, true);
+    const saved = await onToggleSession(person, currentTopic.id, true);
+    if (!saved) {
+      // toggleOneOnOneSession already showed the red error banner —
+      // don't also claim success here.
+      setStatus({ type: "error", text: `${person.name} — could not be saved. Try again.` });
+      return;
+    }
     setStatus({
       type: "ok",
       text: already
@@ -7149,7 +7155,7 @@ function App() {
   // ONE2ONE session checks are mirrored into attendance + status below.
   const oneOnOneTrack = () => (oneOnOneClass && trackNameForClass(oneOnOneClass.name)) || "One2One";
   const oneOnOneStatusFor = (done, total) => (total > 0 && done === total ? "Completed" : done > 0 ? "In-Progress" : "Enrolled");
-  const buildOneOnOneMember = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address, oneOnOneId, status }) => {
+  const buildOneOnOneMember = ({ name, photoUrl, birthdate, gender, lifeStage, contactNumber, address, oneOnOneId, status, ownerEmail }) => {
     const track = oneOnOneTrack();
     const trackStatus = { [track]: status };
     const classStatus = deriveClassStatusFromTracks(classes, trackStatus, null);
@@ -7163,7 +7169,10 @@ function App() {
       name, photoUrl: photoUrl || null,
       birthdate: birthdate || "", gender: gender || "", lifeStage: lifeStage || "", category: "", contactNumber: contactNumber || "", address: address || "", notes: "",
       classIds, classStatus, trackStatus, trackBatch,
-      dateAdded: new Date(), source: "one2one", createdBy: currentEmail, oneOnOneId,
+      // Owned by the ONE2ONE leader who registered this person — NOT
+      // whoever clicked Approve — so that leader can keep marking
+      // sessions for them afterward (Firestore rules check this field).
+      dateAdded: new Date(), source: "one2one", createdBy: ownerEmail || currentEmail, oneOnOneId,
     };
   };
   // A new ONE2ONE person starts as status "pending" and gets no
@@ -7272,8 +7281,10 @@ function App() {
       }
 
       await batch.commit();
+      return true;
     } catch (err) {
       showError("Could not save that. Error: " + err.message);
+      return false;
     }
   };
   // Approving a pending ONE2ONE person (Leaders/Managers only, from the
@@ -7327,11 +7338,18 @@ function App() {
             nextClassStatus[oneOnOneClass.id] = nextTrackStatus[track] || status;
             if (!nextClassIds.includes(oneOnOneClass.id)) nextClassIds.push(oneOnOneClass.id);
           }
-          tx.update(db.collection("members").doc(mergeIntoMemberId), { trackStatus: nextTrackStatus, classStatus: nextClassStatus, classIds: nextClassIds });
+          // Also hand ownership of the merged member to the ONE2ONE
+          // leader who registered them, same as a brand-new member
+          // below — otherwise Firestore rules block that leader from
+          // ever marking this person's sessions after the merge.
+          tx.update(db.collection("members").doc(mergeIntoMemberId), {
+            trackStatus: nextTrackStatus, classStatus: nextClassStatus, classIds: nextClassIds,
+            source: "one2one", createdBy: person.createdBy || existing.createdBy,
+          });
         } else {
           const memberRef = db.collection("members").doc();
           memberId = memberRef.id;
-          tx.set(memberRef, buildOneOnOneMember({ name: person.name, photoUrl: person.photoUrl, birthdate: person.birthdate, gender: person.gender, lifeStage: person.lifeStage, contactNumber: person.contactNumber, address: person.address, oneOnOneId: person.id, status }));
+          tx.set(memberRef, buildOneOnOneMember({ name: person.name, photoUrl: person.photoUrl, birthdate: person.birthdate, gender: person.gender, lifeStage: person.lifeStage, contactNumber: person.contactNumber, address: person.address, oneOnOneId: person.id, status, ownerEmail: person.createdBy }));
         }
         // Replay every session already checked off while pending — no
         // progress is lost however long the approval took.
