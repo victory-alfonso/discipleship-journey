@@ -6310,14 +6310,26 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
             ) : (
               <>
                 <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.6)", marginBottom: 8 }}>
-                  Attendance is marked by scanning the member's QR code (use "Scan Attendance") — it can no longer be ticked manually here.
+                  {isLeader
+                    ? "Tick a session to mark it attended or not — Senior Pastors, Developers, and Staffs can edit this directly. Others still mark attendance by scanning the member's QR code."
+                    : "Attendance is marked by scanning the member's QR code (use \"Scan Attendance\") — it can no longer be ticked manually here."}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                   {sessions.map((t) => {
                     const conducted = isOneOnOneSessionDone(person, t, attendanceByMember);
                     return (
-                      <div key={t.id} style={{ ...detailRow, cursor: "default" }}>
-                        <span style={{ ...styles.sessionCheckIcon, fontSize: 15, opacity: conducted ? 1 : 0.3 }}>{conducted ? "✓" : "○"}</span>
+                      <div key={t.id} style={{ ...detailRow, cursor: isLeader ? "pointer" : "default" }} onClick={() => { if (isLeader) onToggleSession(person, t.id, !conducted); }}>
+                        {isLeader ? (
+                          <input
+                            type="checkbox"
+                            checked={conducted}
+                            onChange={(e) => { e.stopPropagation(); onToggleSession(person, t.id, e.target.checked); }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={styles.sessionCheckbox}
+                          />
+                        ) : (
+                          <span style={{ ...styles.sessionCheckIcon, fontSize: 15, opacity: conducted ? 1 : 0.3 }}>{conducted ? "✓" : "○"}</span>
+                        )}
                         <span style={{ flex: 1, fontSize: 14, fontWeight: 600, ...(conducted ? { textDecoration: "line-through", opacity: 0.75 } : {}) }}>{t.name}</span>
                         {conducted && (
                           <span style={{ ...styles.statusBadge, ...styles.statusBadgeDoneDark }}>Completed</span>
