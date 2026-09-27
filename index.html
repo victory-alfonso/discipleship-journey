@@ -3392,8 +3392,8 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
           </button>
 
           <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
-            <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto" }}>
-              <div style={{ position: "relative", width: "100%", aspectRatio: "3 / 4", background: "#23211D" }}>
+            <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+              <div style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 180, background: "#23211D" }}>
                 <ClassCoverImage classItem={{ name: member.name, photoUrl: member.photoUrl }} />
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(20,18,14,0) 32%, rgba(20,18,14,0.88) 100%)" }} />
                 <div style={{ position: "absolute", left: 18, right: 18, bottom: 16 }}>
@@ -3408,7 +3408,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
                 </div>
               </div>
 
-              <div style={{ padding: "16px 22px 22px" }}>
+              <div style={{ padding: "16px 22px 22px", flexShrink: 0 }}>
               <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                 <button style={dj.ghostBtnDark} onClick={() => setQrOpen(true)}>QR</button>
                 {isLeader && (
@@ -6165,7 +6165,7 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
         animation: "popIn 0.18s ease-out",
       }}
     >
-      <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto" }}>
+      <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
         {/* Cover banner — shows the ONE2ONE class's own logo/cover
             photo (from the Classes tab) when one has been set; falls
             back to the plain ONE2ONE wordmark. Styled the same way as
@@ -6173,8 +6173,12 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
             name pinned bottom-left) so every detail panel in the app
             reads as one consistent shape. The leader's own circular
             avatar sits inline with their name, overlapping the banner
-            slightly, instead of the old big Facebook-style overlap. */}
-        <div style={{ position: "relative", width: "100%", aspectRatio: "3 / 4", background: "#23211D" }}>
+            slightly, instead of the old big Facebook-style overlap.
+            flex:1 (not a fixed aspect-ratio) so it fills whatever
+            height is left after the info block below, rather than
+            forcing this column to scroll when the right column is
+            shorter than photo + info combined. */}
+        <div style={{ position: "relative", width: "100%", flex: "1 1 auto", minHeight: 180, background: "#23211D" }}>
           {coverPhotoUrl ? (
             <img src={coverPhotoUrl} alt="ONE2ONE" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
           ) : (
@@ -6196,25 +6200,29 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
             </div>
           </div>
         </div>
-        <div style={{ padding: "18px 18px 22px", color: "#F5F2E4" }}>
+        {/* Compact, fixed-height info block (flexShrink: 0) — kept
+            short on purpose so photo + info never outgrows the card's
+            actual height. */}
+        <div style={{ padding: "12px 16px 14px", color: "#F5F2E4", flexShrink: 0 }}>
           {onBack && (
-            <button type="button" onClick={onBack} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4", marginBottom: 14 }}>
+            <button type="button" onClick={onBack} style={{ padding: "5px 10px", borderRadius: 8, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4", marginBottom: 10 }}>
             ← Back to leaders
             </button>
           )}
-          <div style={detailLabel}>ONE2ONE Leader</div>
-          <div style={{ fontSize: 13, color: "rgba(245,242,228,0.75)", lineHeight: 1.5, marginBottom: 14 }}>
-            {isOwn
-              ? "This is your own ONE2ONE tracker. Only the members you've personally added show up here."
-              : `This is ${displayName}'s ONE2ONE tracker. Only the members they've personally added show up here.`}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <div style={{ fontSize: 11, color: "rgba(245,242,228,0.65)", lineHeight: 1.4 }}>
+              {isOwn
+                ? "Your own ONE2ONE tracker — only members you've personally added show up here."
+                : `${displayName}'s ONE2ONE tracker — only members they've personally added show up here.`}
+            </div>
+            <button
+              type="button"
+              onClick={onEditProfile}
+              style={{ flexShrink: 0, padding: "6px 10px", borderRadius: 8, fontSize: 11.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4", whiteSpace: "nowrap" }}
+            >
+              ✎ Edit
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onEditProfile}
-            style={{ padding: "8px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4" }}
-          >
-            {isOwn ? "✎ Edit Profile" : "✎ Edit Leader Profile"}
-          </button>
         </div>
       </div>
       {/* Everything else — toolbar, summary badges, and the full
