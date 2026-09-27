@@ -1411,6 +1411,17 @@ function latestOngoingBatch(classItem, topics) {
   }
   return batches[batches.length - 1];
 }
+// The batch a track enrollment should land in when nothing else has
+// been picked for it yet: the SAME "currently running" batch the
+// class card and its detail view already default to (see
+// latestOngoingBatch / ClassRow), not just the first still-open
+// batch. Keeping this in one place means the Edit/Add Member forms
+// and the Classes tab agree on where a fresh enrollment shows up —
+// used by trackNameForClass's callers below.
+function defaultOpenBatchForTrack(classes, topics, track) {
+  const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === track);
+  return matchingClass ? latestOngoingBatch(matchingClass, topics || []) : "Batch 1";
+}
 // The next not-yet-conducted session in a batch, in display order —
 // i.e. the session that comes right after whichever one was last
 // marked conducted.
@@ -3780,6 +3791,12 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
           const noOpenBatch = !!matchingClass && batchOptions.length === 0;
           const statusOptions = noOpenBatch && status === "Not Enrolled" ? ["Not Enrolled"] : TRACK_STATUSES;
           const effectiveBatchOptions = batchOptions.length ? batchOptions : [currentBatch];
+          // Same "currently running" batch the class card/detail view
+          // shows by default — used below only as a display fallback;
+          // onChange (in the parent's setTrack) is what actually seeds
+          // this into trackBatch so what's shown here matches what
+          // gets saved.
+          const defaultBatch = defaultOpenBatchForTrack(classes, topics, track);
           return (
             <div key={track} style={styles.memberModalTrackRow}>
               <span style={styles.memberModalTrackLabel}>{track}</span>
@@ -3794,7 +3811,7 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
                 {status !== "Not Enrolled" && (
                   <select
                     style={{ ...styles.memberModalInput, marginBottom: 0, fontSize: 11.5, padding: "5px 6px", width: 130 }}
-                    value={effectiveBatchOptions.includes(currentBatch) ? currentBatch : effectiveBatchOptions[0]}
+                    value={effectiveBatchOptions.includes(currentBatch) ? currentBatch : (effectiveBatchOptions.includes(defaultBatch) ? defaultBatch : effectiveBatchOptions[0])}
                     onChange={(e) => onBatchChange(track, e.target.value)}
                   >
                     {effectiveBatchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
@@ -3909,6 +3926,13 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
 
   const setTrack = (track, value) => {
     setTrackStatus((prev) => ({ ...prev, [track]: value }));
+    // Freshly enrolling (no batch chosen for this track yet) — land in
+    // the same "currently running" batch the class card/detail view
+    // shows by default, so this saves to match what the dropdown
+    // displays instead of silently falling back to "Batch 1".
+    if (value !== "Not Enrolled" && !trackBatch[track]) {
+      setTrackBatch((prev) => ({ ...prev, [track]: defaultOpenBatchForTrack(classes, topics, track) }));
+    }
   };
   const setBatch = (track, value) => {
     setTrackBatch((prev) => ({ ...prev, [track]: value }));
@@ -4166,6 +4190,13 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
       });
     }
     setTrackStatus((prev) => ({ ...prev, [track]: value }));
+    // Freshly enrolling (no batch chosen for this track yet) — land in
+    // the same "currently running" batch the class card/detail view
+    // shows by default, so this saves to match what the dropdown
+    // displays instead of silently falling back to "Batch 1".
+    if ((prevValue === "Not Enrolled" || !prevValue) && value !== "Not Enrolled" && !trackBatch[track]) {
+      setTrackBatch((prev) => ({ ...prev, [track]: defaultOpenBatchForTrack(classes, topics, track) }));
+    }
   };
   const setBatch = (track, value) => {
     setTrackBatch((prev) => ({ ...prev, [track]: value }));
@@ -4703,9 +4734,12 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   const [membersCollapsed, setMembersCollapsed] = useState(false);
   const batches = useMemo(() => getBatchesForClass(classItem, topics), [classItem, topics]);
   const [selectedBatch, setSelectedBatch] = useState(null);
-  // Default to the last (newest, by natural sort) batch so a leader
-  // who just added "Batch 2026" lands there automatically.
-  const activeBatch = selectedBatch && batches.includes(selectedBatch) ? selectedBatch : batches[batches.length - 1];
+  // Default to the same "currently running" batch the class card face
+  // and the Edit/Add Member forms already default to (see
+  // latestOngoingBatch / defaultOpenBatchForTrack) — not just the
+  // newest batch overall, which could already be finished while an
+  // older batch is still the one actually in progress.
+  const activeBatch = selectedBatch && batches.includes(selectedBatch) ? selectedBatch : latestOngoingBatch(classItem, topics);
   // Only classes that match a Discipleship Track (the app's existing
   // per-class enrollment mechanism) carry a per-member batch label
   // (member.trackBatch). A custom/leader-made class with no matching
@@ -5061,7 +5095,9 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
   const [addingBatch, setAddingBatch] = useState(false);
   const batches = useMemo(() => getBatchesForClass(classItem, topics), [classItem, topics]);
   const [selectedBatch, setSelectedBatch] = useState(null);
-  const activeBatch = selectedBatch && batches.includes(selectedBatch) ? selectedBatch : batches[batches.length - 1];
+  // Same "currently running" batch default used everywhere else — see
+  // ClassDetailModal / latestOngoingBatch / defaultOpenBatchForTrack.
+  const activeBatch = selectedBatch && batches.includes(selectedBatch) ? selectedBatch : latestOngoingBatch(classItem, topics);
   const track = trackNameForClass(classItem.name);
   const ts = useMemo(
     () => sortTopicsForDisplay(topicsForClass(topics, classItem.name)).filter((t) => topicBatch(t) === activeBatch),
