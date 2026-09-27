@@ -6184,11 +6184,11 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
           )}
           <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(31,56,100,0.35) 55%, rgba(31,56,100,0.98) 100%)" }} />
           <div style={{ position: "absolute", left: 20, right: 20, bottom: 14, display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ position: "relative", width: 52, height: 52, flexShrink: 0 }}>
-              <div style={{ width: 52, height: 52, borderRadius: "50%", background: "#1F3864", padding: 2, boxSizing: "border-box", boxShadow: "0 4px 14px rgba(20,18,14,0.4)" }}>
-                <Avatar name={displayName} photoUrl={leader.photoUrl} size={48} />
+            <div style={{ position: "relative", width: 68, height: 68, flexShrink: 0 }}>
+              <div style={{ width: 68, height: 68, borderRadius: "50%", background: "#1F3864", padding: 2, boxSizing: "border-box", boxShadow: "0 4px 14px rgba(20,18,14,0.4)" }}>
+                <Avatar name={displayName} photoUrl={leader.photoUrl} size={64} />
               </div>
-              <button type="button" onClick={onEditProfile} style={{ position: "absolute", bottom: -2, right: -2, background: "#E5A430", border: "2px solid #1F3864", borderRadius: "50%", width: 20, height: 20, color: "#23211D", fontSize: 10, cursor: "pointer", lineHeight: 1 }} aria-label="Edit" title="Edit name / photo">✎</button>
+              <button type="button" onClick={onEditProfile} style={{ position: "absolute", bottom: -2, right: -2, background: "#E5A430", border: "2px solid #1F3864", borderRadius: "50%", width: 24, height: 24, color: "#23211D", fontSize: 11, cursor: "pointer", lineHeight: 1 }} aria-label="Edit" title="Edit name / photo">✎</button>
             </div>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontFamily: "Georgia, serif", fontSize: 18, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.15, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{displayName}</div>
