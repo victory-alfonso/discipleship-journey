@@ -5781,7 +5781,7 @@ function OneOnOneCard({ person, sessions, attendanceByMember, showAdder, onOpen,
   );
 }
 
-function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onToggleSession, leaderEmail, dark }) {
+function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEdit, onDelete, showAll, needsProfile, onCreateProfile, onToggleSession, leaderEmail, dark, descriptionOverride }) {
   const [scanOpen, setScanOpen] = useState(false);
   const descColor = dark ? "rgba(245,242,228,0.75)" : "#7A6E4E";
   const ghostBtnStyle = dark
@@ -5827,7 +5827,7 @@ function OneOnOne({ people, sessions, attendanceByMember, hasClass, onAdd, onOpe
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="stack-mobile" style={{ ...styles.toolbar, justifyContent: "flex-start", alignItems: "center" }}>
         <div style={{ flex: "1 1 100%", fontSize: 13, color: descColor, alignSelf: "center" }}>
-          {showAll ? "All ONE2ONE members from every ONE2ONE leader." : "Your own ONE2ONE tracker — only people you've added show up here."}
+          {descriptionOverride || (showAll ? "All ONE2ONE members from every ONE2ONE leader." : "Your own ONE2ONE tracker — only people you've added show up here.")}
         </div>
         {leaderEmail && <CopyOneOnOneRegistrationLinkButton leaderEmail={leaderEmail} dark={dark} />}
         {!showAll && sessions.length > 0 && <button style={ghostBtnStyle} onClick={() => setScanOpen(true)}>Scan Attendance</button>}
@@ -6134,7 +6134,7 @@ function OneOnOneLeaderFormModal({ title, initialEmail, initialName, initialPhot
 // the full toolbar + summary counts + every member you've added
 // scrolling underneath it in the same card. Nothing renders outside
 // the card behind it.
-function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onEditProfile, onToggleSession, leaderEmail, coverPhotoUrl }) {
+function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasClass, onAdd, onOpen, onEditPerson, onDelete, onEditProfile, onToggleSession, leaderEmail, coverPhotoUrl, onBack, isOwn = true }) {
   const displayName = leader.name || leader.id;
   return (
     // No longer a position:fixed, full-viewport overlay — that was
@@ -6197,16 +6197,23 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
           </div>
         </div>
         <div style={{ padding: "18px 18px 22px", color: "#F5F2E4" }}>
+          {onBack && (
+            <button type="button" onClick={onBack} style={{ padding: "7px 12px", borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4", marginBottom: 14 }}>
+            ← Back to leaders
+            </button>
+          )}
           <div style={detailLabel}>ONE2ONE Leader</div>
           <div style={{ fontSize: 13, color: "rgba(245,242,228,0.75)", lineHeight: 1.5, marginBottom: 14 }}>
-            This is your own ONE2ONE tracker. Only the members you've personally added show up here.
+            {isOwn
+              ? "This is your own ONE2ONE tracker. Only the members you've personally added show up here."
+              : `This is ${displayName}'s ONE2ONE tracker. Only the members they've personally added show up here.`}
           </div>
           <button
             type="button"
             onClick={onEditProfile}
             style={{ padding: "8px 14px", borderRadius: 8, fontSize: 12.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(255,255,255,0.3)", background: "rgba(255,255,255,0.1)", color: "#F5F2E4" }}
           >
-            ✎ Edit Profile
+            {isOwn ? "✎ Edit Profile" : "✎ Edit Leader Profile"}
           </button>
         </div>
       </div>
@@ -6227,6 +6234,7 @@ function OneOnOneOwnProfile({ leader, people, sessions, attendanceByMember, hasC
           showAll={false}
           onToggleSession={onToggleSession}
           leaderEmail={leaderEmail}
+          descriptionOverride={isOwn ? null : `${displayName}'s ONE2ONE tracker — only people they've added show up here.`}
           dark
         />
       </div>
@@ -7971,18 +7979,22 @@ function App() {
         )}
 
         {activeTab === "one2one" && !isOneOnly && openOneOnOneLeaderProfile && (
-          <OneOnOneLeaderProfile
+          <OneOnOneOwnProfile
             leader={openOneOnOneLeaderProfile}
             people={myOneOnOne.filter((p) => normEmail(p.createdBy) === openOneOnOneLeaderProfile.id)}
-            onAdd={() => setAddOneOnOneOpen(true)}
-            onOpen={setOpenOneOnOne}
             sessions={oneOnOneSessions}
             attendanceByMember={attendanceByMember}
             hasClass={!!oneOnOneClass}
-            onBack={() => setOpenOneOnOneLeaderEmail(null)}
-            onEdit={setEditingOneOnOne}
+            coverPhotoUrl={oneOnOneClass?.photoUrl}
+            onAdd={() => setAddOneOnOneOpen(true)}
+            onOpen={setOpenOneOnOne}
+            onEditPerson={setEditingOneOnOne}
             onDelete={deleteOneOnOnePerson}
+            onEditProfile={() => setEditingOneOnOneLeader(openOneOnOneLeaderProfile)}
             onToggleSession={toggleOneOnOneSession}
+            leaderEmail={openOneOnOneLeaderProfile.virtual ? null : openOneOnOneLeaderProfile.id}
+            onBack={() => setOpenOneOnOneLeaderEmail(null)}
+            isOwn={false}
           />
         )}
 
