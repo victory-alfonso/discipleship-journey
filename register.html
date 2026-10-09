@@ -475,11 +475,14 @@ function renderFindMyLink(className, classId, batch, name, errorMessage) {
           <label class="field"><input class="input" id="findFirst" placeholder="First name" aria-label="First name" autocomplete="given-name" /></label>
           <label class="field"><input class="input" id="findLast" placeholder="Last name" aria-label="Last name" autocomplete="family-name" /></label>
         </div>` : ""}
-      <label class="field"><span>Birthdate</span><input class="input" type="date" id="verifyBirthdate" max="${new Date().toISOString().slice(0, 10)}" /></label>
+      <label class="field"><span>Birthdate</span>${dobFieldsHTML()}</label>
       <button class="submitBtn" id="verifyBtn">Find My QR</button>
       <button class="againBtn" id="backBtn" style="margin-top:10px;">Back</button>
     </div>
   `;
+  // Same Month / Day / Year dropdowns as the registration form, so picking
+  // an old birthdate doesn't mean scrolling through a native calendar.
+  const dob = wireDobFields(app, null);
   document.getElementById("backBtn").onclick = () => {
     if (askName) renderForm(className, classId, batch);
     else renderAlreadyMemberSameClass(className, classId, batch, name);
@@ -489,7 +492,7 @@ function renderFindMyLink(className, classId, batch, name, errorMessage) {
     const first = askName ? document.getElementById("findFirst").value.trim() : "";
     const last = askName ? document.getElementById("findLast").value.trim() : "";
     const fullName = askName ? `${first} ${last}`.replace(/\s+/g, " ").trim() : name;
-    const entered = document.getElementById("verifyBirthdate").value;
+    const entered = dob.getBirthdate();
     if (askName && (!first || !last)) {
       renderFindMyLink(className, classId, batch, name, "Please enter your first and last name.");
       return;
