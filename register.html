@@ -539,7 +539,6 @@ function renderForm(className, classId, batch, errorMessage) {
       <div class="className">${esc(className)}</div>
       <div class="classSub">Fill in your details to register for this class.${batch ? ` You'll be added to <strong>${esc(batch)}</strong>.` : ""}</div>
       ${errorMessage ? `<div class="errorBox">${esc(errorMessage)}</div>` : ""}
-      <div style="margin-bottom:12px; font-size:13px; color:#5C5230;">Already registered? <a href="#" id="findMyQrLink" style="color:#A9782F; font-weight:700;">Find my QR</a></div>
       <form id="regForm">
         <div class="row2">
           <label class="field">
@@ -593,6 +592,7 @@ function renderForm(className, classId, batch, errorMessage) {
           <input class="input" name="notes" placeholder="Notes (optional)" aria-label="Notes (optional)" />
         </label>
         <button class="submitBtn" type="submit" id="submitBtn">Submit Registration</button>
+        <button type="button" id="findMyQrBtn" style="width:100%; padding:13px; margin-top:10px; border-radius:8px; border:1px solid #D8CFB0; background:#FFFFFF; color:#4A4230; font-weight:700; font-size:15px; cursor:pointer;">Already registered? Find my QR</button>
       </form>
       <div class="noteBox">Your registration is reviewed by a class leader before it appears on the roster — this helps keep the list accurate and prevents mistaken or fake sign-ups. If you've registered before, ask a leader to add this class to your existing profile instead so you don't end up with two entries.</div>
     </div>
@@ -600,7 +600,7 @@ function renderForm(className, classId, batch, errorMessage) {
 
   const ageHint = document.getElementById("ageHint");
   const dob = wireDobFields(app, ageHint);
-  document.getElementById("findMyQrLink").onclick = (e) => { e.preventDefault(); renderFindMyLink(className, classId, batch, null); };
+  document.getElementById("findMyQrBtn").onclick = () => renderFindMyLink(className, classId, batch, null);
 
   // "required" alone lets someone through with just a space (HTML's
   // built-in check only cares that a value exists, not that it's more
