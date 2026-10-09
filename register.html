@@ -413,17 +413,102 @@ function renderAlreadyPendingSameClass(className, classId, batch, regId) {
   document.getElementById("notMeBtn").onclick = () => renderForm(className, classId, batch);
 }
 
-// Name is already an approved member of THIS class.
-function renderAlreadyMemberSameClass(className, classId, batch) {
+// Name is already an approved member of THIS class. The person may have
+// lost the personal status link they got right after registering, so
+// offer a way to get it back: they confirm their birthdate, and we look
+// up their approved registration (the pendingRegistrations doc is kept
+// after approval, stamped status "approved") to rebuild the link.
+// NOTE: this needs the Firestore rules to allow anonymous reads on
+// pendingRegistrations filtered by name (the same kind of read the
+// duplicate check already does for status == "pending").
+function renderAlreadyMemberSameClass(className, classId, batch, name) {
   app.innerHTML = `
     <div class="msgScreen">
       <div class="checkCircle">✓</div>
       <div class="big">You're already enrolled</div>
       <div class="sub">Someone under this exact name is already an active member of <strong>${esc(className)}</strong>. No need to register again — if this isn't you, let a leader know.</div>
-      <button class="againBtn" id="notMeBtn" style="margin-top:18px;">That wasn't me — register anyway</button>
+      <button class="submitBtn" id="findLinkBtn" style="margin-top:18px;">I'm this person — find my QR link</button>
+      <button class="againBtn" id="notMeBtn" style="margin-top:10px;">That wasn't me — register anyway</button>
     </div>
   `;
+  document.getElementById("findLinkBtn").onclick = () => renderFindMyLink(className, classId, batch, name);
   document.getElementById("notMeBtn").onclick = () => renderForm(className, classId, batch);
+}
+
+// Lets a registrant recover their personal status link by confirming the
+// birthdate they registered with. Works for both pending and approved
+// registrations (the pendingRegistrations doc is kept after approval).
+// When `name` is not given (opened from the top of the form), the screen
+// asks for first/last name too.
+// NOTE: the "pending" lookup uses the same query shape as the duplicate
+// check; the "approved" lookup is new and needs the Firestore rules to
+// allow anonymous reads on pendingRegistrations filtered by name + status.
+async function lookupStatusLink(name, classId, birthdate) {
+  const trimmed = name.trim();
+  const n = normName(trimmed);
+  const run = (status) => db.collection("pendingRegistrations").where("name", "==", trimmed).where("status", "==", status).get();
+  const [approvedRes, pendingRes] = await Promise.allSettled([run("approved"), run("pending")]);
+  if (approvedRes.status === "rejected" && pendingRes.status === "rejected") throw approvedRes.reason;
+  const docs = [
+    ...(approvedRes.status === "fulfilled" ? approvedRes.value.docs : []),
+    ...(pendingRes.status === "fulfilled" ? pendingRes.value.docs : []),
+  ];
+  const match = docs.find((d) => {
+    const data = d.data() || {};
+    const ids = Array.isArray(data.classIds) ? data.classIds : [];
+    return normName(data.name || "") === n && ids.includes(classId) && data.birthdate === birthdate;
+  });
+  return match ? match.id : null;
+}
+
+function renderFindMyLink(className, classId, batch, name, errorMessage) {
+  const askName = !name;
+  app.innerHTML = `
+    <div class="card">
+      <div class="className">Find my QR</div>
+      <div class="sub" style="font-size:13.5px; color:#5C5230; margin-bottom:14px; line-height:1.5;">${askName
+        ? `Enter the name and birthdate you used to register for <strong>${esc(className)}</strong>.`
+        : `To confirm it's you, enter the birthdate you used when you registered as <strong>${esc(name)}</strong>.`}</div>
+      ${errorMessage ? `<div class="errorBox">${esc(errorMessage)}</div>` : ""}
+      ${askName ? `
+        <div class="row2">
+          <label class="field"><input class="input" id="findFirst" placeholder="First name" aria-label="First name" autocomplete="given-name" /></label>
+          <label class="field"><input class="input" id="findLast" placeholder="Last name" aria-label="Last name" autocomplete="family-name" /></label>
+        </div>` : ""}
+      <label class="field"><span>Birthdate</span><input class="input" type="date" id="verifyBirthdate" max="${new Date().toISOString().slice(0, 10)}" /></label>
+      <button class="submitBtn" id="verifyBtn">Find My QR</button>
+      <button class="againBtn" id="backBtn" style="margin-top:10px;">Back</button>
+    </div>
+  `;
+  document.getElementById("backBtn").onclick = () => {
+    if (askName) renderForm(className, classId, batch);
+    else renderAlreadyMemberSameClass(className, classId, batch, name);
+  };
+  document.getElementById("verifyBtn").onclick = async () => {
+    const btn = document.getElementById("verifyBtn");
+    const first = askName ? document.getElementById("findFirst").value.trim() : "";
+    const last = askName ? document.getElementById("findLast").value.trim() : "";
+    const fullName = askName ? `${first} ${last}`.replace(/\s+/g, " ").trim() : name;
+    const entered = document.getElementById("verifyBirthdate").value;
+    if (askName && (!first || !last)) {
+      renderFindMyLink(className, classId, batch, name, "Please enter your first and last name.");
+      return;
+    }
+    if (!entered) { renderFindMyLink(className, classId, batch, name, "Please enter your birthdate."); return; }
+    btn.disabled = true;
+    btn.textContent = "Looking...";
+    try {
+      await ensureSignedIn();
+      const regId = await lookupStatusLink(fullName, classId, entered);
+      if (!regId) {
+        renderFindMyLink(className, classId, batch, name, "We couldn't find a registration for this class that matches those details. Check the spelling and birthdate, or ask your leader for your QR code.");
+        return;
+      }
+      window.location.href = statusLinkForReg(regId);
+    } catch (err) {
+      renderFindMyLink(className, classId, batch, name, "Couldn't look that up right now. Please try again, or ask your leader for your QR code.");
+    }
+  };
 }
 
 // Name already has a record (member or pending) under a DIFFERENT class.
@@ -451,6 +536,7 @@ function renderForm(className, classId, batch, errorMessage) {
       <div class="className">${esc(className)}</div>
       <div class="classSub">Fill in your details to register for this class.${batch ? ` You'll be added to <strong>${esc(batch)}</strong>.` : ""}</div>
       ${errorMessage ? `<div class="errorBox">${esc(errorMessage)}</div>` : ""}
+      <div style="margin-bottom:12px; font-size:13px; color:#5C5230;">Already registered? <a href="#" id="findMyQrLink" style="color:#A9782F; font-weight:700;">Find my QR</a></div>
       <form id="regForm">
         <div class="row2">
           <label class="field">
@@ -511,6 +597,7 @@ function renderForm(className, classId, batch, errorMessage) {
 
   const ageHint = document.getElementById("ageHint");
   const dob = wireDobFields(app, ageHint);
+  document.getElementById("findMyQrLink").onclick = (e) => { e.preventDefault(); renderFindMyLink(className, classId, batch, null); };
 
   // "required" alone lets someone through with just a space (HTML's
   // built-in check only cares that a value exists, not that it's more
@@ -605,7 +692,7 @@ function renderForm(className, classId, batch, errorMessage) {
         if (dup) {
           if (dup.sameClass) {
             if (dup.type === "pending") { renderAlreadyPendingSameClass(className, classId, batch, dup.regId); return; }
-            renderAlreadyMemberSameClass(className, classId, batch);
+            renderAlreadyMemberSameClass(className, classId, batch, name);
             return;
           }
           const otherClassNames = await classNamesFor(dup.classIds.filter((id) => id !== classId));
