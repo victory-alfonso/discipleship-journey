@@ -5366,6 +5366,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   const [addingBatch, setAddingBatch] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [membersCollapsed, setMembersCollapsed] = useState(false);
+  const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
   const batches = useMemo(() => getBatchesForClass(classItem, topics), [classItem, topics]);
   const [selectedBatch, setSelectedBatch] = useState(null);
   // Default to the same "currently running" batch the class card face
@@ -5406,10 +5407,19 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
       .map((m) => {
         const att = attendanceByMember[m.id] || {};
         const done = ts.filter((t) => att[t.id] && att[t.id].attended).length;
-        return { member: m, done, total: ts.length, pct: ts.length ? Math.round((done / ts.length) * 100) : 0 };
+        // Late / absent only count from Week 1 onwards (Week 0 is just orientation).
+        // Absent = a conducted session the member didn't attend.
+        const counted = ts.filter((t) => !isWeekZeroTopic(t));
+        const late = counted.filter((t) => att[t.id] && att[t.id].attended && isLateAttendance(att[t.id].dateAttended)).length;
+        const absent = counted.filter((t) => t.conducted && !(att[t.id] && att[t.id].attended)).length;
+        return { member: m, done, late, absent, total: ts.length, pct: ts.length ? Math.round((done / ts.length) * 100) : 0 };
       })
       .sort((a, b) => b.pct - a.pct || a.member.name.localeCompare(b.member.name));
   }, [classMembers, attendanceByMember, ts]);
+  const lateAbsentTotals = useMemo(
+    () => memberRows.reduce((acc, r) => ({ late: acc.late + r.late, absent: acc.absent + r.absent }), { late: 0, absent: 0 }),
+    [memberRows]
+  );
 
   const openSession = (t) => { onOpenSession(t); };
   // Editing from inside a specific class should only show that
@@ -5527,14 +5537,39 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                 </div>
               </div>
             )}
+            {!isOneOnOne && ts.length > 0 && (
+              <>
+                <div style={detailLabel}>Late &amp; Absences</div>
+                <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 6 }}>
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: lateAbsentTotals.late > 0 ? "#E5C77A" : "#F5F2E4" }}>{lateAbsentTotals.late}</div>
+                    <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)" }}>Late check-ins</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: lateAbsentTotals.absent > 0 ? "#FF8A7A" : "#F5F2E4" }}>{lateAbsentTotals.absent}</div>
+                    <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)" }}>Absences</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(245,242,228,0.5)", marginBottom: 16 }}>From Week 1 onwards · absences count conducted sessions only</div>
+              </>
+            )}
             </div>
           </div>
 
           <div className="dj-classdetail-right" style={{ flex: 1, minWidth: 0, overflowY: "auto", padding: "18px 20px 22px", color: "#F5F2E4", borderLeft: "1px solid rgba(255,255,255,0.12)" }}>
-            <div style={detailLabel}>
-              Sessions ({ts.length}) · {activeBatch}
-              {batchComplete && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: "#8FCB74" }}>✓ Batch complete</span>}
+            <div
+              onClick={() => setSessionsCollapsed((v) => !v)}
+              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none", marginBottom: sessionsCollapsed ? 0 : 10 }}
+              title={sessionsCollapsed ? "Expand sessions" : "Collapse sessions"}
+            >
+              <span style={{ fontSize: 10, color: "rgba(245,242,228,0.65)", transition: "transform 0.15s ease", display: "inline-block", transform: sessionsCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+              <div style={{ ...detailLabel, marginBottom: 0 }}>
+                Sessions ({ts.length}) · {activeBatch}
+                {batchComplete && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 700, color: "#8FCB74" }}>✓ Batch complete</span>}
+              </div>
             </div>
+            {!sessionsCollapsed && (
+            <>
             {ts.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 6 }}>No sessions yet in {activeBatch}.</div>
             ) : (
@@ -5546,12 +5581,18 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                   const { attended, notAttended } = topicAttendanceLists(classMembers, attendanceByMember, t.id);
                   const totalMembers = attended.length + notAttended.length;
                   const tpct = totalMembers ? Math.round((attended.length / totalMembers) * 100) : 0;
+                  // Late check-ins for this session (Week 0 and ONE2ONE don't use the on-time/late split).
+                  const showLate = !isOneOnOne && !isWeekZeroTopic(t);
+                  const lateCount = showLate ? attended.filter((m) => isLateAttendance(m._attendance && m._attendance.dateAttended)).length : 0;
                   return (
                     <div className="dj-detail-row" style={detailRow} onClick={() => openSession(t)}>
                       {isLeader && ts.length > 1 && <SessionDragHandle dragHandlers={dragHandlers} dark />}
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: 14, fontWeight: 600 }}>{t.name}</div>
-                        <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", marginTop: 2 }}>{attended.length} of {totalMembers} attended</div>
+                        <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", marginTop: 2 }}>
+                          {attended.length} of {totalMembers} attended
+                          {showLate && <>{" · "}<span style={lateCount > 0 ? { color: "#E5C77A", fontWeight: 700 } : undefined}>{lateCount} late</span></>}
+                        </div>
                         <DetailBar pct={tpct} />
                       </div>
                       <span style={{ fontSize: 12.5, fontWeight: 700, color: "#E5C77A" }}>{tpct}%</span>
@@ -5596,6 +5637,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                 <button style={{ padding: "9px 16px", borderRadius: 8, border: "none", background: "#E5A430", color: "#23211D", fontWeight: 700, fontSize: 13.5, cursor: "pointer" }} onClick={addTopic}>Add</button>
               </div>
             )}
+            </>
+            )}
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 24, flexWrap: "wrap" }}>
               <div
@@ -5622,7 +5665,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginTop: 10 }}>Add sessions to this class to start tracking attendance.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-                {memberRows.map(({ member, done, total: totalSessions, pct: mpct }) => (
+                {memberRows.map(({ member, done, late, absent, total: totalSessions, pct: mpct }) => (
                   <div key={member.id} className="dj-detail-row" style={detailRow} onClick={() => openMember(member)}>
                     <Avatar name={member.name} photoUrl={member.photoUrl} size={38} />
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -5630,7 +5673,15 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                         <span style={{ fontSize: 14, fontWeight: 600 }}>{member.name}</span>
                         <TrackStatusCell status={(member.classStatus && member.classStatus[classItem.id]) || "Enrolled"} dark />
                       </div>
-                      <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", marginTop: 2 }}>{done} of {totalSessions} sessions attended</div>
+                      <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", marginTop: 2 }}>
+                        {done} of {totalSessions} sessions attended
+                        {!isOneOnOne && (
+                          <>
+                            {" · "}<span style={late > 0 ? { color: "#E5C77A", fontWeight: 700 } : undefined}>{late} late</span>
+                            {" · "}<span style={absent > 0 ? { color: "#FF8A7A", fontWeight: 700 } : undefined}>{absent} absent</span>
+                          </>
+                        )}
+                      </div>
                       <DetailBar pct={mpct} />
                     </div>
                     <span style={{ fontSize: 12.5, fontWeight: 700, color: "#E5C77A" }}>{mpct}%</span>
