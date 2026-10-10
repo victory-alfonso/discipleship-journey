@@ -5593,7 +5593,7 @@ function SessionDragHandle({ dragHandlers, dark }) {
 
 // Double donut for the class sidebar: the OUTER ring is sessions conducted out of the
 // total; the INNER ring splits the members by attendance status (each member lands in
-// exactly one slice, worst status first). Tapping a status lists the member names.
+// exactly one slice, worst status first). Hovering a status (tap on phones) lists the member names.
 const RING_STATUS = [
   { key: "completed", label: "Completed", color: "#4FA36A" },
   { key: "onTrack", label: "On track", color: "#7BD18F" },
@@ -5652,27 +5652,31 @@ function ClassProgressRings({ sessionCount, conductedCount, rows }) {
       </div>
       <div style={{ borderTop: "1px solid rgba(255,255,255,0.15)", paddingTop: 10, fontSize: 11.5, color: cream, marginBottom: 8 }}>Inner: members by status</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px" }}>
-        {segs.map((sg) => (
-          <button key={sg.key} type="button" onClick={() => setOpenKey(openKey === sg.key ? null : sg.key)} aria-expanded={openKey === sg.key} style={{ display: "flex", alignItems: "flex-start", gap: 8, background: openKey === sg.key ? "rgba(255,255,255,0.1)" : "transparent", border: "none", borderRadius: 8, padding: 4, margin: -4, cursor: "pointer", textAlign: "left", color: "#F5F2E4", font: "inherit" }}>
-            <span style={{ width: 10, height: 10, borderRadius: "50%", background: sg.color, flexShrink: 0, marginTop: 4 }} />
-            <span style={{ minWidth: 0 }}>
-              <span style={{ display: "block", fontSize: 12.5, lineHeight: 1.2 }}>{sg.label}</span>
-              <span style={{ display: "block", fontSize: 13, fontWeight: 700 }}>{sg.v} <span style={{ fontWeight: 400, color: "rgba(245,242,228,0.65)", fontSize: 12 }}>· {Math.round((sg.v / total) * 100)}%</span></span>
-            </span>
-          </button>
+        {segs.map((sg, idx) => (
+          <div key={sg.key} style={{ position: "relative", zIndex: openKey === sg.key ? 6 : 1 }} onMouseEnter={() => setOpenKey(sg.key)} onMouseLeave={() => setOpenKey((k) => (k === sg.key ? null : k))}>
+            <button type="button" onClick={() => setOpenKey(openKey === sg.key ? null : sg.key)} onFocus={() => setOpenKey(sg.key)} onBlur={() => setOpenKey((k) => (k === sg.key ? null : k))} onKeyDown={(e) => { if (e.key === "Escape") setOpenKey(null); }} aria-expanded={openKey === sg.key} style={{ display: "flex", alignItems: "flex-start", gap: 8, width: "100%", background: openKey === sg.key ? "rgba(255,255,255,0.1)" : "transparent", border: "none", borderRadius: 8, padding: 4, margin: -4, cursor: "default", textAlign: "left", color: "#F5F2E4", font: "inherit", outline: "none" }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: sg.color, flexShrink: 0, marginTop: 4 }} />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 12.5, lineHeight: 1.2 }}>{sg.label}</span>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 700 }}>{sg.v} <span style={{ fontWeight: 400, color: "rgba(245,242,228,0.65)", fontSize: 12 }}>· {Math.round((sg.v / total) * 100)}%</span></span>
+              </span>
+            </button>
+            {openKey === sg.key && (
+              <div style={{ position: "absolute", top: "100%", paddingTop: 6, width: 230, ...(idx % 2 === 0 ? { left: -4 } : { right: -4 }) }}>
+                <div style={{ background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 12, padding: "10px 12px", boxShadow: "0 14px 30px -10px rgba(0,0,0,0.6)", maxHeight: 220, overflowY: "auto" }}>
+                  <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, color: sg.color, marginBottom: 4 }}>{sg.label} · {sg.v}</div>
+                  {sg.list.map((r) => (
+                    <div key={r.member.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "4px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                      <span>{displayName(r.member.name)}</span>
+                      <span style={{ color: cream, whiteSpace: "nowrap" }}>{r.absent > 0 ? `${r.absent} absent` : r.late > 0 ? `${r.late} late` : `${r.done}/${sessionCount}`}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         ))}
       </div>
-      {openKey && buckets[openKey] && buckets[openKey].length > 0 && (
-        <div style={{ marginTop: 12, background: "rgba(18,26,50,0.55)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "8px 12px", maxHeight: 200, overflowY: "auto" }}>
-          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, color: (RING_STATUS.find((x) => x.key === openKey) || {}).color, marginBottom: 4 }}>{(RING_STATUS.find((x) => x.key === openKey) || {}).label} · {buckets[openKey].length}</div>
-          {buckets[openKey].map((r) => (
-            <div key={r.member.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "4px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-              <span>{displayName(r.member.name)}</span>
-              <span style={{ color: cream, whiteSpace: "nowrap" }}>{r.absent > 0 ? `${r.absent} absent` : r.late > 0 ? `${r.late} late` : `${r.done}/${sessionCount}`}</span>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
