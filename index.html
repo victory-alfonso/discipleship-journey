@@ -5367,6 +5367,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [membersCollapsed, setMembersCollapsed] = useState(false);
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
+  const [statPop, setStatPop] = useState(null); // "late" | "absent" | null — details popover on the Late & Absences numbers
+  const [statDir, setStatDir] = useState("up");
   const batches = useMemo(() => getBatchesForClass(classItem, topics), [classItem, topics]);
   const [selectedBatch, setSelectedBatch] = useState(null);
   // Default to the same "currently running" batch the class card face
@@ -5410,16 +5412,28 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
         // Late / absent only count from Week 1 onwards (Week 0 is just orientation).
         // Absent = a conducted session the member didn't attend.
         const counted = ts.filter((t) => !isWeekZeroTopic(t));
-        const late = counted.filter((t) => att[t.id] && att[t.id].attended && isLateAttendance(att[t.id].dateAttended)).length;
-        const absent = counted.filter((t) => t.conducted && !(att[t.id] && att[t.id].attended)).length;
-        return { member: m, done, late, absent, total: ts.length, pct: ts.length ? Math.round((done / ts.length) * 100) : 0 };
+        const lateSessions = counted.filter((t) => att[t.id] && att[t.id].attended && isLateAttendance(att[t.id].dateAttended));
+        const absentSessions = counted.filter((t) => t.conducted && !(att[t.id] && att[t.id].attended));
+        const late = lateSessions.length;
+        const absent = absentSessions.length;
+        return { member: m, done, late, absent, lateSessions: lateSessions.map((t) => t.name), absentSessions: absentSessions.map((t) => t.name), total: ts.length, pct: ts.length ? Math.round((done / ts.length) * 100) : 0 };
       })
       .sort((a, b) => b.pct - a.pct || a.member.name.localeCompare(b.member.name));
   }, [classMembers, attendanceByMember, ts]);
-  const lateAbsentTotals = useMemo(
-    () => memberRows.reduce((acc, r) => ({ late: acc.late + r.late, absent: acc.absent + r.absent }), { late: 0, absent: 0 }),
-    [memberRows]
-  );
+  const lateAbsentTotals = useMemo(() => {
+    const byCount = (key) => (a, b) => b[key] - a[key] || a.member.name.localeCompare(b.member.name);
+    return {
+      late: memberRows.reduce((n, r) => n + r.late, 0),
+      absent: memberRows.reduce((n, r) => n + r.absent, 0),
+      lateList: memberRows.filter((r) => r.late > 0).sort(byCount("late")),
+      absentList: memberRows.filter((r) => r.absent > 0).sort(byCount("absent")),
+    };
+  }, [memberRows]);
+  const openStat = (key, el) => {
+    const r = el.getBoundingClientRect();
+    setStatDir(r.top > 300 ? "up" : "down");
+    setStatPop(key);
+  };
 
   const openSession = (t) => { onOpenSession(t); };
   // Editing from inside a specific class should only show that
@@ -5540,15 +5554,46 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
             {!isOneOnOne && ts.length > 0 && (
               <>
                 <div style={detailLabel}>Late &amp; Absences</div>
-                <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginBottom: 6 }}>
-                  <div>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: lateAbsentTotals.late > 0 ? "#E5C77A" : "#F5F2E4" }}>{lateAbsentTotals.late}</div>
-                    <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)" }}>Late check-ins</div>
+                <div style={{ position: "relative", marginBottom: 6 }} onMouseLeave={() => setStatPop(null)}>
+                  <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
+                    {[["late", "Late check-ins", lateAbsentTotals.late, "#E5C77A"], ["absent", "Absences", lateAbsentTotals.absent, "#FF8A7A"]].map(([k, label, n, color]) => (
+                      <div
+                        key={k}
+                        tabIndex={0}
+                        style={{ cursor: "pointer", outline: "none" }}
+                        onMouseEnter={(e) => openStat(k, e.currentTarget)}
+                        onFocus={(e) => openStat(k, e.currentTarget)}
+                        onClick={(e) => openStat(k, e.currentTarget)}
+                        onKeyDown={(e) => { if (e.key === "Escape") setStatPop(null); }}
+                      >
+                        <div style={{ fontSize: 22, fontWeight: 700, color: n > 0 ? color : "#F5F2E4" }}>{n}</div>
+                        <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", borderBottom: "1px dotted rgba(245,242,228,0.4)", display: "inline-block" }}>{label}</div>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <div style={{ fontSize: 22, fontWeight: 700, color: lateAbsentTotals.absent > 0 ? "#FF8A7A" : "#F5F2E4" }}>{lateAbsentTotals.absent}</div>
-                    <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)" }}>Absences</div>
-                  </div>
+                  {statPop && (() => {
+                    const isLate = statPop === "late";
+                    const list = isLate ? lateAbsentTotals.lateList : lateAbsentTotals.absentList;
+                    const color = isLate ? "#E5C77A" : "#FF8A7A";
+                    return (
+                      <div style={{ position: "absolute", left: 0, right: 0, zIndex: 6, ...(statDir === "up" ? { bottom: "100%", paddingBottom: 6 } : { top: "100%", paddingTop: 6 }) }}>
+                        <div style={{ background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 12, padding: "10px 12px", boxShadow: "0 14px 30px -10px rgba(0,0,0,0.6)", maxHeight: 240, overflowY: "auto" }}>
+                          <div style={{ ...detailLabel, marginBottom: 6, color }}>{isLate ? "Late check-ins" : "Absences"} · by member</div>
+                          {list.length === 0 ? (
+                            <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.7)" }}>{isLate ? "No late check-ins yet." : "No absences yet."}</div>
+                          ) : list.map((r) => (
+                            <div key={r.member.id} style={{ padding: "5px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, fontWeight: 600 }}>
+                                <span>{r.member.name}</span>
+                                <span style={{ color }}>{isLate ? r.late : r.absent}</span>
+                              </div>
+                              <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.6)" }}>{(isLate ? r.lateSessions : r.absentSessions).join(", ")}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div style={{ fontSize: 11, color: "rgba(245,242,228,0.5)", marginBottom: 16 }}>From Week 1 onwards · absences count conducted sessions only</div>
               </>
