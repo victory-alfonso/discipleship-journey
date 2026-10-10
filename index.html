@@ -3068,12 +3068,33 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
     [assessments, classItem]
   );
   const classTopics = useMemo(() => (classItem ? topicsForClass(topics, classItem.name) : []), [topics, classItem]);
+  const openAssessment = openId ? classAssessments.find((x) => x.id === openId) || null : null;
   const scoreOf = (memberId, aId) => {
     const g = (gradeDocs || []).find((x) => x.memberId === memberId && x.assessmentId === aId);
     return g ? g.score : null;
   };
   const inputStyle = { padding: "7px 10px", borderRadius: 8, border: "1px solid rgba(31,56,100,0.25)", fontSize: 14, background: "#fff", color: "#23211D" };
   const fmtNum = (n) => Math.round(n * 10) / 10;
+  // Score-entry modal: blur first so a focused score box still saves (onBlur) before it unmounts.
+  const closeScores = () => {
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+    setOpenId(null);
+  };
+  useEffect(() => {
+    if (!openId) return;
+    const onKey = (e) => { if (e.key === "Escape") closeScores(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [openId]);
+  // Jump straight to the first member who has no score yet.
+  useEffect(() => {
+    if (!openId || !isLeader) return;
+    const t = setTimeout(() => {
+      const first = Array.from(document.querySelectorAll(`input[data-score-group="${openId}"]`)).find((i) => i.value === "");
+      if (first) first.focus();
+    }, 60);
+    return () => clearTimeout(t);
+  }, [openId, isLeader]);
   const submit = () => {
     const title = (form.title || "").trim();
     const maxScore = Number(form.maxScore);
@@ -3328,6 +3349,44 @@ tr{page-break-inside:avoid}
         </div>
       )}
 
+      {openAssessment && (() => {
+        const a = openAssessment;
+        const scores = classMembers.map((m) => scoreOf(m.id, a.id)).filter((v) => v !== null);
+        const avg = scores.length ? scores.reduce((x, y) => x + y, 0) / scores.length : null;
+        const topic = a.topicId ? classTopics.find((t) => t.id === a.topicId) : null;
+        return (
+          <div style={styles.modalOverlay} onClick={closeScores}>
+            <div
+              role="dialog"
+              aria-modal="true"
+              style={{ ...styles.modalCard, maxWidth: 460, display: "flex", flexDirection: "column", maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ ...styles.modalTitle, marginBottom: 4 }}>{a.title}</div>
+              <div style={{ fontSize: 12.5, color: "#7A6E4E", marginBottom: 2 }}>
+                {a.type} · /{a.maxScore}{topic ? ` · ${topic.name}` : ""}{a.date ? ` · ${a.date}` : ""}
+              </div>
+              <div style={{ fontSize: 12.5, color: "#7A6E4E", marginBottom: 12 }}>
+                {scores.length} of {classMembers.length} graded{avg !== null ? ` · avg ${fmtNum(avg)}/${a.maxScore}` : ""}
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflowY: "auto", marginBottom: 12, border: "1px solid rgba(216,207,176,0.5)", borderRadius: 10, padding: "4px 10px" }}>
+                {classMembers.length === 0 && <div style={styles.emptyNote}>No members in this class yet.</div>}
+                {classMembers.map((m) => (
+                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+                    <span style={{ flex: 1, fontSize: 14 }}>{m.name}</span>
+                    {scoreInput(m, a)}
+                    <span style={{ fontSize: 12, opacity: 0.6, width: 36 }}>/{a.maxScore}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ ...styles.modalActions, marginTop: 0 }}>
+                <button style={styles.modalConfirmBtn} onClick={closeScores}>{isLeader ? "Done" : "Close"}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {form && (
         <div style={styles.lightCard}>
           <div style={styles.sectionLabel}>{form.id ? "Edit" : "New"} Quiz / Activity</div>
@@ -3359,11 +3418,10 @@ tr{page-break-inside:avoid}
           const scores = classMembers.map((m) => scoreOf(m.id, a.id)).filter((v) => v !== null);
           const avg = scores.length ? scores.reduce((x, y) => x + y, 0) / scores.length : null;
           const topic = a.topicId ? classTopics.find((t) => t.id === a.topicId) : null;
-          const open = openId === a.id;
           return (
             <div key={a.id} style={styles.lightCard}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => setOpenId(open ? null : a.id)}>
-                <span style={{ fontSize: 10, display: "inline-block", transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => setOpenId(a.id)}>
+                <span style={{ fontSize: 18, lineHeight: 1, opacity: 0.5 }}>›</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{a.title} <span style={{ fontWeight: 500, fontSize: 12, opacity: 0.7 }}>· {a.type} · /{a.maxScore}</span></div>
                   <div style={{ fontSize: 12, opacity: 0.7 }}>
@@ -3377,18 +3435,6 @@ tr{page-break-inside:avoid}
                   </>
                 )}
               </div>
-              {open && (
-                <div style={{ marginTop: 10 }}>
-                  {classMembers.length === 0 && <div style={styles.emptyNote}>No members in this class yet.</div>}
-                  {classMembers.map((m) => (
-                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
-                      <span style={{ flex: 1, fontSize: 14 }}>{m.name}</span>
-                      {scoreInput(m, a)}
-                      <span style={{ fontSize: 12, opacity: 0.6, width: 36 }}>/{a.maxScore}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
           );
         })
