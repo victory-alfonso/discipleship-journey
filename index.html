@@ -5467,7 +5467,7 @@ function ClassFormModal({ title, initialName, initialPhoto, submitLabel, namePla
 // every session, and every enrolled member.
 // ============================================================
 
-const detailLabel = { fontSize: 11.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: "rgba(245,242,228,0.65)", marginBottom: 10 };
+const detailLabel = { fontSize: 11.5, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: "rgba(245,242,228,0.8)", marginBottom: 10 };
 const detailRow = { display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.08)", cursor: "pointer" };
 const detailBarTrack = { height: 5, borderRadius: 20, background: "rgba(255,255,255,0.18)", overflow: "hidden", marginTop: 6 };
 
@@ -5704,7 +5704,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   return (
     <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
       <div
-        style={{ position: "relative", width: "100%", maxWidth: 900, height: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
+        style={{ position: "relative", width: "100%", maxWidth: 900, height: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgb(53,88,150), rgb(31,56,100))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
         onClick={(e) => e.stopPropagation()}
       >
         <button type="button" onClick={onClose} style={{ ...roundBtn, right: 12 }} aria-label="Close">×</button>
@@ -5717,20 +5717,15 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
 
         <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
           <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", background: "#23211D" }}>
-            {/* Fixed-size backdrop (min 620px tall) so the image neither crops
-                its text nor re-zooms when the right side collapses. */}
-            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100%", minHeight: 620, background: "linear-gradient(180deg, #3A5A94 0%, #2A4A80 45%, #1F3864 100%)" }}>
-              {classItem.photoUrl ? (
-                // Feathered edges (mask) dissolve the picture's own rectangle into
-                // the blue backdrop, whatever its background colour is.
-                <img src={classItem.photoUrl} alt="" style={{ position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)", width: "100%", height: "auto", maxHeight: "100%", objectFit: "contain", opacity: 0.6, WebkitMaskImage: "radial-gradient(ellipse 70% 70% at 50% 50%, #000 50%, transparent 100%)", maskImage: "radial-gradient(ellipse 70% 70% at 50% 50%, #000 50%, transparent 100%)" }} />
-              ) : (
-                <ClassCoverImage classItem={classItem} />
-              )}
-            </div>
-            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(31,56,100,0.25) 0%, rgba(31,56,100,0.15) 50%, rgba(31,56,100,0.3) 100%)" }} />
+            {/* Clean solid sidebar: the cover photo is shown as a proper
+                banner card above the title (not ghosted behind the text),
+                so every label and number stays fully readable. */}
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, #2C4C84 0%, #243F70 55%, #1F3864 100%)" }} />
 
             <div className="dj-classdetail-leftscroll" style={{ position: "relative", flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 18px 22px", color: "#F5F2E4" }}>
+            <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", borderRadius: 12, overflow: "hidden", marginBottom: 16, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)", boxShadow: "0 8px 20px -10px rgba(0,0,0,0.5)" }}>
+              <ClassCoverImage classItem={classItem} />
+            </div>
             <div className="dj-classdetail-title" style={{ marginBottom: 18 }}>
               <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.15 }}>{classItem.name}</div>
               <div style={{ fontSize: 12, color: "rgba(245,242,228,0.8)", marginTop: 4 }}>
@@ -5860,7 +5855,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                         onKeyDown={(e) => { if (e.key === "Escape") setStatPop(null); }}
                       >
                         <div style={{ fontSize: 22, fontWeight: 700, color: n > 0 ? color : "#F5F2E4" }}>{n}</div>
-                        <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", borderBottom: "1px dotted rgba(245,242,228,0.4)", display: "inline-block" }}>{label}</div>
+                        <div style={{ fontSize: 12, color: "rgba(245,242,228,0.85)", borderBottom: "1px dotted rgba(245,242,228,0.5)", display: "inline-block" }}>{label}</div>
                       </div>
                     ))}
                   </div>
@@ -5888,7 +5883,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                     );
                   })()}
                 </div>
-                <div style={{ fontSize: 11, color: "rgba(245,242,228,0.5)", marginBottom: 16 }}>From Week 1 onwards · absences count conducted sessions only</div>
+                <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.72)", marginBottom: 16 }}>From Week 1 onwards · absences count conducted sessions only</div>
               </>
             )}
             </div>
