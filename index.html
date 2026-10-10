@@ -2706,7 +2706,7 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
       const detail = [statusWord, firstStr].filter(Boolean).join(" · ");
       setStatus({
         type: "warn",
-        text: `⚠️ ${member.name}: Already marked present${detail ? ` · ${detail}` : ""}. Walang binago.`,
+        text: `⚠️ ${member.name}: Already marked present${detail ? ` · ${detail}` : ""}`,
       });
       if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
       showSuccessToast(`${member.name} · ${detail ? detail : "already marked present"}`, "warn");
