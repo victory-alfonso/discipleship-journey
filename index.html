@@ -318,8 +318,7 @@
        a phone screen, so stack it back into one scrollable column. */
     .dj-classdetail-body { flex-direction: column !important; overflow-y: auto !important; }
     .dj-classdetail-left { width: 100% !important; overflow-y: visible !important; flex-shrink: 1 !important; }
-    .dj-classdetail-leftscroll { overflow-y: visible !important; flex: none !important; }
-    .dj-classdetail-title { padding-right: 130px; }
+    .dj-classdetail-leftscroll { overflow-y: visible !important; flex: none !important; padding-top: 56px !important; }
     .dj-classdetail-right { border-left: none !important; border-top: 1px solid rgba(255,255,255,0.12) !important; overflow-y: visible !important; }
     /* ONE2ONE leader's own profile card: same idea — the wide
        cover/profile-left + content-right layout stacks into one
@@ -5462,6 +5461,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
+  const [batchMenuOpen, setBatchMenuOpen] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [membersCollapsed, setMembersCollapsed] = useState(false);
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
@@ -5570,12 +5570,23 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
           <button type="button" onClick={() => onEditClass(classItem)} style={{ ...roundBtn, right: 52, fontSize: 14 }} aria-label="Edit class" title="Edit class">✎</button>
         )}
         {isLeader && !isOneOnOneClassName(classItem.name) && (
-          <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} iconStyle={{ ...roundBtn, right: 92, fontSize: 14 }} />
+          <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} iconStyle={{ ...roundBtn, right: 92, width: "auto", borderRadius: 16, padding: "0 14px", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap" }} />
         )}
 
         <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
           <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", background: "#23211D" }}>
-            <ClassCoverImage classItem={classItem} />
+            {/* Fixed-size backdrop (min 620px tall) so the image neither crops
+                its text nor re-zooms when the right side collapses. */}
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100%", minHeight: 620 }}>
+              {classItem.photoUrl ? (
+                <>
+                  <img src={classItem.photoUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", filter: "blur(18px)", transform: "scale(1.15)" }} />
+                  <img src={classItem.photoUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
+                </>
+              ) : (
+                <ClassCoverImage classItem={classItem} />
+              )}
+            </div>
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(31,56,100,0.55) 0%, rgba(31,56,100,0.88) 40%, rgba(31,56,100,0.96) 100%)" }} />
 
             <div className="dj-classdetail-leftscroll" style={{ position: "relative", flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 18px 22px", color: "#F5F2E4" }}>
@@ -5591,18 +5602,41 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                 <div style={detailLabel}>Batch</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
                   {batches.length > 2 ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 1 }}>
-                      <select
-                        value={activeBatch}
-                        onChange={(e) => setSelectedBatch(e.target.value)}
-                        style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px solid #E5A430", background: "#E5A430", color: "#23211D", maxWidth: 170 }}
+                    <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 1, maxWidth: "100%" }}>
+                      <button
+                        type="button"
+                        onClick={() => setBatchMenuOpen((v) => !v)}
+                        aria-haspopup="listbox"
+                        aria-expanded={batchMenuOpen}
+                        style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px 6px 14px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px solid #E5A430", background: "#E5A430", color: "#23211D", maxWidth: 190 }}
                       >
-                        {batches.map((b) => (<option key={b} value={b} style={{ background: "#fff", color: "#23211D" }}>{b}</option>))}
-                      </select>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{activeBatch}</span>
+                        <span style={{ fontSize: 9, transition: "transform 0.15s ease", transform: batchMenuOpen ? "rotate(180deg)" : "none" }}>▼</span>
+                      </button>
                       {isLeader && (
                         <>
                           <button type="button" onClick={() => onRenameBatch(classItem.id, activeBatch)} title="Rename batch" style={{ background: "transparent", border: "none", color: "#F5F2E4", cursor: "pointer", fontSize: 12, padding: "2px 5px", opacity: 0.8 }}>✎</button>
                           <button type="button" onClick={() => onDeleteBatch(classItem.id, activeBatch)} title="Delete batch" style={{ background: "transparent", border: "none", color: "#F5F2E4", cursor: "pointer", fontSize: 15, padding: "2px 5px", opacity: 0.8 }}>×</button>
+                        </>
+                      )}
+                      {batchMenuOpen && (
+                        <>
+                          <div style={{ position: "fixed", inset: 0, zIndex: 7 }} onClick={() => setBatchMenuOpen(false)} />
+                          <div role="listbox" style={{ position: "absolute", top: "100%", left: 0, marginTop: 6, minWidth: 190, maxWidth: 264, maxHeight: 220, overflowY: "auto", zIndex: 8, background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 12, padding: 5, boxShadow: "0 14px 30px -10px rgba(0,0,0,0.6)" }}>
+                            {batches.map((b) => (
+                              <button
+                                key={b}
+                                type="button"
+                                role="option"
+                                aria-selected={b === activeBatch}
+                                onClick={() => { setSelectedBatch(b); setBatchMenuOpen(false); }}
+                                style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, width: "100%", textAlign: "left", padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: b === activeBatch ? 700 : 500, background: b === activeBatch ? "rgba(229,164,48,0.18)" : "transparent", color: b === activeBatch ? "#E5A430" : "#F5F2E4" }}
+                              >
+                                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{b}</span>
+                                {b === activeBatch && <span>✓</span>}
+                              </button>
+                            ))}
+                          </div>
                         </>
                       )}
                     </div>
@@ -5926,7 +5960,7 @@ function CopyRegistrationLinkButton({ classId, batch, iconStyle }) {
   if (iconStyle) {
     return (
       <button type="button" onClick={copy} style={iconStyle} aria-label="Copy registration link" title={copied ? "Copied!" : `Copy registration link${batch ? ` (${batch})` : ""}`}>
-        {copied ? "✓" : "🔗"}
+        {copied ? "Copied!" : "Copy Registration Link"}
       </button>
     );
   }
