@@ -5343,12 +5343,7 @@ function ClassRow({ classItem, topics, members, attendanceByMember, isLeader, on
         )}
         {reorderMode ? (
           <span style={{ ...styles.statusBadge, background: "rgba(20,18,14,0.65)", color: "#F5F2E4", border: "none", fontSize: 12 }}>#{position}</span>
-        ) : isLeader && (
-          <div style={{ display: "flex", gap: 6 }} onClick={(e) => e.stopPropagation()}>
-            <button style={styles.iconEdit} onClick={() => onEditClass(classItem)} title="Edit class">✎</button>
-            <button style={styles.iconDanger} onClick={() => onDeleteClass(classItem.id, classItem.name)} title="Delete class">×</button>
-          </div>
-        )}
+        ) : null}
       </div>
       {reorderMode && (
         <div style={{ position: "absolute", left: 0, right: 0, top: "38%", display: "flex", justifyContent: "center", gap: 8 }} onClick={(e) => e.stopPropagation()}>
@@ -5708,11 +5703,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
         onClick={(e) => e.stopPropagation()}
       >
         <button type="button" onClick={onClose} style={{ ...roundBtn, right: 12 }} aria-label="Close">×</button>
-        {isLeader && (
-          <button type="button" onClick={() => onEditClass(classItem)} style={{ ...roundBtn, right: 52, fontSize: 14 }} aria-label="Edit class" title="Edit class">✎</button>
-        )}
         {isLeader && !isOneOnOneClassName(classItem.name) && (
-          <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} iconStyle={{ ...roundBtn, right: 92, width: "auto", borderRadius: 16, padding: "0 14px", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap" }} />
+          <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} iconStyle={{ ...roundBtn, right: 52, width: "auto", borderRadius: 16, padding: "0 14px", fontSize: 12.5, fontWeight: 600, whiteSpace: "nowrap" }} />
         )}
 
         <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
@@ -5721,7 +5713,12 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                 right side collapses). The photo/logo now COVERS the full area edge to edge. */}
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100%", minHeight: 620, background: "linear-gradient(180deg, #3A5A94 0%, #2A4A80 45%, #1F3864 100%)" }}>
               {classItem.photoUrl ? (
-                <img src={classItem.photoUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", opacity: 0.55 }} />
+                <>
+                  {/* Soft, blurred extension of the same image fills the whole sidebar so no empty space shows */}
+                  <img src={classItem.photoUrl} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", transform: "scale(1.12)", filter: "blur(12px)", opacity: 0.55 }} />
+                  {/* The logo itself, zoomed out so the whole thing is visible (not cropped) */}
+                  <img src={classItem.photoUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", objectPosition: "center", opacity: 0.6 }} />
+                </>
               ) : (
                 <ClassCoverImage classItem={classItem} />
               )}
@@ -6212,9 +6209,6 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h2 style={styles.profileName}>{classItem.name}</h2>
-            {isLeader && (
-              <button style={styles.iconEdit} onClick={() => onEditClass(classItem)} title="Edit class name">✎</button>
-            )}
           </div>
           <div style={styles.rosterMeta}>
             {ts.length} session{ts.length === 1 ? "" : "s"} · {classMembers.length} member{classMembers.length === 1 ? "" : "s"}
@@ -7785,7 +7779,7 @@ function PendingRegistrations({ pendingRegistrations, classes, members, onApprov
 // SETTINGS — leaders / mentors (leader-only)
 // ============================================================
 
-function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeaders, onAddOneLeader, onRemoveOneLeader, onEditOneLeader, oneLeaderApps, onApproveOneLeaderApp, onRejectOneLeaderApp, admins, isAdmin, isManager, onAddAdmin, onRemoveAdmin, seniorPastors, onAddSeniorPastor, onRemoveSeniorPastor }) {
+function Settings({ classes, topics, onEditClass, onDeleteClass, leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeaders, onAddOneLeader, onRemoveOneLeader, onEditOneLeader, oneLeaderApps, onApproveOneLeaderApp, onRejectOneLeaderApp, admins, isAdmin, isManager, onAddAdmin, onRemoveAdmin, seniorPastors, onAddSeniorPastor, onRemoveSeniorPastor }) {
   const [newLeaderEmail, setNewLeaderEmail] = useState("");
   const [newOneLeaderEmail, setNewOneLeaderEmail] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
@@ -7795,6 +7789,7 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeade
   const settingsTabs = [
     ["staffs", "Staffs"],
     ["one2one", "ONE2ONE Leaders"],
+    ["classes", "Classes"],
     ...(isManager ? [["developers", "Developers"]] : []),
     ...(isAdmin ? [["pastor", "Senior Pastor"]] : []),
   ];
@@ -7827,6 +7822,29 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeade
         ) : (
           <div style={styles.emptyNote}>Only Developers or Senior Pastors can add or remove staffs.</div>
         )}
+      </div>
+      )}
+
+      {activeKey === "classes" && (
+      <div style={styles.settingsSection}>
+        <div style={styles.sectionLabel}>Manage Classes</div>
+        <div style={styles.pairNote}>Edit a class's name and cover photo, or delete a class. Deleting a class also deletes all of its sessions and their attendance records, and can't be undone.</div>
+        {(classes || []).length === 0 && <div style={styles.emptyNote}>No classes yet.</div>}
+        <div style={styles.restrictList}>
+          {(classes || []).map((c) => {
+            const n = topicsForClass(topics || [], c.name).length;
+            return (
+              <div key={c.id} style={styles.restrictRow}>
+                <span style={{ ...styles.restrictName, flex: 1, minWidth: 0 }}>
+                  {c.name}
+                  <span style={{ opacity: 0.6, fontWeight: 400, marginLeft: 8, fontSize: 12 }}>{n} session{n === 1 ? "" : "s"}</span>
+                </span>
+                <button style={styles.iconEdit} onClick={() => onEditClass(c)} title="Edit class">✎</button>
+                <button style={styles.iconDanger} onClick={() => onDeleteClass(c.id, c.name)} title="Delete class">×</button>
+              </div>
+            );
+          })}
+        </div>
       </div>
       )}
 
@@ -9365,6 +9383,10 @@ function App() {
 
         {activeTab === "settings" && isLeader && (
           <Settings
+            classes={classes}
+            topics={topics}
+            onEditClass={setRenamingClass}
+            onDeleteClass={deleteClass}
             leaders={leaders}
             currentEmail={currentEmail}
             onAddLeader={addLeader}
