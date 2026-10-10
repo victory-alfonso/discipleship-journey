@@ -2535,7 +2535,7 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
   const [status, setStatus] = useState({ type: "idle", text: "Point the camera at the member's QR code." });
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
-  const [toastLate, setToastLate] = useState(false);
+  const [toastKind, setToastKind] = useState("ok"); // "ok" | "late" | "warn"
   const [toastLeaving, setToastLeaving] = useState(false);
   const toastTimerRef = useRef(null);
   const toastLeaveTimerRef = useRef(null);
@@ -2654,11 +2654,11 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
     }
   }
 
-  function showSuccessToast(text, late) {
+  function showSuccessToast(text, kind) {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     if (toastLeaveTimerRef.current) clearTimeout(toastLeaveTimerRef.current);
     setToastLeaving(false);
-    setToastLate(!!late);
+    setToastKind(kind || "ok");
     setToast(text);
     toastTimerRef.current = setTimeout(() => {
       setToastLeaving(true);
@@ -2689,31 +2689,40 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
       return;
     }
     const scannedAt = new Date();
-    const already = !!((attendanceByMember[memberId] || {})[topic.id] || {}).attended;
-    onToggleAttendance(memberId, topic.id, true);
+    const rec = (attendanceByMember[memberId] || {})[topic.id] || {};
+    const already = !!rec.attended;
     // On time = 9:10 AM or earlier, late = 9:11 AM or later. Week 0 has no split.
     const showStatus = !isWeekZeroTopic(topic);
+
+    if (already) {
+      // Already scanned in: warn, and leave the saved check-in time untouched.
+      const first = rec.dateAttended;
+      const wasLate = showStatus && first && isLateAttendance(first);
+      const firstStr = first ? fmtTime(first) : "";
+      const statusWord = showStatus ? (wasLate ? "Late" : "On time") : "";
+      const detail = [statusWord, firstStr].filter(Boolean).join(" · ");
+      setStatus({
+        type: "warn",
+        text: `⚠️ ${member.name}: Already marked present${detail ? ` · ${detail}` : ""}. Walang binago.`,
+      });
+      if (navigator.vibrate) navigator.vibrate([80, 60, 80]);
+      showSuccessToast(`${member.name} · ${detail ? detail : "already marked present"}`, "warn");
+      return;
+    }
+
+    onToggleAttendance(memberId, topic.id, true);
     const isLate = showStatus && isLateAttendance(scannedAt);
     const statusWord = isLate ? "Late" : "On time";
     const timeStr = fmtTime(scannedAt);
     setStatus({
       type: isLate ? "late" : "ok",
-      text: !showStatus
-        ? (already
-            ? `${member.name} — already marked present, ${fmtDateTime(scannedAt)}.`
-            : `${member.name} — marked present, ${fmtDateTime(scannedAt)}.`)
-        : already
-          ? `${isLate ? "⏰" : "✓"} ${member.name}: already marked present · ${statusWord} · ${timeStr}`
-          : `${isLate ? "⏰" : "✓"} ${member.name}: ${statusWord} · ${timeStr}`,
+      text: showStatus
+        ? `${isLate ? "⏰" : "✓"} ${member.name}: ${statusWord} · ${timeStr}`
+        : `${member.name} — marked present, ${fmtDateTime(scannedAt)}.`,
     });
     if (navigator.vibrate) navigator.vibrate(120);
     playSuccessBeep();
-    const toastText = !showStatus
-      ? (already ? `${member.name} was already marked present.` : `${member.name} has been marked present.`)
-      : already
-        ? `${member.name} was already marked present · ${statusWord}`
-        : `${member.name} · ${statusWord}`;
-    showSuccessToast(toastText, isLate);
+    showSuccessToast(showStatus ? `${member.name} · ${statusWord}` : `${member.name} has been marked present.`, isLate ? "late" : "ok");
   }
 
   return (
@@ -2759,18 +2768,25 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
                     width: 36,
                     height: 36,
                     borderRadius: "50%",
-                    background: toastLate ? "#FF9F0A" : "#34C759",
+                    background: toastKind === "warn" ? "#FF6B3D" : toastKind === "late" ? "#FF9F0A" : "#34C759",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                   }}
                 >
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
-                    <path d="M4 12.5L9.5 18L20 6" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  {toastKind === "warn" ? (
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+                      <path d="M12 5v9" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" />
+                      <circle cx="12" cy="19" r="1.8" fill="#fff" />
+                    </svg>
+                  ) : (
+                    <svg width="19" height="19" viewBox="0 0 24 24" fill="none">
+                      <path d="M4 12.5L9.5 18L20 6" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  )}
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ color: "#fff", fontSize: 17, fontWeight: 800, letterSpacing: 0.1 }}>Attendance Marked</div>
+                  <div style={{ color: "#fff", fontSize: 17, fontWeight: 800, letterSpacing: 0.1 }}>{toastKind === "warn" ? "Already Marked" : "Attendance Marked"}</div>
                   <div
                     style={{
                       color: "rgba(255,255,255,0.9)",
@@ -2794,8 +2810,8 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
             fontSize: 13.5,
             fontWeight: 600,
             textAlign: "center",
-            background: status.type === "ok" ? "#DCE7D4" : status.type === "late" ? "#FBE9C6" : status.type === "error" ? "#F3E4DF" : "#F6F1E4",
-            color: status.type === "ok" ? "#385026" : status.type === "late" ? "#8A5A00" : status.type === "error" ? "#A6402F" : "#7A6E4E",
+            background: status.type === "ok" ? "#DCE7D4" : status.type === "late" ? "#FBE9C6" : status.type === "warn" ? "#FADBCF" : status.type === "error" ? "#F3E4DF" : "#F6F1E4",
+            color: status.type === "ok" ? "#385026" : status.type === "late" ? "#8A5A00" : status.type === "warn" ? "#9A3412" : status.type === "error" ? "#A6402F" : "#7A6E4E",
           }}
         >
           {status.text}
