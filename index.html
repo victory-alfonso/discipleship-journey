@@ -5572,7 +5572,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   return (
     <div style={{ ...styles.modalOverlay, background: "rgba(20,18,14,0.55)" }} onClick={onClose}>
       <div
-        style={{ position: "relative", width: "100%", maxWidth: 900, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
+        style={{ position: "relative", width: "100%", maxWidth: 900, height: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column", background: "linear-gradient(155deg, rgba(53,88,150,0.97), rgba(31,56,100,0.99))", border: "1px solid rgba(180,198,231,0.5)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden", animation: "popIn 0.18s ease-out" }}
         onClick={(e) => e.stopPropagation()}
       >
         <button type="button" onClick={onClose} style={{ ...roundBtn, right: 12 }} aria-label="Close">×</button>
