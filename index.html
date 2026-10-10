@@ -3090,6 +3090,17 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
         defaultValue={sc === null ? "" : sc}
         key={`${m.id}_${a.id}_${sc}`}
         placeholder="—"
+        data-score-group={a.id}
+        data-score-idx={classMembers.findIndex((x) => x.id === m.id)}
+        onFocus={(e) => e.target.select()}
+        onKeyDown={(e) => {
+          // Enter jumps to the next member's box for the same quiz.
+          if (e.key !== "Enter") return;
+          e.preventDefault();
+          const idx = Number(e.target.getAttribute("data-score-idx"));
+          const next = document.querySelector(`input[data-score-group="${a.id}"][data-score-idx="${idx + 1}"]`);
+          if (next) next.focus(); else e.target.blur();
+        }}
         onBlur={(e) => {
           const v = e.target.value;
           if (v === "" && sc === null) return;
@@ -3157,6 +3168,91 @@ tr{page-break-inside:avoid}
     w.document.close();
   };
 
+  const saveSummaryImage = () => {
+    const rows = gradebookRows();
+    const scale = 2, pad = 24, rowH = 30, headH = 46, titleH = 56, font = "Arial, Helvetica, sans-serif";
+    const probe = document.createElement("canvas").getContext("2d");
+    const measure = (t, w) => { probe.font = `${w || 400} 14px ${font}`; return probe.measureText(String(t)).width; };
+    const totalText = (r) => (r.possible ? `${fmtNum(r.got)}/${r.possible} (${r.pct}%)` : "—");
+    const avgs = classAssessments.map((a) => {
+      const sc = classMembers.map((m) => scoreOf(m.id, a.id)).filter((v) => v !== null);
+      return sc.length ? String(fmtNum(sc.reduce((x, y) => x + y, 0) / sc.length)) : "—";
+    });
+    const pcts = rows.filter((r) => r.pct !== null).map((r) => r.pct);
+    const avgTotal = pcts.length ? Math.round(pcts.reduce((x, y) => x + y, 0) / pcts.length) + "%" : "—";
+    const heads = ["Member", ...classAssessments.map((a) => a.title), "Total"];
+    const subs = ["", ...classAssessments.map((a) => `${a.type} · /${a.maxScore}`), ""];
+    const last = heads.length - 1;
+    const textFor = (r, c) => (c === 0 ? r.name : c === last ? totalText(r) : (r.cells[c - 1] === "" ? "—" : String(r.cells[c - 1])));
+    const avgFor = (c) => (c === 0 ? "Class average" : c === last ? avgTotal : avgs[c - 1]);
+    const colW = heads.map((h, c) => {
+      let w = Math.max(measure(h, 700), measure(subs[c]) * 0.85, measure(avgFor(c), 700));
+      rows.forEach((r) => { w = Math.max(w, measure(textFor(r, c), c === last ? 700 : 400)); });
+      return Math.ceil(w + 24);
+    });
+    const tableW = colW.reduce((x, y) => x + y, 0);
+    const W = Math.max(tableW + pad * 2, 480);
+    const H = pad + titleH + headH + rowH * (rows.length + 1) + pad;
+    const cv = document.createElement("canvas");
+    cv.width = W * scale; cv.height = H * scale;
+    const ctx = cv.getContext("2d");
+    ctx.scale(scale, scale);
+    ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0, 0, W, H);
+    ctx.textBaseline = "middle"; ctx.textAlign = "left";
+    ctx.fillStyle = "#1F3864"; ctx.font = `700 20px ${font}`;
+    ctx.fillText(`${classItem.name} — Grade Summary`, pad, pad + 14);
+    ctx.fillStyle = "#666"; ctx.font = `400 12px ${font}`;
+    ctx.fillText(`${rows.length} member${rows.length === 1 ? "" : "s"} · ${classAssessments.length} quiz/activit${classAssessments.length === 1 ? "y" : "ies"} · ${new Date().toLocaleDateString()}`, pad, pad + 38);
+    const top = pad + titleH;
+    const drawText = (c, x, yy, h, text, bold) => {
+      ctx.font = `${bold ? 700 : 400} 14px ${font}`; ctx.fillStyle = "#222";
+      ctx.textAlign = c === 0 ? "left" : "center";
+      ctx.fillText(text, c === 0 ? x + 10 : x + colW[c] / 2, yy + h / 2);
+    };
+    ctx.fillStyle = "#E8EDF5"; ctx.fillRect(pad, top, tableW, headH);
+    let x = pad;
+    heads.forEach((h, c) => {
+      const tx = c === 0 ? x + 10 : x + colW[c] / 2;
+      ctx.textAlign = c === 0 ? "left" : "center";
+      ctx.font = `700 14px ${font}`; ctx.fillStyle = "#1F3864";
+      ctx.fillText(h, tx, top + (subs[c] ? 16 : headH / 2));
+      if (subs[c]) { ctx.font = `400 11px ${font}`; ctx.fillStyle = "#666"; ctx.fillText(subs[c], tx, top + 33); }
+      x += colW[c];
+    });
+    let y = top + headH;
+    rows.forEach((r, i) => {
+      if (i % 2 === 1) { ctx.fillStyle = "#F7F7F7"; ctx.fillRect(pad, y, tableW, rowH); }
+      let cx = pad;
+      heads.forEach((_, c) => { drawText(c, cx, y, rowH, textFor(r, c), c === last); cx += colW[c]; });
+      y += rowH;
+    });
+    ctx.fillStyle = "#E8EDF5"; ctx.fillRect(pad, y, tableW, rowH);
+    let ax = pad;
+    heads.forEach((_, c) => { drawText(c, ax, y, rowH, avgFor(c), true); ax += colW[c]; });
+    y += rowH;
+    ctx.strokeStyle = "#B5B5B5"; ctx.lineWidth = 1;
+    for (let i = 0; i <= rows.length + 2; i++) {
+      const ly = i === 0 ? top : top + headH + rowH * (i - 1);
+      ctx.beginPath(); ctx.moveTo(pad, ly + 0.5); ctx.lineTo(pad + tableW, ly + 0.5); ctx.stroke();
+    }
+    let gx = pad;
+    for (let c = 0; c <= heads.length; c++) {
+      ctx.beginPath(); ctx.moveTo(gx + 0.5, top); ctx.lineTo(gx + 0.5, y); ctx.stroke();
+      gx += colW[c] || 0;
+    }
+    cv.toBlob((blob) => {
+      if (!blob) { alert("Could not create the image."); return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${classItem.name} - Grade Summary.png`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }, "image/png");
+  };
+
   if (!classItem) return <div style={styles.emptyNote}>No classes yet.</div>;
 
   return (
@@ -3175,6 +3271,7 @@ tr{page-break-inside:avoid}
             <button onClick={exportCsv} style={{ ...inputStyle, cursor: "pointer", fontWeight: 700 }}>Export CSV</button>
             <button onClick={printGradebook} style={{ ...inputStyle, cursor: "pointer", fontWeight: 700 }}>Print</button>
             <button onClick={() => setSummaryOpen(true)} style={{ ...inputStyle, cursor: "pointer", fontWeight: 700 }}>Summary</button>
+            <button onClick={saveSummaryImage} style={{ ...inputStyle, cursor: "pointer", fontWeight: 700 }}>Save as Image</button>
           </div>
         )}
         {isLeader && !form && (
