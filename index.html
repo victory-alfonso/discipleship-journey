@@ -318,6 +318,8 @@
        a phone screen, so stack it back into one scrollable column. */
     .dj-classdetail-body { flex-direction: column !important; overflow-y: auto !important; }
     .dj-classdetail-left { width: 100% !important; overflow-y: visible !important; flex-shrink: 1 !important; }
+    .dj-classdetail-leftscroll { overflow-y: visible !important; flex: none !important; }
+    .dj-classdetail-title { padding-right: 130px; }
     .dj-classdetail-right { border-left: none !important; border-top: 1px solid rgba(255,255,255,0.12) !important; overflow-y: visible !important; }
     /* ONE2ONE leader's own profile card: same idea — the wide
        cover/profile-left + content-right layout stacks into one
@@ -5567,32 +5569,44 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
         {isLeader && (
           <button type="button" onClick={() => onEditClass(classItem)} style={{ ...roundBtn, right: 52, fontSize: 14 }} aria-label="Edit class" title="Edit class">✎</button>
         )}
+        {isLeader && !isOneOnOneClassName(classItem.name) && (
+          <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} iconStyle={{ ...roundBtn, right: 92, fontSize: 14 }} />
+        )}
 
         <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
-          <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, overflowY: "auto" }}>
-            <div style={{ position: "relative", height: 150, background: "#23211D" }}>
-              <ClassCoverImage classItem={classItem} />
-              <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(31,56,100,0.55) 60%, rgba(31,56,100,0.98) 100%)" }} />
-              <div style={{ position: "absolute", left: 20, right: 20, bottom: 14 }}>
-                <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.15 }}>{classItem.name}</div>
-                <div style={{ fontSize: 12, color: "rgba(245,242,228,0.8)", marginTop: 4 }}>
-                  {ts.length} session{ts.length === 1 ? "" : "s"} · {classMembers.length} member{classMembers.length === 1 ? "" : "s"} · {pct}% overall attendance
-                </div>
+          <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", background: "#23211D" }}>
+            <ClassCoverImage classItem={classItem} />
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(31,56,100,0.55) 0%, rgba(31,56,100,0.88) 40%, rgba(31,56,100,0.96) 100%)" }} />
+
+            <div className="dj-classdetail-leftscroll" style={{ position: "relative", flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 18px 22px", color: "#F5F2E4" }}>
+            <div className="dj-classdetail-title" style={{ marginBottom: 18 }}>
+              <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.15 }}>{classItem.name}</div>
+              <div style={{ fontSize: 12, color: "rgba(245,242,228,0.8)", marginTop: 4 }}>
+                {ts.length} session{ts.length === 1 ? "" : "s"} · {classMembers.length} member{classMembers.length === 1 ? "" : "s"}
               </div>
             </div>
-
-            <div style={{ padding: "18px 18px 22px", color: "#F5F2E4" }}>
-            {isLeader && !isOneOnOneClassName(classItem.name) && (
-              <div style={{ marginBottom: 18 }}>
-                <CopyRegistrationLinkButton classId={classItem.id} batch={activeBatch} />
-              </div>
-            )}
 
             {(batches.length > 1 || isLeader) && (
               <div style={{ marginBottom: 18 }}>
                 <div style={detailLabel}>Batch</div>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-                  {batches.map((b) => (
+                  {batches.length > 2 ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <select
+                        value={activeBatch}
+                        onChange={(e) => setSelectedBatch(e.target.value)}
+                        style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12.5, fontWeight: 600, cursor: "pointer", border: "1px solid #E5A430", background: "#E5A430", color: "#23211D", maxWidth: 170 }}
+                      >
+                        {batches.map((b) => (<option key={b} value={b} style={{ background: "#fff", color: "#23211D" }}>{b}</option>))}
+                      </select>
+                      {isLeader && (
+                        <>
+                          <button type="button" onClick={() => onRenameBatch(classItem.id, activeBatch)} title="Rename batch" style={{ background: "transparent", border: "none", color: "#F5F2E4", cursor: "pointer", fontSize: 12, padding: "2px 5px", opacity: 0.8 }}>✎</button>
+                          <button type="button" onClick={() => onDeleteBatch(classItem.id, activeBatch)} title="Delete batch" style={{ background: "transparent", border: "none", color: "#F5F2E4", cursor: "pointer", fontSize: 15, padding: "2px 5px", opacity: 0.8 }}>×</button>
+                        </>
+                      )}
+                    </div>
+                  ) : batches.map((b) => (
                     <div key={b} style={{ display: "flex", alignItems: "center", gap: 1 }}>
                       <button
                         type="button"
@@ -5640,15 +5654,16 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
             {segments.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 20 }}>No data yet — add sessions and members to see progress.</div>
             ) : (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 20, flexWrap: "wrap", marginBottom: 22 }}>
-                <DemographicsRing segments={segments} total={total} size={140} dark centerLabel={total} centerSub="Members" />
-                <div style={{ display: "flex", flexDirection: "column", gap: 9, minWidth: 130 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginBottom: 22 }}>
+                <DemographicsRing segments={segments} total={total} size={110} dark centerLabel={total} centerSub="Members" />
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 14px", width: "100%" }}>
                   {segments.map((sg) => (
-                    <div key={sg.label} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: sg.color, flexShrink: 0 }} />
-                      <span style={{ flex: 1 }}>{sg.label}</span>
-                      <span style={{ fontWeight: 700 }}>{sg.count}</span>
-                      <span style={{ color: "rgba(245,242,228,0.6)", width: 38, textAlign: "right" }}>{Math.round((sg.count / total) * 100)}%</span>
+                    <div key={sg.label} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: "50%", background: sg.color, flexShrink: 0, marginTop: 4 }} />
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 12.5, lineHeight: 1.2 }}>{sg.label}</div>
+                        <div style={{ fontSize: 13, fontWeight: 700 }}>{sg.count} <span style={{ fontWeight: 400, color: "rgba(245,242,228,0.6)", fontSize: 12 }}>· {Math.round((sg.count / total) * 100)}%</span></div>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -5896,7 +5911,7 @@ function registrationLinkForClass(classId, batch) {
   return batch ? `${link}&batch=${encodeURIComponent(batch)}` : link;
 }
 
-function CopyRegistrationLinkButton({ classId, batch }) {
+function CopyRegistrationLinkButton({ classId, batch, iconStyle }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     const link = registrationLinkForClass(classId, batch);
@@ -5908,6 +5923,13 @@ function CopyRegistrationLinkButton({ classId, batch }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+  if (iconStyle) {
+    return (
+      <button type="button" onClick={copy} style={iconStyle} aria-label="Copy registration link" title={copied ? "Copied!" : `Copy registration link${batch ? ` (${batch})` : ""}`}>
+        {copied ? "✓" : "🔗"}
+      </button>
+    );
+  }
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", gap: 3 }}>
       <button style={styles.ghostBtn} onClick={copy}>{copied ? "Copied!" : "Copy Registration Link"}</button>
