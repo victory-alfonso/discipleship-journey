@@ -1548,6 +1548,19 @@ function topicAttendanceLists(members, attendanceByMember, topicId) {
   return { attended, notAttended };
 }
 
+// On time = checked in at 9:10 AM or earlier; late = 9:11 AM or later (compared by the minute).
+// Week 0 sessions don't use this split.
+const ON_TIME_CUTOFF_MINUTES = 9 * 60 + 10;
+function isWeekZeroTopic(topic) {
+  return /^\s*week\s*0+(?!\d)/i.test((topic && topic.name) || "");
+}
+function isLateAttendance(dateAttended) {
+  if (!dateAttended) return false;
+  const dt = dateAttended.toDate ? dateAttended.toDate() : new Date(dateAttended);
+  if (isNaN(dt.getTime())) return false;
+  return dt.getHours() * 60 + dt.getMinutes() > ON_TIME_CUTOFF_MINUTES;
+}
+
 // Overall attendance rate for a class: attended-marks over
 // (sessions × members), i.e. the average of every member's
 // per-session attendance for that class. Used for the ring chart
@@ -5942,6 +5955,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   const [scanOpen, setScanOpen] = useState(false);
   const [editUnlocked, setEditUnlocked] = useState(false);
   const [attendedCollapsed, setAttendedCollapsed] = useState(false);
+  const [lateCollapsed, setLateCollapsed] = useState(false);
   const [notAttendedCollapsed, setNotAttendedCollapsed] = useState(false);
   const classForTopic = useMemo(() => (classes || []).find((c) => c.name === topic.class), [classes, topic.class]);
   const classMembers = useMemo(
@@ -5952,6 +5966,13 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
     () => topicAttendanceLists(classMembers, attendanceByMember, topic.id),
     [classMembers, attendanceByMember, topic.id]
   );
+  const weekZero = isWeekZeroTopic(topic);
+  const { onTime, late } = useMemo(() => {
+    if (weekZero) return { onTime: attended, late: [] };
+    const o = [], l = [];
+    attended.forEach((m) => (isLateAttendance(m._attendance && m._attendance.dateAttended) ? l : o).push(m));
+    return { onTime: o, late: l };
+  }, [attended, weekZero]);
   const total = attended.length + notAttended.length;
   const pct = total ? Math.round((attended.length / total) * 100) : 0;
   const track = trackNameForClass(topic.class);
@@ -5992,6 +6013,29 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
       </div>
     );
   };
+
+  const renderAttendedCard = (label, hint, color, list, collapsed, setCollapsed, emptyText) => (
+    <div style={styles.lightCard}>
+      <div
+        onClick={() => setCollapsed((v) => !v)}
+        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none", marginBottom: collapsed ? 0 : 12 }}
+        title={collapsed ? "Expand" : "Collapse"}
+      >
+        <span style={{ fontSize: 10, color, transition: "transform 0.15s ease", display: "inline-block", transform: collapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
+        <div style={{ ...styles.sectionLabel, color, marginBottom: 0 }}>
+          {label} ({list.length})
+          {hint && <span style={{ textTransform: "none", fontWeight: 500, opacity: 0.75, marginLeft: 8, letterSpacing: 0 }}>{hint}</span>}
+        </div>
+      </div>
+      {!collapsed && (list.length === 0 ? (
+        <div style={styles.emptyNote}>{emptyText}</div>
+      ) : (
+        <div style={styles.sessionList}>
+          {list.map((m) => <MemberRow key={m.id} m={m} done={true} />)}
+        </div>
+      ))}
+    </div>
+  );
 
   return (
     <div style={{ ...styles.modalOverlay, paddingTop: "calc(var(--dj-header-h, 180px) + 5vh)", paddingBottom: "5vh" }} onClick={onClose}>
@@ -6096,23 +6140,14 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
               </label>
             </div>
           )}
-          <div style={styles.lightCard}>
-            <div
-              onClick={() => setAttendedCollapsed((v) => !v)}
-              style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", userSelect: "none", marginBottom: attendedCollapsed ? 0 : 12 }}
-              title={attendedCollapsed ? "Expand attended" : "Collapse attended"}
-            >
-              <span style={{ fontSize: 10, color: "#5CDB9B", transition: "transform 0.15s ease", display: "inline-block", transform: attendedCollapsed ? "rotate(-90deg)" : "rotate(0deg)" }}>▾</span>
-              <div style={{ ...styles.sectionLabel, color: "#5CDB9B", marginBottom: 0 }}>Attended ({attended.length})</div>
-            </div>
-            {!attendedCollapsed && (attended.length === 0 ? (
-              <div style={styles.emptyNote}>No attendees yet.</div>
-            ) : (
-              <div style={styles.sessionList}>
-                {attended.map((m) => <MemberRow key={m.id} m={m} done={true} />)}
-              </div>
-            ))}
-          </div>
+          {weekZero
+            ? renderAttendedCard("Attended", "", "#5CDB9B", attended, attendedCollapsed, setAttendedCollapsed, "No attendees yet.")
+            : (
+              <>
+                {renderAttendedCard("Attended on time", "9:10 AM and earlier", "#5CDB9B", onTime, attendedCollapsed, setAttendedCollapsed, "No one on time yet.")}
+                {renderAttendedCard("Attended late", "9:11 AM and later", "#E0A63B", late, lateCollapsed, setLateCollapsed, "No late attendees.")}
+              </>
+            )}
 
           <div style={styles.lightCard}>
             <div
@@ -7871,7 +7906,10 @@ function App() {
   const setAttendanceDate = (memberId, topicId, dateStr) => {
     const docId = `${memberId}_${topicId}`;
     const [y, m, d] = dateStr.split("-").map(Number);
-    const dateAttended = new Date(y, m - 1, d);
+    const prev = ((attendanceByMember[memberId] || {})[topicId] || {}).dateAttended;
+    const pd = prev ? (prev.toDate ? prev.toDate() : new Date(prev)) : null;
+    const hasTime = pd && !isNaN(pd.getTime());
+    const dateAttended = new Date(y, m - 1, d, hasTime ? pd.getHours() : 0, hasTime ? pd.getMinutes() : 0, hasTime ? pd.getSeconds() : 0);
     db.collection("attendance").doc(docId).set({ memberId, topicId, attended: true, dateAttended }, { merge: true })
       .catch((err) => showError("Could not save the date. Error: " + err.message));
   };
