@@ -2746,32 +2746,29 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
         ) : (
           <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000" }}>
             <video ref={videoRef} playsInline muted style={{ width: "100%", display: "block" }} />
-            <div
-              onClick={(e) => e.stopPropagation()}
+            <button
+              type="button"
+              aria-label="Switch camera"
+              title="Switch camera"
+              onClick={(e) => {
+                e.stopPropagation();
+                selectCamera(facingModeRef.current === "environment" ? "user" : "environment");
+              }}
               style={{
-                position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 15,
-                display: "flex", padding: 3, borderRadius: 999, gap: 2,
+                position: "absolute", top: 10, right: 10, zIndex: 15,
+                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
                 background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
               }}
             >
-              {[["environment", "Rear"], ["user", "Front"]].map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-label={`Use ${label.toLowerCase()} camera`}
-                  aria-pressed={facingMode === mode}
-                  onClick={() => selectCamera(mode)}
-                  style={{
-                    padding: "7px 16px", borderRadius: 999, border: "none", cursor: "pointer",
-                    fontSize: 13, fontWeight: 700,
-                    background: facingMode === mode ? "#fff" : "transparent",
-                    color: facingMode === mode ? "#111" : "#fff",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
+                <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="m18 22-3-3 3-3" />
+                <path d="m6 2 3 3-3 3" />
+              </svg>
+            </button>
             <canvas ref={canvasRef} style={{ display: "none" }} />
             {toast && (
               <div
@@ -3090,32 +3087,29 @@ function ScanOneOnOneAttendanceModal({ sessions, people, attendanceByMember, onT
         ) : (
           <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "#000" }}>
             <video ref={videoRef} playsInline muted style={{ width: "100%", display: "block" }} />
-            <div
-              onClick={(e) => e.stopPropagation()}
+            <button
+              type="button"
+              aria-label="Switch camera"
+              title="Switch camera"
+              onClick={(e) => {
+                e.stopPropagation();
+                selectCamera(facingModeRef.current === "environment" ? "user" : "environment");
+              }}
               style={{
-                position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 15,
-                display: "flex", padding: 3, borderRadius: 999, gap: 2,
+                position: "absolute", top: 10, right: 10, zIndex: 15,
+                width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center", padding: 0,
                 background: "rgba(0,0,0,0.55)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
               }}
             >
-              {[["environment", "Rear"], ["user", "Front"]].map(([mode, label]) => (
-                <button
-                  key={mode}
-                  type="button"
-                  aria-label={`Use ${label.toLowerCase()} camera`}
-                  aria-pressed={facingMode === mode}
-                  onClick={() => selectCamera(mode)}
-                  style={{
-                    padding: "7px 16px", borderRadius: 999, border: "none", cursor: "pointer",
-                    fontSize: 13, fontWeight: 700,
-                    background: facingMode === mode ? "#fff" : "transparent",
-                    color: facingMode === mode ? "#111" : "#fff",
-                  }}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 19H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5" />
+                <path d="M13 5h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-5" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="m18 22-3-3 3-3" />
+                <path d="m6 2 3 3-3 3" />
+              </svg>
+            </button>
             <canvas ref={canvasRef} style={{ display: "none" }} />
             {toast && (
               <div
