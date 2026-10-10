@@ -5591,6 +5591,92 @@ function SessionDragHandle({ dragHandlers, dark }) {
   );
 }
 
+// Double donut for the class sidebar: the OUTER ring is sessions conducted out of the
+// total; the INNER ring splits the members by attendance status (each member lands in
+// exactly one slice, worst status first). Tapping a status lists the member names.
+const RING_STATUS = [
+  { key: "completed", label: "Completed", color: "#4FA36A" },
+  { key: "onTrack", label: "On track", color: "#7BD18F" },
+  { key: "late", label: "Late", color: "#E5C77A" },
+  { key: "absent", label: "Has absence", color: "#FF9E7A" },
+  { key: "atRisk", label: "At risk (2+)", color: "#FF6B6B" },
+  { key: "notStarted", label: "Not started", color: "#B9B3A0" },
+];
+function memberRingStatus(r, sessionCount) {
+  if (sessionCount > 0 && r.done >= sessionCount) return "completed";
+  if (r.absent >= 2) return "atRisk";
+  if (r.absent === 1) return "absent";
+  if (r.late > 0) return "late";
+  if (r.done === 0) return "notStarted";
+  return "onTrack";
+}
+function ClassProgressRings({ sessionCount, conductedCount, rows }) {
+  const [openKey, setOpenKey] = useState(null);
+  const buckets = {};
+  RING_STATUS.forEach((st) => { buckets[st.key] = []; });
+  rows.forEach((r) => { buckets[memberRingStatus(r, sessionCount)].push(r); });
+  const segs = RING_STATUS.map((st) => ({ ...st, list: buckets[st.key], v: buckets[st.key].length })).filter((x) => x.v > 0);
+  const total = rows.length;
+  const NS = 190, cx = NS / 2;
+  const arcs = (r, items, sum, gap) => {
+    const c = 2 * Math.PI * r;
+    let cum = 0;
+    return items.map((it) => {
+      const frac = it.v / sum;
+      const len = Math.max(frac * c - (items.length > 1 ? gap : 0), 0.5);
+      const el = <circle key={it.key} r={r} fill="none" stroke={it.color} strokeWidth={14} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-cum * c} />;
+      cum += frac;
+      return el;
+    });
+  };
+  const pctSessions = sessionCount ? Math.round((conductedCount / sessionCount) * 100) : 0;
+  const cream = "rgba(245,242,228,0.75)";
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+        <svg width={NS} height={NS} viewBox={`0 0 ${NS} ${NS}`} role="img" aria-label={`${conductedCount} of ${sessionCount} sessions conducted; ${total} members by attendance status`}>
+          <g transform={`translate(${cx} ${cx}) rotate(-90)`}>
+            <circle r={82} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth={14} />
+            {conductedCount > 0 && arcs(82, [{ key: "conducted", v: conductedCount, color: "#E5A430" }, ...(sessionCount > conductedCount ? [{ key: "rest", v: sessionCount - conductedCount, color: "transparent" }] : [])], sessionCount, 0)}
+            <circle r={58} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth={14} />
+            {arcs(58, segs, total, 3)}
+          </g>
+          <text x={cx} y={cx - 5} textAnchor="middle" fontSize="26" fontWeight="700" fill="#F5F2E4" fontFamily="Georgia, serif">{conductedCount}/{sessionCount}</text>
+          <text x={cx} y={cx + 14} textAnchor="middle" fontSize="11" fill={cream}>sessions</text>
+        </svg>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 12.5 }}>
+        <span style={{ width: 10, height: 10, borderRadius: 2, background: "#E5A430", flexShrink: 0 }} />
+        <span style={{ flex: 1 }}>Outer: sessions conducted</span>
+        <span style={{ fontWeight: 700 }}>{conductedCount} of {sessionCount} · {pctSessions}%</span>
+      </div>
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.15)", paddingTop: 10, fontSize: 11.5, color: cream, marginBottom: 8 }}>Inner: members by status</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px" }}>
+        {segs.map((sg) => (
+          <button key={sg.key} type="button" onClick={() => setOpenKey(openKey === sg.key ? null : sg.key)} aria-expanded={openKey === sg.key} style={{ display: "flex", alignItems: "flex-start", gap: 8, background: openKey === sg.key ? "rgba(255,255,255,0.1)" : "transparent", border: "none", borderRadius: 8, padding: 4, margin: -4, cursor: "pointer", textAlign: "left", color: "#F5F2E4", font: "inherit" }}>
+            <span style={{ width: 10, height: 10, borderRadius: "50%", background: sg.color, flexShrink: 0, marginTop: 4 }} />
+            <span style={{ minWidth: 0 }}>
+              <span style={{ display: "block", fontSize: 12.5, lineHeight: 1.2 }}>{sg.label}</span>
+              <span style={{ display: "block", fontSize: 13, fontWeight: 700 }}>{sg.v} <span style={{ fontWeight: 400, color: "rgba(245,242,228,0.65)", fontSize: 12 }}>· {Math.round((sg.v / total) * 100)}%</span></span>
+            </span>
+          </button>
+        ))}
+      </div>
+      {openKey && buckets[openKey] && buckets[openKey].length > 0 && (
+        <div style={{ marginTop: 12, background: "rgba(18,26,50,0.55)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 10, padding: "8px 12px", maxHeight: 200, overflowY: "auto" }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, color: (RING_STATUS.find((x) => x.key === openKey) || {}).color, marginBottom: 4 }}>{(RING_STATUS.find((x) => x.key === openKey) || {}).label} · {buckets[openKey].length}</div>
+          {buckets[openKey].map((r) => (
+            <div key={r.member.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "4px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+              <span>{displayName(r.member.name)}</span>
+              <span style={{ color: cream, whiteSpace: "nowrap" }}>{r.absent > 0 ? `${r.absent} absent` : r.late > 0 ? `${r.late} late` : `${r.done}/${sessionCount}`}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ClassDetailModal({ classItem, classes, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember, onReorderTopics }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
@@ -5666,6 +5752,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
       absentList: memberRows.filter((r) => r.absent > 0).sort(byCount("absent")),
     };
   }, [memberRows]);
+  const showRings = !isOneOnOne && ts.length > 0 && classMembers.length > 0;
+  const conductedCount = ts.filter((t) => t.conducted).length;
   const openMemberStat = (key, el) => {
     const r = el.getBoundingClientRect();
     setMemberPopDir(r.top > 230 ? "up" : "down");
@@ -5817,7 +5905,9 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
             )}
 
             <div style={detailLabel}>Member Progress</div>
-            {segments.length === 0 ? (
+            {showRings ? (
+              <ClassProgressRings sessionCount={ts.length} conductedCount={conductedCount} rows={memberRows} />
+            ) : segments.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 20 }}>No data yet — add sessions and members to see progress.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, marginBottom: 22 }}>
