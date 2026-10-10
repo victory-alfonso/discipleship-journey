@@ -3055,6 +3055,7 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
   const [form, setForm] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const [editGrades, setEditGrades] = useState(true); // tick box in the quiz modal: can grades be edited?
   const classItem = (classes || []).find((c) => c.id === classId) || (classes || [])[0] || null;
   // Surname first ("Santos, Mary Grace"), sorted by surname then first name.
   const classMembers = useMemo(
@@ -3076,6 +3077,11 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
   const inputStyle = { padding: "7px 10px", borderRadius: 8, border: "1px solid rgba(31,56,100,0.25)", fontSize: 14, background: "#fff", color: "#23211D" };
   const fmtNum = (n) => Math.round(n * 10) / 10;
   // Score-entry modal: blur first so a focused score box still saves (onBlur) before it unmounts.
+  // Opening a quiz that already has grades starts locked (tick the box to edit); a fresh quiz starts editable.
+  const openScores = (a) => {
+    setEditGrades(!classMembers.some((m) => scoreOf(m.id, a.id) !== null));
+    setOpenId(a.id);
+  };
   const closeScores = () => {
     if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
     setOpenId(null);
@@ -3088,13 +3094,13 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
   }, [openId]);
   // Jump straight to the first member who has no score yet.
   useEffect(() => {
-    if (!openId || !isLeader) return;
+    if (!openId || !isLeader || !editGrades) return;
     const t = setTimeout(() => {
       const first = Array.from(document.querySelectorAll(`input[data-score-group="${openId}"]`)).find((i) => i.value === "");
       if (first) first.focus();
     }, 60);
     return () => clearTimeout(t);
-  }, [openId, isLeader]);
+  }, [openId, isLeader, editGrades]);
   const submit = () => {
     const title = (form.title || "").trim();
     const maxScore = Number(form.maxScore);
@@ -3102,9 +3108,9 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
     onSaveAssessment(classItem.name, { title, type: form.type, maxScore, topicId: form.topicId, date: form.date }, form.id);
     setForm(null);
   };
-  const scoreInput = (m, a) => {
+  const scoreInput = (m, a, locked) => {
     const sc = scoreOf(m.id, a.id);
-    if (!isLeader) return <span style={{ fontWeight: 600 }}>{sc === null ? "—" : sc}</span>;
+    if (!isLeader || locked) return <span style={{ fontWeight: 600, ...(locked ? { display: "inline-block", width: 72, boxSizing: "border-box", textAlign: "right", padding: "5px 8px" } : {}) }}>{sc === null ? "—" : sc}</span>;
     return (
       <input
         type="number" min="0" max={a.maxScore} step="any"
@@ -3146,7 +3152,7 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
   });
   const exportCsv = () => {
     const esc = (v) => `"${String(v === null || v === undefined ? "" : v).replace(/"/g, '""')}"`;
-    const head = ["Member", ...classAssessments.map((a) => `${a.title} (/${a.maxScore})`), "Total", "Possible", "Percent"];
+    const head = ["Member", ...classAssessments.map((a) => `${a.title} (/${a.maxScore})`), "Total", "Possible", "Average"];
     const lines = [head.map(esc).join(",")];
     gradebookRows().forEach((r) => {
       lines.push([r.name, ...r.cells, r.possible ? fmtNum(r.got) : "", r.possible || "", r.pct === null ? "" : r.pct + "%"].map(esc).join(","));
@@ -3178,8 +3184,8 @@ tr{page-break-inside:avoid}
 </style></head><body>
 <h1>${h(classItem.name)} — Grades</h1>
 <div class="sub">Printed ${h(new Date().toLocaleDateString())} · ${rows.length} member${rows.length === 1 ? "" : "s"}</div>
-<table><thead><tr><th>Member</th>${classAssessments.map((a) => `<th>${h(a.title)}<div class="max">${h(a.type)} · /${h(a.maxScore)}${a.date ? " · " + h(a.date) : ""}</div></th>`).join("")}<th>Total</th></tr></thead>
-<tbody>${rows.map((r) => `<tr><td>${h(r.name)}</td>${r.cells.map((c) => `<td>${h(c === "" ? "—" : c)}</td>`).join("")}<td><b>${r.possible ? h(fmtNum(r.got)) + "/" + r.possible + " (" + r.pct + "%)" : "—"}</b></td></tr>`).join("")}</tbody></table>
+<table><thead><tr><th>Member</th>${classAssessments.map((a) => `<th>${h(a.title)}<div class="max">${h(a.type)} · /${h(a.maxScore)}${a.date ? " · " + h(a.date) : ""}</div></th>`).join("")}<th>Total</th><th>Average</th></tr></thead>
+<tbody>${rows.map((r) => `<tr><td>${h(r.name)}</td>${r.cells.map((c) => `<td>${h(c === "" ? "—" : c)}</td>`).join("")}<td><b>${r.possible ? h(fmtNum(r.got)) + "/" + r.possible : "—"}</b></td><td><b>${r.possible ? r.pct + "%" : "—"}</b></td></tr>`).join("")}</tbody></table>
 <script>window.onload=function(){window.print();}<\/script>
 </body></html>`;
     const w = window.open("", "_blank");
@@ -3194,21 +3200,22 @@ tr{page-break-inside:avoid}
     const scale = 2, pad = 24, rowH = 30, headH = 46, titleH = 56, font = "Arial, Helvetica, sans-serif";
     const probe = document.createElement("canvas").getContext("2d");
     const measure = (t, w) => { probe.font = `${w || 400} 14px ${font}`; return probe.measureText(String(t)).width; };
-    const totalText = (r) => (r.possible ? `${fmtNum(r.got)}/${r.possible} (${r.pct}%)` : "—");
+    const totalText = (r) => (r.possible ? `${fmtNum(r.got)}/${r.possible}` : "—");
+    const pctText = (r) => (r.possible ? `${r.pct}%` : "—");
     const avgs = classAssessments.map((a) => {
       const sc = classMembers.map((m) => scoreOf(m.id, a.id)).filter((v) => v !== null);
       return sc.length ? String(fmtNum(sc.reduce((x, y) => x + y, 0) / sc.length)) : "—";
     });
     const pcts = rows.filter((r) => r.pct !== null).map((r) => r.pct);
     const avgTotal = pcts.length ? Math.round(pcts.reduce((x, y) => x + y, 0) / pcts.length) + "%" : "—";
-    const heads = ["Member", ...classAssessments.map((a) => a.title), "Total"];
-    const subs = ["", ...classAssessments.map((a) => `${a.type} · /${a.maxScore}`), ""];
+    const heads = ["Member", ...classAssessments.map((a) => a.title), "Total", "Average"];
+    const subs = ["", ...classAssessments.map((a) => `${a.type} · /${a.maxScore}`), "", ""];
     const last = heads.length - 1;
-    const textFor = (r, c) => (c === 0 ? r.name : c === last ? totalText(r) : (r.cells[c - 1] === "" ? "—" : String(r.cells[c - 1])));
-    const avgFor = (c) => (c === 0 ? "Class average" : c === last ? avgTotal : avgs[c - 1]);
+    const textFor = (r, c) => (c === 0 ? r.name : c === last ? pctText(r) : c === last - 1 ? totalText(r) : (r.cells[c - 1] === "" ? "—" : String(r.cells[c - 1])));
+    const avgFor = (c) => (c === 0 ? "Class average" : c === last ? avgTotal : c === last - 1 ? "—" : avgs[c - 1]);
     const colW = heads.map((h, c) => {
       let w = Math.max(measure(h, 700), measure(subs[c]) * 0.85, measure(avgFor(c), 700));
-      rows.forEach((r) => { w = Math.max(w, measure(textFor(r, c), c === last ? 700 : 400)); });
+      rows.forEach((r) => { w = Math.max(w, measure(textFor(r, c), c >= last - 1 ? 700 : 400)); });
       return Math.ceil(w + 24);
     });
     const tableW = colW.reduce((x, y) => x + y, 0);
@@ -3244,7 +3251,7 @@ tr{page-break-inside:avoid}
     rows.forEach((r, i) => {
       if (i % 2 === 1) { ctx.fillStyle = "#F7F7F7"; ctx.fillRect(pad, y, tableW, rowH); }
       let cx = pad;
-      heads.forEach((_, c) => { drawText(c, cx, y, rowH, textFor(r, c), c === last); cx += colW[c]; });
+      heads.forEach((_, c) => { drawText(c, cx, y, rowH, textFor(r, c), c >= last - 1); cx += colW[c]; });
       y += rowH;
     });
     ctx.fillStyle = "#E8EDF5"; ctx.fillRect(pad, y, tableW, rowH);
@@ -3321,6 +3328,7 @@ tr{page-break-inside:avoid}
                         <th key={a.id} style={{ padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" }}>{a.title}<div style={{ fontWeight: 500, fontSize: 11, opacity: 0.6 }}>{a.type} · /{a.maxScore}</div></th>
                       ))}
                       <th style={{ padding: "6px 10px", textAlign: "center" }}>Total</th>
+                      <th style={{ padding: "6px 10px", textAlign: "center" }}>Average</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3328,7 +3336,8 @@ tr{page-break-inside:avoid}
                       <tr key={i} style={{ borderTop: "1px solid rgba(31,56,100,0.12)" }}>
                         <td style={{ padding: "6px 10px", position: "sticky", left: 0, background: "#F6F0DE", whiteSpace: "nowrap" }}>{r.name}</td>
                         {r.cells.map((c, j) => <td key={j} style={{ padding: "6px 10px", textAlign: "center" }}>{c === "" ? "—" : c}</td>)}
-                        <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>{r.possible ? `${fmtNum(r.got)}/${r.possible} (${r.pct}%)` : "—"}</td>
+                        <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>{r.possible ? `${fmtNum(r.got)}/${r.possible}` : "—"}</td>
+                        <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>{r.possible ? `${r.pct}%` : "—"}</td>
                       </tr>
                     ))}
                     <tr style={{ borderTop: "2px solid rgba(31,56,100,0.35)", fontWeight: 700 }}>
@@ -3337,6 +3346,7 @@ tr{page-break-inside:avoid}
                         const sc = classMembers.map((m) => scoreOf(m.id, a.id)).filter((v) => v !== null);
                         return <td key={a.id} style={{ padding: "6px 10px", textAlign: "center" }}>{sc.length ? fmtNum(sc.reduce((x, y) => x + y, 0) / sc.length) : "—"}</td>;
                       })}
+                      <td style={{ padding: "6px 10px", textAlign: "center" }}>—</td>
                       <td style={{ padding: "6px 10px", textAlign: "center" }}>
                         {(() => { const pcts = gradebookRows().filter((r) => r.pct !== null).map((r) => r.pct); return pcts.length ? Math.round(pcts.reduce((x, y) => x + y, 0) / pcts.length) + "%" : "—"; })()}
                       </td>
@@ -3369,12 +3379,18 @@ tr{page-break-inside:avoid}
               <div style={{ fontSize: 12.5, color: "#7A6E4E", marginBottom: 12 }}>
                 {scores.length} of {classMembers.length} graded{avg !== null ? ` · avg ${fmtNum(avg)}/${a.maxScore}` : ""}
               </div>
+              {isLeader && (
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, color: "#23211D", cursor: "pointer", marginBottom: 10 }}>
+                  <input type="checkbox" checked={editGrades} onChange={(e) => setEditGrades(e.target.checked)} />
+                  Allow editing grades
+                </label>
+              )}
               <div style={{ flex: 1, minHeight: 0, overflowY: "auto", marginBottom: 12, border: "1px solid rgba(216,207,176,0.5)", borderRadius: 10, padding: "4px 10px" }}>
                 {classMembers.length === 0 && <div style={styles.emptyNote}>No members in this class yet.</div>}
                 {classMembers.map((m) => (
                   <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
                     <span style={{ flex: 1, fontSize: 14 }}>{m.name}</span>
-                    {scoreInput(m, a)}
+                    {scoreInput(m, a, !editGrades)}
                     <span style={{ fontSize: 12, opacity: 0.6, width: 36 }}>/{a.maxScore}</span>
                   </div>
                 ))}
@@ -3420,7 +3436,7 @@ tr{page-break-inside:avoid}
           const topic = a.topicId ? classTopics.find((t) => t.id === a.topicId) : null;
           return (
             <div key={a.id} style={styles.lightCard}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => setOpenId(a.id)}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => openScores(a)}>
                 <span style={{ fontSize: 18, lineHeight: 1, opacity: 0.5 }}>›</span>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontWeight: 700, fontSize: 15 }}>{a.title} <span style={{ fontWeight: 500, fontSize: 12, opacity: 0.7 }}>· {a.type} · /{a.maxScore}</span></div>
@@ -3453,6 +3469,7 @@ tr{page-break-inside:avoid}
                     <th key={a.id} style={{ padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" }}>{a.title}<div style={{ fontWeight: 500, fontSize: 11, opacity: 0.6 }}>/{a.maxScore}</div></th>
                   ))}
                   <th style={{ padding: "6px 10px", textAlign: "center" }}>Total</th>
+                  <th style={{ padding: "6px 10px", textAlign: "center" }}>Average</th>
                 </tr>
               </thead>
               <tbody>
@@ -3466,7 +3483,10 @@ tr{page-break-inside:avoid}
                         <td key={a.id} style={{ padding: "4px 10px", textAlign: "center" }}>{scoreInput(m, a)}</td>
                       ))}
                       <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>
-                        {possible ? `${fmtNum(got)}/${possible} (${Math.round((got / possible) * 100)}%)` : "—"}
+                        {possible ? `${fmtNum(got)}/${possible}` : "—"}
+                      </td>
+                      <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>
+                        {possible ? `${Math.round((got / possible) * 100)}%` : "—"}
                       </td>
                     </tr>
                   );
