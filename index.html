@@ -5697,9 +5697,13 @@ function ClassProgressRings({ sessionCount, conductedCount, rows }) {
                 <div style={{ background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 12, padding: "10px 12px", boxShadow: "0 14px 30px -10px rgba(0,0,0,0.6)", maxHeight: 220, overflowY: "auto" }}>
                   <div style={{ fontSize: 11.5, fontWeight: 700, letterSpacing: 0.4, color: sg.color, marginBottom: 4 }}>{sg.label} · {sg.v}</div>
                   {sg.list.map((r) => (
-                    <div key={r.member.id} style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12.5, padding: "4px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                      <span>{displayName(r.member.name)}</span>
-                      <span style={{ color: cream, whiteSpace: "nowrap" }}>{r.absent > 0 ? `${r.absent} absent` : r.late > 0 ? `${r.late} late` : `${r.done}/${sessionCount}`}</span>
+                    <div key={r.member.id} style={{ padding: "5px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, fontWeight: 600 }}>
+                        <span>{displayName(r.member.name)}</span>
+                        <span style={{ color: sg.color, whiteSpace: "nowrap" }}>{r.absent > 0 ? `${r.absent} absent` : r.late > 0 ? `${r.late} late` : `${r.done}/${sessionCount}`}</span>
+                      </div>
+                      {r.absent > 0 && <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.6)" }}>Absent: {(r.absentSessions || []).join(", ")}</div>}
+                      {r.late > 0 && <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.6)" }}>Late: {(r.lateSessions || []).join(", ")}</div>}
                     </div>
                   ))}
                 </div>
@@ -5960,52 +5964,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                 </div>
               </div>
             )}
-            {!isOneOnOne && ts.length > 0 && (
-              <>
-                <div style={detailLabel}>Late &amp; Absences</div>
-                <div style={{ position: "relative", marginBottom: 6 }} onMouseLeave={() => setStatPop(null)}>
-                  <div style={{ display: "flex", gap: 24, flexWrap: "wrap" }}>
-                    {[["late", "Late check-ins", lateAbsentTotals.late, "#E5C77A"], ["absent", "Absences", lateAbsentTotals.absent, "#FF8A7A"]].map(([k, label, n, color]) => (
-                      <div
-                        key={k}
-                        tabIndex={0}
-                        style={{ cursor: "pointer", outline: "none" }}
-                        onMouseEnter={(e) => openStat(k, e.currentTarget)}
-                        onFocus={(e) => openStat(k, e.currentTarget)}
-                        onClick={(e) => openStat(k, e.currentTarget)}
-                        onKeyDown={(e) => { if (e.key === "Escape") setStatPop(null); }}
-                      >
-                        <div style={{ fontSize: 22, fontWeight: 700, color: n > 0 ? color : "#F5F2E4" }}>{n}</div>
-                        <div style={{ fontSize: 12, color: "rgba(245,242,228,0.85)", borderBottom: "1px dotted rgba(245,242,228,0.5)", display: "inline-block" }}>{label}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {statPop && (() => {
-                    const isLate = statPop === "late";
-                    const list = isLate ? lateAbsentTotals.lateList : lateAbsentTotals.absentList;
-                    const color = isLate ? "#E5C77A" : "#FF8A7A";
-                    return (
-                      <div style={{ position: "absolute", left: 0, right: 0, zIndex: 6, ...(statDir === "up" ? { bottom: "100%", paddingBottom: 6 } : { top: "100%", paddingTop: 6 }) }}>
-                        <div style={{ background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 12, padding: "10px 12px", boxShadow: "0 14px 30px -10px rgba(0,0,0,0.6)", maxHeight: 240, overflowY: "auto" }}>
-                          <div style={{ ...detailLabel, marginBottom: 6, color }}>{isLate ? "Late check-ins" : "Absences"} · by member</div>
-                          {list.length === 0 ? (
-                            <div style={{ fontSize: 12.5, color: "rgba(245,242,228,0.7)" }}>{isLate ? "No late check-ins yet." : "No absences yet."}</div>
-                          ) : list.map((r) => (
-                            <div key={r.member.id} style={{ padding: "5px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
-                              <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, fontWeight: 600 }}>
-                                <span>{displayName(r.member.name)}</span>
-                                <span style={{ color }}>{isLate ? r.late : r.absent}</span>
-                              </div>
-                              <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.6)" }}>{(isLate ? r.lateSessions : r.absentSessions).join(", ")}</div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-                <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.72)", marginBottom: 16 }}>From Week 1 onwards · absences count conducted sessions only</div>
-              </>
+            {!isOneOnOne && ts.length > 0 && showRings && (
+              <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.72)", marginBottom: 16 }}>From Week 1 onwards · absences count conducted sessions only</div>
             )}
             </div>
           </div>
