@@ -1128,6 +1128,7 @@ function FancySelect({ value, onChange, children, style, required, disabled, nam
   const [active, setActive] = useState(-1);
   const [pos, setPos] = useState(null);
   const btnRef = useRef(null);
+  const listRef = useRef(null);
   const opts = fancyOptions(children);
   const cur = String(value == null ? "" : value);
   const selIdx = opts.findIndex((o) => o.value === cur);
@@ -1156,9 +1157,11 @@ function FancySelect({ value, onChange, children, style, required, disabled, nam
   useEffect(() => {
     if (!open) return;
     const onMove = () => setOpen(false);
+    // Scrolling the option list itself must NOT close it (scroll events are captured from every element).
+    const onScroll = (e) => { if (listRef.current && e.target && (e.target === listRef.current || (e.target.nodeType === 1 && listRef.current.contains(e.target)))) return; setOpen(false); };
     window.addEventListener("resize", onMove);
-    window.addEventListener("scroll", onMove, true);
-    return () => { window.removeEventListener("resize", onMove); window.removeEventListener("scroll", onMove, true); };
+    window.addEventListener("scroll", onScroll, true);
+    return () => { window.removeEventListener("resize", onMove); window.removeEventListener("scroll", onScroll, true); };
   }, [open]);
   const onKeyDown = (e) => {
     if (disabled) return;
@@ -1203,7 +1206,7 @@ function FancySelect({ value, onChange, children, style, required, disabled, nam
       {open && pos && ReactDOM.createPortal(
         <>
           <div style={{ position: "fixed", inset: 0, zIndex: 100000 }} onClick={close} />
-          <div role="listbox" style={{ position: "fixed", zIndex: 100001, left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxH, overflowY: "auto", background: "#FFFDF6", border: "1px solid rgba(35,33,29,0.14)", borderRadius: 12, padding: 5, boxShadow: "0 16px 36px -12px rgba(20,18,14,0.45)", fontFamily: "inherit" }}>
+          <div role="listbox" ref={listRef} style={{ position: "fixed", zIndex: 100001, left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxH, overflowY: "auto", overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", touchAction: "pan-y", background: "#FFFDF6", border: "1px solid rgba(35,33,29,0.14)", borderRadius: 12, padding: 5, boxShadow: "0 16px 36px -12px rgba(20,18,14,0.45)", fontFamily: "inherit" }}>
             {opts.map((o, i) => {
               const isSel = o.value === cur;
               return (
