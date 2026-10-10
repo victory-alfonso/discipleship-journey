@@ -5369,6 +5369,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
   const [statPop, setStatPop] = useState(null); // "late" | "absent" | null — details popover on the Late & Absences numbers
   const [statDir, setStatDir] = useState("up");
+  const [memberPop, setMemberPop] = useState(null); // "<memberId>:late|absent" — details popover on a member row
+  const [memberPopDir, setMemberPopDir] = useState("up");
   const batches = useMemo(() => getBatchesForClass(classItem, topics), [classItem, topics]);
   const [selectedBatch, setSelectedBatch] = useState(null);
   // Default to the same "currently running" batch the class card face
@@ -5416,7 +5418,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
         const absentSessions = counted.filter((t) => t.conducted && !(att[t.id] && att[t.id].attended));
         const late = lateSessions.length;
         const absent = absentSessions.length;
-        return { member: m, done, late, absent, lateSessions: lateSessions.map((t) => t.name), absentSessions: absentSessions.map((t) => t.name), total: ts.length, pct: ts.length ? Math.round((done / ts.length) * 100) : 0 };
+        return { member: m, done, late, absent, lateSessions: lateSessions.map((t) => t.name), lateDetail: lateSessions.map((t) => `${t.name} · ${fmtTime(att[t.id].dateAttended)}`), absentSessions: absentSessions.map((t) => t.name), total: ts.length, pct: ts.length ? Math.round((done / ts.length) * 100) : 0 };
       })
       .sort((a, b) => b.pct - a.pct || a.member.name.localeCompare(b.member.name));
   }, [classMembers, attendanceByMember, ts]);
@@ -5429,6 +5431,11 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
       absentList: memberRows.filter((r) => r.absent > 0).sort(byCount("absent")),
     };
   }, [memberRows]);
+  const openMemberStat = (key, el) => {
+    const r = el.getBoundingClientRect();
+    setMemberPopDir(r.top > 230 ? "up" : "down");
+    setMemberPop(key);
+  };
   const openStat = (key, el) => {
     const r = el.getBoundingClientRect();
     setStatDir(r.top > 300 ? "up" : "down");
@@ -5710,7 +5717,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginTop: 10 }}>Add sessions to this class to start tracking attendance.</div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-                {memberRows.map(({ member, done, late, absent, total: totalSessions, pct: mpct }) => (
+                {memberRows.map(({ member, done, late, absent, lateDetail, absentSessions, total: totalSessions, pct: mpct }) => (
                   <div key={member.id} className="dj-detail-row" style={detailRow} onClick={() => openMember(member)}>
                     <Avatar name={member.name} photoUrl={member.photoUrl} size={38} />
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -5720,12 +5727,35 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                       </div>
                       <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", marginTop: 2 }}>
                         {done} of {totalSessions} sessions attended
-                        {!isOneOnOne && (
-                          <>
-                            {" · "}<span style={late > 0 ? { color: "#E5C77A", fontWeight: 700 } : undefined}>{late} late</span>
-                            {" · "}<span style={absent > 0 ? { color: "#FF8A7A", fontWeight: 700 } : undefined}>{absent} absent</span>
-                          </>
-                        )}
+                        {!isOneOnOne && [["late", late, lateDetail, "#E5C77A", "Late check-ins"], ["absent", absent, absentSessions, "#FF8A7A", "Absent"]].map(([k, n, items, color, title]) => {
+                          const key = `${member.id}:${k}`;
+                          return (
+                            <React.Fragment key={k}>
+                              {" · "}
+                              <span
+                                style={{ position: "relative", display: "inline-block" }}
+                                onMouseEnter={(e) => { if (n > 0) openMemberStat(key, e.currentTarget); }}
+                                onMouseLeave={() => setMemberPop(null)}
+                                onClick={(e) => { if (n > 0) { e.stopPropagation(); openMemberStat(key, e.currentTarget); } }}
+                              >
+                                <span style={n > 0 ? { color, fontWeight: 700, cursor: "pointer", borderBottom: "1px dotted currentColor" } : undefined}>{n} {k}</span>
+                                {memberPop === key && n > 0 && (
+                                  <div
+                                    style={{ position: "absolute", left: 0, zIndex: 6, cursor: "default", ...(memberPopDir === "up" ? { bottom: "100%", paddingBottom: 6 } : { top: "100%", paddingTop: 6 }) }}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div style={{ background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 12, padding: "9px 12px", boxShadow: "0 14px 30px -10px rgba(0,0,0,0.6)", minWidth: 160, maxWidth: 260, maxHeight: 200, overflowY: "auto", whiteSpace: "nowrap" }}>
+                                      <div style={{ ...detailLabel, marginBottom: 5, color }}>{title} ({n})</div>
+                                      {items.map((it, i) => (
+                                        <div key={i} style={{ fontSize: 12.5, color: "#F5F2E4", padding: "2px 0" }}>{it}</div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </span>
+                            </React.Fragment>
+                          );
+                        })}
                       </div>
                       <DetailBar pct={mpct} />
                     </div>
