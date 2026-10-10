@@ -310,6 +310,8 @@
     .filter-grid-mobile::-webkit-scrollbar { display: none !important; }
     .filter-grid-mobile > * { flex: 0 0 auto !important; width: auto !important; min-width: auto !important; margin: 0 !important; padding: 5px 8px !important; font-size: 11px !important; }
     .filter-grid-mobile input[type="number"] { width: 62px !important; }
+    .filter-grid-mobile > .dj-fs { padding: 0 !important; }
+    .filter-grid-mobile > .dj-fs > button { padding: 5px 8px !important; font-size: 11px !important; }
     .dj-modal-body { flex-direction: column !important; align-items: center !important; }
     .dj-modal-ring-col { width: 100% !important; }
     .dj-modal-list { max-height: none !important; }
@@ -1101,6 +1103,133 @@ const DOB_MONTHS = [
 
 function daysInMonth(month, year) {
   return new Date(year, month, 0).getDate();
+}
+
+// Styled replacement for the native <select> (whose popup is the plain
+// browser/OS list). Drop-in: takes the same <option> children, `value`,
+// `onChange` (called with { target: { value } }), `style`, `required`,
+// `disabled` and `aria-label`. The list is rendered in a portal so it is
+// never clipped by a scrolling modal, and flips upward near the bottom.
+const FANCY_LAYOUT_KEYS = ["flex", "flexGrow", "flexShrink", "flexBasis", "width", "minWidth", "maxWidth", "margin", "marginTop", "marginBottom", "marginLeft", "marginRight", "gridColumn", "alignSelf"];
+function fancyOptions(children) {
+  const out = [];
+  React.Children.forEach(children, (ch) => {
+    if (!ch || !ch.props) return;
+    if (ch.type === React.Fragment) { out.push(...fancyOptions(ch.props.children)); return; }
+    if (ch.type === "option") {
+      const label = [].concat(ch.props.children == null ? [] : ch.props.children).join("");
+      out.push({ value: ch.props.value != null ? String(ch.props.value) : label, label, disabled: !!ch.props.disabled });
+    }
+  });
+  return out;
+}
+function FancySelect({ value, onChange, children, style, required, disabled, name, ...rest }) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+  const opts = fancyOptions(children);
+  const cur = String(value == null ? "" : value);
+  const selIdx = opts.findIndex((o) => o.value === cur);
+  const selected = selIdx >= 0 ? opts[selIdx] : null;
+  const isPlaceholder = !selected || (selected.value === "" );
+
+  const layout = {}, look = {};
+  Object.keys(style || {}).forEach((k) => { (FANCY_LAYOUT_KEYS.includes(k) ? layout : look)[k] = style[k]; });
+
+  const openMenu = () => {
+    if (disabled || !btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    const below = window.innerHeight - r.bottom - 12, above = r.top - 12;
+    const up = below < 200 && above > below;
+    setPos({ left: r.left, width: Math.max(r.width, 170), top: up ? undefined : r.bottom + 4, bottom: up ? window.innerHeight - r.top + 4 : undefined, maxH: Math.max(120, Math.min(280, up ? above : below)) });
+    setActive(selIdx);
+    setOpen(true);
+  };
+  const close = () => setOpen(false);
+  const choose = (o) => {
+    if (o.disabled) return;
+    setOpen(false);
+    if (o.value !== cur && onChange) onChange({ target: { value: o.value, name }, currentTarget: { value: o.value, name } });
+    if (btnRef.current) btnRef.current.focus();
+  };
+  useEffect(() => {
+    if (!open) return;
+    const onMove = () => setOpen(false);
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
+    return () => { window.removeEventListener("resize", onMove); window.removeEventListener("scroll", onMove, true); };
+  }, [open]);
+  const onKeyDown = (e) => {
+    if (disabled) return;
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") { e.preventDefault(); openMenu(); }
+      return;
+    }
+    if (e.key === "Escape") { e.preventDefault(); close(); }
+    else if (e.key === "Tab") close();
+    else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const dir = e.key === "ArrowDown" ? 1 : -1;
+      let i = active;
+      for (let n = 0; n < opts.length; n++) { i = (i + dir + opts.length) % opts.length; if (!opts[i].disabled) break; }
+      setActive(i);
+    } else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); if (opts[active]) choose(opts[active]); }
+  };
+
+  return (
+    <div className="dj-fs" style={{ position: "relative", ...layout }}>
+      <button
+        type="button"
+        ref={btnRef}
+        disabled={disabled}
+        onClick={() => (open ? close() : openMenu())}
+        onKeyDown={onKeyDown}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={rest["aria-label"]}
+        style={{
+          ...look, boxSizing: "border-box", width: "100%", marginBottom: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+          textAlign: "left", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit", appearance: "none", WebkitAppearance: "none",
+          opacity: disabled ? 0.6 : look.opacity,
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: isPlaceholder && selected && selected.value === "" ? 0.7 : 1 }}>{selected ? selected.label : " "}</span>
+        <span aria-hidden="true" style={{ fontSize: 9, opacity: 0.65, flexShrink: 0, transition: "transform 0.15s ease", transform: open ? "rotate(180deg)" : "none" }}>▼</span>
+      </button>
+      {required && (
+        <input tabIndex={-1} aria-hidden="true" required value={cur} onChange={() => {}} onFocus={() => btnRef.current && btnRef.current.focus()} style={{ position: "absolute", left: 0, bottom: 0, width: "100%", height: 1, opacity: 0, pointerEvents: "none" }} />
+      )}
+      {open && pos && ReactDOM.createPortal(
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 100000 }} onClick={close} />
+          <div role="listbox" style={{ position: "fixed", zIndex: 100001, left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, maxHeight: pos.maxH, overflowY: "auto", background: "#FFFDF6", border: "1px solid rgba(35,33,29,0.14)", borderRadius: 12, padding: 5, boxShadow: "0 16px 36px -12px rgba(20,18,14,0.45)", fontFamily: "inherit" }}>
+            {opts.map((o, i) => {
+              const isSel = o.value === cur;
+              return (
+                <div
+                  key={o.value + "|" + i}
+                  role="option"
+                  aria-selected={isSel}
+                  onMouseEnter={() => !o.disabled && setActive(i)}
+                  onClick={() => choose(o)}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "8px 10px", borderRadius: 8, fontSize: 13.5,
+                    cursor: o.disabled ? "not-allowed" : "pointer", color: o.disabled ? "rgba(35,33,29,0.35)" : (o.value === "" ? "rgba(35,33,29,0.6)" : "#23211D"),
+                    fontWeight: isSel ? 700 : 500, background: i === active ? "#F1EAD6" : (isSel ? "rgba(229,164,48,0.16)" : "transparent"),
+                  }}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.label || " "}</span>
+                  {isSel && <span style={{ color: "#C98A14", flexShrink: 0 }}>✓</span>}
+                </div>
+              );
+            })}
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
 }
 
 // Birthdate as Month / Day / Year dropdowns instead of the native
@@ -3084,9 +3213,9 @@ function ScanOneOnOneAttendanceModal({ sessions, people, attendanceByMember, onT
         {sessions.length === 0 ? (
           <div style={styles.pairNote}>No ONE2ONE sessions yet — add them to the ONE2ONE class in the Classes tab first.</div>
         ) : (
-          <select style={{ ...styles.modalInput, marginBottom: 12 }} value={topicId} onChange={(e) => setTopicId(e.target.value)}>
+          <FancySelect style={{ ...styles.modalInput, marginBottom: 12 }} value={topicId} onChange={(e) => setTopicId(e.target.value)}>
             {sessions.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-          </select>
+          </FancySelect>
         )}
         {sessions.length > 0 && (error ? (
           <div>
@@ -3414,9 +3543,9 @@ tr{page-break-inside:avoid}
   return (
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 14 }}>
-        <select value={classItem.id} onChange={(e) => { setClassId(e.target.value); setOpenId(null); setForm(null); setGbEdit(!classHasScores((classes || []).find((c) => c.id === e.target.value))); }} style={{ ...inputStyle, fontWeight: 700, minWidth: 180 }}>
+        <FancySelect value={classItem.id} onChange={(e) => { setClassId(e.target.value); setOpenId(null); setForm(null); setGbEdit(!classHasScores((classes || []).find((c) => c.id === e.target.value))); }} style={{ ...inputStyle, fontWeight: 700, minWidth: 180 }}>
           {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
+        </FancySelect>
         <div style={{ display: "flex", gap: 6 }}>
           {[["quizzes", "Quizzes"], ["gradebook", "Gradebook"]].map(([k, label]) => (
             <button key={k} onClick={() => { setView(k); if (k === "gradebook") setGbEdit(!classHasScores(classItem)); }} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(31,56,100,0.25)", background: view === k ? "#1F3864" : "transparent", color: view === k ? "#fff" : "#23211D" }}>{label}</button>
@@ -3535,19 +3664,19 @@ tr{page-break-inside:avoid}
         <div style={styles.lightCard}>
           <div style={styles.sectionLabel}>{form.id ? "Edit" : "New"} Quiz / Activity</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }}>
-            <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={inputStyle}>
+            <FancySelect value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={inputStyle}>
               <option>Quiz</option>
               <option>Activity</option>
-            </select>
+            </FancySelect>
             <input placeholder="Title (e.g. Quiz 1)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
             <label style={{ fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}>
               Total score
               <input type="number" min="1" value={form.maxScore} onChange={(e) => setForm({ ...form, maxScore: e.target.value })} style={{ ...inputStyle, width: 72 }} />
             </label>
-            <select value={form.topicId || ""} onChange={(e) => setForm({ ...form, topicId: e.target.value })} style={inputStyle}>
+            <FancySelect value={form.topicId || ""} onChange={(e) => setForm({ ...form, topicId: e.target.value })} style={inputStyle}>
               <option value="">Session (optional)</option>
               {classTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            </FancySelect>
             <input type="date" value={form.date || ""} onChange={(e) => setForm({ ...form, date: e.target.value })} style={inputStyle} />
             <button style={styles.primaryBtn} onClick={submit}>{form.id ? "Save" : "Add"}</button>
             <button style={{ ...inputStyle, cursor: "pointer" }} onClick={() => setForm(null)}>Cancel</button>
@@ -3804,18 +3933,18 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
       {printAllOpen && <PrintAllQrModal members={members} onClose={() => setPrintAllOpen(false)} />}
 
       <div className="filter-grid-mobile" style={{ ...styles.toolbar, marginTop: -2, marginBottom: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))" }}>
-        <select style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)}>
+        <FancySelect style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} value={genderFilter} onChange={(e) => setGenderFilter(e.target.value)}>
           <option value="">Gender: All</option>
           {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-        </select>
-        <select style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} value={lifeStageFilter} onChange={(e) => setLifeStageFilter(e.target.value)}>
+        </FancySelect>
+        <FancySelect style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} value={lifeStageFilter} onChange={(e) => setLifeStageFilter(e.target.value)}>
           <option value="">Life stage: All</option>
           {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
-        </select>
-        <select style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+        </FancySelect>
+        <FancySelect style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
           <option value="">Membership: All</option>
           {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-        </select>
+        </FancySelect>
         <input style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)", flex: "0 1 90px", minWidth: 70 }} type="number" min="0" placeholder="Min age" value={minAge} onChange={(e) => setMinAge(e.target.value)} />
         <input style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)", flex: "0 1 90px", minWidth: 70 }} type="number" min="0" placeholder="Max age" value={maxAge} onChange={(e) => setMaxAge(e.target.value)} />
       </div>
@@ -4005,13 +4134,13 @@ function AddSelectedToClassModal({ classes, count, onClose, onSave }) {
           <div style={styles.pairNote}>No classes yet — add one in the Classes tab first.</div>
         ) : (
           <>
-            <select style={{ ...styles.modalInput, marginBottom: 10 }} value={classId} onChange={(e) => { setClassId(e.target.value); setBatchLabel(""); }}>
+            <FancySelect style={{ ...styles.modalInput, marginBottom: 10 }} value={classId} onChange={(e) => { setClassId(e.target.value); setBatchLabel(""); }}>
               {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-            <select style={{ ...styles.modalInput, marginBottom: 12 }} value={batchLabel} onChange={(e) => setBatchLabel(e.target.value)}>
+            </FancySelect>
+            <FancySelect style={{ ...styles.modalInput, marginBottom: 12 }} value={batchLabel} onChange={(e) => setBatchLabel(e.target.value)}>
               <option value="">No specific batch</option>
               {batchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
+            </FancySelect>
           </>
         )}
         <div style={styles.modalActions}>
@@ -4542,21 +4671,21 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
             <div key={track} style={styles.memberModalTrackRow}>
               <span style={styles.memberModalTrackLabel}>{track}</span>
               <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "0 0 auto", alignItems: "flex-end" }}>
-                <select
+                <FancySelect
                   style={{ ...styles.memberModalInput, marginBottom: 0, fontSize: 11.5, padding: "5px 6px", width: 130 }}
                   value={status}
                   onChange={(e) => onChange(track, e.target.value)}
                 >
                   {statusOptions.map((s) => <option key={s} value={s}>{s}</option>)}
-                </select>
+                </FancySelect>
                 {status !== "Not Enrolled" && (
-                  <select
+                  <FancySelect
                     style={{ ...styles.memberModalInput, marginBottom: 0, fontSize: 11.5, padding: "5px 6px", width: 130 }}
                     value={effectiveBatchOptions.includes(currentBatch) ? currentBatch : (effectiveBatchOptions.includes(defaultBatch) ? defaultBatch : effectiveBatchOptions[0])}
                     onChange={(e) => onBatchChange(track, e.target.value)}
                   >
                     {effectiveBatchOptions.map((b) => <option key={b} value={b}>{b}</option>)}
-                  </select>
+                  </FancySelect>
                 )}
                 {noOpenBatch && status === "Not Enrolled" && (
                   <div style={{ ...styles.memberModalTrackWarn, width: 130, textAlign: "right" }}>No open batch.</div>
@@ -4788,12 +4917,12 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
             <div style={{ marginBottom: 12 }}>
               <div style={styles.memberModalSectionLabel}>Possible existing match</div>
               <div style={styles.memberModalPairNote}>Someone in Disciples already has this exact name. Merge instead of creating a duplicate person, or pick "Add as new person" if it's someone else.</div>
-              <select style={styles.memberModalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
+              <FancySelect style={styles.memberModalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
                 <option value="">Add as new person</option>
                 {duplicates.map((d) => (
                   <option key={d.id} value={d.id}>Merge into existing: {displayName(d.name)}</option>
                 ))}
-              </select>
+              </FancySelect>
             </div>
           )}
           <div style={styles.memberModalRow2}>
@@ -4803,26 +4932,26 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
             </label>
             <label style={styles.memberModalFieldLabel}>
               Gender
-              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
+              <FancySelect style={{ ...styles.memberModalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
                 <option value="">Select…</option>
                 {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
+              </FancySelect>
             </label>
           </div>
           <div style={styles.memberModalRow2}>
             <label style={styles.memberModalFieldLabel}>
               Membership
-              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
+              <FancySelect style={{ ...styles.memberModalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
                 <option value="">Select…</option>
                 {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+              </FancySelect>
             </label>
             <label style={styles.memberModalFieldLabel}>
               Life stage
-              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
+              <FancySelect style={{ ...styles.memberModalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
                 <option value="">Select…</option>
                 {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
-              </select>
+              </FancySelect>
             </label>
           </div>
           <div style={styles.memberModalRow2}>
@@ -5056,26 +5185,26 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
             </label>
             <label style={styles.memberModalFieldLabel}>
               Gender
-              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
+              <FancySelect style={{ ...styles.memberModalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
                 <option value="">Select…</option>
                 {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
+              </FancySelect>
             </label>
           </div>
           <div style={styles.memberModalRow2}>
             <label style={styles.memberModalFieldLabel}>
               Membership
-              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
+              <FancySelect style={{ ...styles.memberModalInput, marginBottom: 0 }} value={category} onChange={(e) => setCategory(e.target.value)} required>
                 <option value="">Select…</option>
                 {MEMBER_CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-              </select>
+              </FancySelect>
             </label>
             <label style={styles.memberModalFieldLabel}>
               Life stage
-              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
+              <FancySelect style={{ ...styles.memberModalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
                 <option value="">Select…</option>
                 {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
-              </select>
+              </FancySelect>
             </label>
           </div>
           <div style={styles.memberModalRow2}>
@@ -6725,19 +6854,19 @@ function OneOnOneFormModal({ title, initial, submitLabel, existingPeople, onClos
             </label>
             <label style={styles.memberModalFieldLabel}>
               Gender
-              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
+              <FancySelect style={{ ...styles.memberModalInput, marginBottom: 0 }} value={gender} onChange={(e) => setGender(e.target.value)} required>
                 <option value="">Select…</option>
                 {GENDERS.map((g) => <option key={g} value={g}>{g}</option>)}
-              </select>
+              </FancySelect>
             </label>
           </div>
           <div style={styles.memberModalRow2}>
             <label style={styles.memberModalFieldLabel}>
               Life stage
-              <select style={{ ...styles.memberModalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
+              <FancySelect style={{ ...styles.memberModalInput, marginBottom: 0 }} value={lifeStage} onChange={(e) => setLifeStage(e.target.value)} required>
                 <option value="">Select…</option>
                 {LIFE_STAGES.map((ls) => <option key={ls} value={ls}>{ls}</option>)}
-              </select>
+              </FancySelect>
             </label>
             <label style={styles.memberModalFieldLabel}>
               Contact number
@@ -7390,7 +7519,7 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
                   Currently with <strong>{currentOwner || "unknown"}</strong>. Moving keeps all their session progress — it only changes whose ONE2ONE tracker they show up under.
                 </div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <select
+                  <FancySelect
                     style={{ ...styles.modalInput, marginBottom: 0, flex: 1, minWidth: 180, background: "rgba(255,255,255,0.12)", color: "#F5F2E4", borderColor: "rgba(245,242,228,0.35)" }}
                     value={moveTarget}
                     onChange={(e) => setMoveTarget(e.target.value)}
@@ -7399,7 +7528,7 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
                     {moveChoices.map((l) => (
                       <option key={l.id} value={l.id} style={{ color: "#23211D", background: "#FFFFFF" }}>{l.name ? `${l.name} (${l.id})` : l.id}</option>
                     ))}
-                  </select>
+                  </FancySelect>
                   <button
                     type="button"
                     style={{ ...styles.modalConfirmBtn, opacity: moveTarget && !moving ? 1 : 0.5 }}
@@ -7490,12 +7619,12 @@ function PendingRegistrationRow({ pending, classes, members, onApprove, onReject
         <div style={{ marginTop: 12 }}>
           <div style={styles.sectionLabel}>Possible existing match</div>
           <div style={styles.pairNote}>Someone in Disciples already has this exact name. Merge instead of creating a duplicate person, or pick "Add as new person" if it's someone else.</div>
-          <select style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
+          <FancySelect style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
             <option value="">Add as new person</option>
             {duplicates.map((d) => (
               <option key={d.id} value={d.id}>Merge into existing: {displayName(d.name)}</option>
             ))}
-          </select>
+          </FancySelect>
         </div>
       )}
 
@@ -7572,12 +7701,12 @@ function PendingOneOnOneRow({ person, sessions, attendanceByMember, members, onA
         <div style={{ marginTop: 12 }}>
           <div style={styles.sectionLabel}>Possible existing match</div>
           <div style={styles.pairNote}>Someone in Disciples already has this exact name. Merge instead of creating a duplicate person, or pick "Add as new person" if it's someone else.</div>
-          <select style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
+          <FancySelect style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
             <option value="">Add as new person</option>
             {duplicates.map((d) => (
               <option key={d.id} value={d.id}>Merge into existing: {displayName(d.name)}</option>
             ))}
-          </select>
+          </FancySelect>
         </div>
       )}
 
