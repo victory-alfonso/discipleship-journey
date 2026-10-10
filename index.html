@@ -7303,12 +7303,27 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeade
   const [newOneLeaderEmail, setNewOneLeaderEmail] = useState("");
   const [newAdminEmail, setNewAdminEmail] = useState("");
   const [newSeniorPastorEmail, setNewSeniorPastorEmail] = useState("");
+  const [settingsTab, setSettingsTab] = useState("staffs");
+  // Only list the tabs this person is allowed to see; fall back to the first one if the current tab disappears.
+  const settingsTabs = [
+    ["staffs", "Staffs"],
+    ["one2one", "ONE2ONE Leaders"],
+    ...(isManager ? [["developers", "Developers"]] : []),
+    ...(isAdmin ? [["pastor", "Senior Pastor"]] : []),
+  ];
+  const activeKey = settingsTabs.some(([k]) => k === settingsTab) ? settingsTab : settingsTabs[0][0];
 
   return (
     <div>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+        {settingsTabs.map(([k, label]) => (
+          <button key={k} onClick={() => setSettingsTab(k)} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(31,56,100,0.25)", background: activeKey === k ? "#1F3864" : "transparent", color: activeKey === k ? "#fff" : "#23211D" }}>{label}</button>
+        ))}
+      </div>
+      {activeKey === "staffs" && (
       <div style={styles.settingsSection}>
         <div style={styles.sectionLabel}>Staffs (can edit)</div>
-        <div style={styles.pairNote}>Anyone whose email is listed here (or in the Developers or Senior Pastor list below) can add classes, topics, members, and mark attendance. Everyone else who signs in gets a read-only view.</div>
+        <div style={styles.pairNote}>Anyone whose email is listed here (or in the Developers or Senior Pastor tab) can add classes, topics, members, and mark attendance. Everyone else who signs in gets a read-only view.</div>
         <div style={styles.restrictList}>
           {leaders.map((l) => (
             <div key={l.id} style={styles.restrictRow}>
@@ -7326,8 +7341,10 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeade
           <div style={styles.emptyNote}>Only Developers or Senior Pastors can add or remove staffs.</div>
         )}
       </div>
+      )}
 
-      <div style={{ ...styles.settingsSection, marginTop: 20 }}>
+      {activeKey === "one2one" && (
+      <div style={styles.settingsSection}>
         <div style={styles.sectionLabel}>ONE2ONE Leaders (ONE2ONE tab only)</div>
         <div style={styles.pairNote}>Anyone listed here can sign in and use only the ONE2ONE tab — they can add members there and see/edit just the members they added. Staffs, Developers, and Senior Pastors can see and edit all ONE2ONE members.</div>
         {oneLeaders.length === 0 && (
@@ -7362,11 +7379,12 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeade
           <div style={styles.emptyNote}>Only Developers or Senior Pastors can add or remove ONE2ONE leaders.</div>
         )}
       </div>
+      )}
 
-      {isManager && (
-        <div style={{ ...styles.settingsSection, marginTop: 20 }}>
+      {isManager && activeKey === "developers" && (
+        <div style={styles.settingsSection}>
           <div style={styles.sectionLabel}>Developers (can edit this Settings page)</div>
-          <div style={styles.pairNote}>Only Developers listed here can add or remove staffs, developers, and Senior Pastors here. A developer can already do everything a staff can, even without a separate entry in the Staffs list above. This section is only visible to Developers — Senior Pastors, Staffs, and ONE2ONE Leaders won't see it.</div>
+          <div style={styles.pairNote}>Only Developers listed here can add or remove staffs, developers, and Senior Pastors here. A developer can already do everything a staff can, even without a separate entry in the Staffs tab. This section is only visible to Developers — Senior Pastors, Staffs, and ONE2ONE Leaders won't see it.</div>
           {admins.length === 0 && (
             <div style={styles.emptyNote}>No developers set yet, so every staff can currently manage this page. Add someone below to lock it down to just them.</div>
           )}
@@ -7385,8 +7403,8 @@ function Settings({ leaders, currentEmail, onAddLeader, onRemoveLeader, oneLeade
         </div>
       )}
 
-      {isAdmin && (
-        <div style={{ ...styles.settingsSection, marginTop: 20 }}>
+      {isAdmin && activeKey === "pastor" && (
+        <div style={styles.settingsSection}>
           <div style={styles.sectionLabel}>Senior Pastor (same access as Developers)</div>
           <div style={styles.pairNote}>Anyone listed here has the same full access as a Developer — they can add or remove staffs, ONE2ONE leaders, developers, and other Senior Pastors here, kept as its own list for clarity.</div>
           {seniorPastors.length === 0 && (
