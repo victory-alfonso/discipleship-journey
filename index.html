@@ -3055,7 +3055,13 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
   const [form, setForm] = useState(null);
   const [openId, setOpenId] = useState(null);
   const classItem = (classes || []).find((c) => c.id === classId) || (classes || [])[0] || null;
-  const classMembers = useMemo(() => (classItem ? getClassMembers(members, classItem.id) : []), [members, classItem]);
+  // Surname first ("Santos, Mary Grace"), sorted by surname then first name.
+  const classMembers = useMemo(
+    () => (classItem ? getClassMembers(members, classItem.id) : [])
+      .map((m) => ({ ...m, name: (() => { const { firstName, lastName } = splitFullName(m.name); return lastName ? `${lastName}, ${firstName}` : firstName; })() }))
+      .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" })),
+    [members, classItem]
+  );
   const classAssessments = useMemo(
     () => (assessments || []).filter((a) => classItem && a.class === classItem.name),
     [assessments, classItem]
