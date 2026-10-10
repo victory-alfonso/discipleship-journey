@@ -3081,7 +3081,7 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
     onSaveAssessment(classItem.name, { title, type: form.type, maxScore, topicId: form.topicId, date: form.date }, form.id);
     setForm(null);
   };
-  const ScoreInput = ({ m, a }) => {
+  const scoreInput = (m, a) => {
     const sc = scoreOf(m.id, a.id);
     if (!isLeader) return <span style={{ fontWeight: 600 }}>{sc === null ? "—" : sc}</span>;
     return (
@@ -3383,7 +3383,7 @@ tr{page-break-inside:avoid}
                   {classMembers.map((m) => (
                     <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
                       <span style={{ flex: 1, fontSize: 14 }}>{m.name}</span>
-                      <ScoreInput m={m} a={a} />
+                      {scoreInput(m, a)}
                       <span style={{ fontSize: 12, opacity: 0.6, width: 36 }}>/{a.maxScore}</span>
                     </div>
                   ))}
@@ -3417,7 +3417,7 @@ tr{page-break-inside:avoid}
                     <tr key={m.id} style={{ borderTop: "1px solid rgba(31,56,100,0.12)" }}>
                       <td style={{ padding: "6px 10px", position: "sticky", left: 0, background: "#F6F0DE", whiteSpace: "nowrap" }}>{m.name}</td>
                       {classAssessments.map((a) => (
-                        <td key={a.id} style={{ padding: "4px 10px", textAlign: "center" }}><ScoreInput m={m} a={a} /></td>
+                        <td key={a.id} style={{ padding: "4px 10px", textAlign: "center" }}>{scoreInput(m, a)}</td>
                       ))}
                       <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>
                         {possible ? `${fmtNum(got)}/${possible} (${Math.round((got / possible) * 100)}%)` : "—"}
