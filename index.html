@@ -5300,10 +5300,13 @@ function SidebarLogoBackdrop({ src }) {
     im.src = src;
     return () => { dead = true; };
   }, [src]);
-  const feather = "radial-gradient(ellipse 72% 72% at 50% 50%, #000 62%, transparent 100%)";
+  // Logo is sized by WIDTH so the whole wordmark stays readable (never cropped sideways); only its top and
+  // bottom edges fade into the sampled background colour. Everything is absolutely positioned, so it never
+  // changes the modal's size.
+  const feather = "linear-gradient(180deg, transparent 0%, #000 14%, #000 86%, transparent 100%)";
   return (
-    <div style={{ position: "absolute", inset: 0, background: bg }}>
-      <img src={src} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", transform: "scale(0.59)", WebkitMaskImage: feather, maskImage: feather }} />
+    <div style={{ position: "absolute", inset: 0, background: bg, overflow: "hidden" }}>
+      <img src={src} alt="" style={{ position: "absolute", left: 0, top: "50%", width: "100%", height: "auto", transform: "translateY(-50%)", WebkitMaskImage: feather, maskImage: feather }} />
     </div>
   );
 }
