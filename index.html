@@ -5471,7 +5471,102 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
 // listing every member as attended / not yet attended
 // ============================================================
 
-function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, onClose, onToggleAttendance, onSetAttendanceDate, onEditTopic, onOpenMember, onToggleConducted }) {
+function QuizSection({ topic, classMembers, assessments, gradeDocs, isLeader, onSaveAssessment, onDeleteAssessment, onSetGrade }) {
+  const [form, setForm] = useState(null); // { id?, title, type, maxScore }
+  const [openId, setOpenId] = useState(null);
+  const inputStyle = { padding: "7px 10px", borderRadius: 8, border: "1px solid rgba(31,56,100,0.25)", fontSize: 14, background: "#fff", color: "#23211D" };
+  const scoreOf = (memberId, aId) => {
+    const g = gradeDocs.find((x) => x.memberId === memberId && x.assessmentId === aId);
+    return g ? g.score : null;
+  };
+  const submit = () => {
+    const title = (form.title || "").trim();
+    const maxScore = Number(form.maxScore);
+    if (!title || !(maxScore > 0)) return;
+    onSaveAssessment(topic, { title, type: form.type, maxScore }, form.id);
+    setForm(null);
+  };
+  return (
+    <div style={styles.lightCard}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ ...styles.sectionLabel, marginBottom: 0 }}>Quizzes &amp; Activities ({assessments.length})</div>
+        {isLeader && !form && (
+          <button style={styles.primaryBtn} onClick={() => setForm({ title: "", type: "Quiz", maxScore: 10 })}>+ Add</button>
+        )}
+      </div>
+      {form && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 12, alignItems: "center" }}>
+          <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} style={inputStyle}>
+            <option>Quiz</option>
+            <option>Activity</option>
+          </select>
+          <input placeholder="Title (e.g. Quiz 1)" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} style={{ ...inputStyle, flex: 1, minWidth: 140 }} />
+          <input type="number" min="1" value={form.maxScore} onChange={(e) => setForm({ ...form, maxScore: e.target.value })} style={{ ...inputStyle, width: 80 }} title="Total / perfect score" />
+          <button style={styles.primaryBtn} onClick={submit}>{form.id ? "Save" : "Add"}</button>
+          <button style={{ ...inputStyle, cursor: "pointer" }} onClick={() => setForm(null)}>Cancel</button>
+        </div>
+      )}
+      {assessments.length === 0 && !form && <div style={styles.emptyNote}>No quizzes or activities for this session yet.</div>}
+      {assessments.map((a) => {
+        const scores = classMembers.map((m) => scoreOf(m.id, a.id)).filter((v) => v !== null);
+        const avg = scores.length ? scores.reduce((x, y) => x + y, 0) / scores.length : null;
+        const open = openId === a.id;
+        return (
+          <div key={a.id} style={{ borderTop: "1px solid rgba(31,56,100,0.12)", paddingTop: 8, marginTop: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }} onClick={() => setOpenId(open ? null : a.id)}>
+              <span style={{ fontSize: 10, display: "inline-block", transform: open ? "rotate(0deg)" : "rotate(-90deg)" }}>▾</span>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontWeight: 700, fontSize: 14 }}>{a.title} <span style={{ fontWeight: 500, fontSize: 12, opacity: 0.7 }}>· {a.type} · /{a.maxScore}</span></div>
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  {scores.length} of {classMembers.length} graded{avg !== null ? ` · avg ${Math.round(avg * 10) / 10}/${a.maxScore}` : ""}
+                </div>
+              </div>
+              {isLeader && (
+                <>
+                  <button style={styles.iconEdit} title="Edit" onClick={(e) => { e.stopPropagation(); setForm({ id: a.id, title: a.title, type: a.type, maxScore: a.maxScore }); }}>✎</button>
+                  <button style={styles.iconEdit} title="Delete" onClick={(e) => { e.stopPropagation(); if (window.confirm(`Delete "${a.title}" and all its grades?`)) onDeleteAssessment(a.id); }}>🗑</button>
+                </>
+              )}
+            </div>
+            {open && (
+              <div style={{ marginTop: 8 }}>
+                {classMembers.map((m) => {
+                  const sc = scoreOf(m.id, a.id);
+                  return (
+                    <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0" }}>
+                      <span style={{ flex: 1, fontSize: 14 }}>{m.name}</span>
+                      {isLeader ? (
+                        <input
+                          type="number" min="0" max={a.maxScore} step="any"
+                          defaultValue={sc === null ? "" : sc}
+                          key={`${m.id}_${a.id}_${sc}`}
+                          placeholder="—"
+                          onBlur={(e) => {
+                            const v = e.target.value;
+                            if (v === "" && sc === null) return;
+                            if (v !== "" && (Number(v) < 0 || Number(v) > a.maxScore)) { e.target.value = sc === null ? "" : sc; return; }
+                            if (v !== "" && Number(v) === sc) return;
+                            onSetGrade(m.id, a, v);
+                          }}
+                          style={{ ...inputStyle, width: 80, textAlign: "right" }}
+                        />
+                      ) : (
+                        <span style={{ fontWeight: 600 }}>{sc === null ? "—" : sc}</span>
+                      )}
+                      <span style={{ fontSize: 12, opacity: 0.6, width: 36 }}>/{a.maxScore}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, onClose, onToggleAttendance, onSetAttendanceDate, onEditTopic, onOpenMember, onToggleConducted, assessments, gradeDocs, onSaveAssessment, onDeleteAssessment, onSetGrade }) {
   const [scanOpen, setScanOpen] = useState(false);
   const [editUnlocked, setEditUnlocked] = useState(false);
   const [attendedCollapsed, setAttendedCollapsed] = useState(false);
@@ -5596,6 +5691,17 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
           </div>
         </div>
       </div>
+
+      <QuizSection
+        topic={topic}
+        classMembers={classMembers}
+        assessments={(assessments || []).filter((a) => a.topicId === topic.id)}
+        gradeDocs={gradeDocs || []}
+        isLeader={isLeader}
+        onSaveAssessment={onSaveAssessment}
+        onDeleteAssessment={onDeleteAssessment}
+        onSetGrade={onSetGrade}
+      />
 
       {total === 0 ? (
         <div style={styles.emptyNote}>No members in Disciples yet.</div>
@@ -7093,6 +7199,8 @@ function App() {
   const [classes] = useCollection("classes", "order", authReady);
   const [topics] = useCollection("topics", "order", authReady);
   const [attendanceDocs] = useCollection("attendance", null, authReady && !isOneOnly);
+  const [assessments] = useCollection("assessments", "order", authReady && !isOneOnly);
+  const [gradeDocs] = useCollection("grades", null, authReady && !isOneOnly);
   // ONE2ONE lives in its own collection, fetched in full like every
   // other collection here; each person carries a createdBy (the
   // adder's email) so it can be filtered below — Leaders/Managers see
@@ -7387,6 +7495,37 @@ function App() {
     const dateAttended = new Date(y, m - 1, d);
     db.collection("attendance").doc(docId).set({ memberId, topicId, attended: true, dateAttended }, { merge: true })
       .catch((err) => showError("Could not save the date. Error: " + err.message));
+  };
+  // Quizzes / activities per session, plus each member's score for them.
+  // assessments: { topicId, class, title, type, maxScore, order }
+  // grades: doc id `${memberId}_${assessmentId}` -> { memberId, assessmentId, topicId, score }
+  const saveAssessment = (topic, data, existingId) => {
+    const payload = { topicId: topic.id, class: topic.class, title: data.title, type: data.type, maxScore: data.maxScore };
+    if (existingId) {
+      db.collection("assessments").doc(existingId).update(payload)
+        .catch((err) => showError("Could not save the quiz/activity. Error: " + err.message));
+    } else {
+      const order = (assessments || []).filter((a) => a.topicId === topic.id).length + 1;
+      db.collection("assessments").add({ ...payload, order })
+        .catch((err) => showError("Could not add the quiz/activity. Error: " + err.message));
+    }
+  };
+  const deleteAssessment = async (assessmentId) => {
+    try {
+      const batch = db.batch();
+      (gradeDocs || []).filter((g) => g.assessmentId === assessmentId).forEach((g) => batch.delete(db.collection("grades").doc(g.id)));
+      batch.delete(db.collection("assessments").doc(assessmentId));
+      await batch.commit();
+    } catch (err) {
+      showError("Could not delete the quiz/activity. Error: " + err.message);
+    }
+  };
+  const setGrade = (memberId, assessment, score) => {
+    const ref = db.collection("grades").doc(`${memberId}_${assessment.id}`);
+    const op = (score === null || score === "")
+      ? ref.delete()
+      : ref.set({ memberId, assessmentId: assessment.id, topicId: assessment.topicId, score: Number(score) }, { merge: true });
+    op.catch((err) => showError("Could not save the grade. Error: " + err.message));
   };
   // Used when a leader manually flips a member's status to "Completed"
   // in the Edit Member form (after confirming) — marks every session in
@@ -8413,6 +8552,11 @@ function App() {
           onEditTopic={setRenamingTopic}
           onOpenMember={openMemberInContext}
           onToggleConducted={toggleTopicConducted}
+          assessments={assessments}
+          gradeDocs={gradeDocs}
+          onSaveAssessment={saveAssessment}
+          onDeleteAssessment={deleteAssessment}
+          onSetGrade={setGrade}
         />
       )}
 
