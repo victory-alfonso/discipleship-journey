@@ -5644,8 +5644,10 @@ function memberRingStatus(r, sessionCount) {
   if (r.done === 0) return "notStarted";
   return "onTrack";
 }
-function ClassProgressRings({ sessionCount, conductedCount, rows }) {
+function ClassProgressRings({ sessionCount, conductedCount, rows, sessionNames }) {
   const [openKey, setOpenKey] = useState(null);
+  const [innerHover, setInnerHover] = useState(null); // status key of the inner-ring slice under the pointer
+  const [segHover, setSegHover] = useState(null); // index of the outer-ring session under the pointer
   const buckets = {};
   RING_STATUS.forEach((st) => { buckets[st.key] = []; });
   rows.forEach((r) => { buckets[memberRingStatus(r, sessionCount)].push(r); });
@@ -5667,20 +5669,49 @@ function ClassProgressRings({ sessionCount, conductedCount, rows }) {
   const cream = "rgba(245,242,228,0.75)";
   return (
     <div style={{ marginBottom: 22 }}>
-      <div style={{ display: "flex", justifyContent: "center", marginBottom: 14 }}>
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 14, position: "relative" }}>
+        {segHover === null && innerHover !== null && (() => {
+          const sg = segs.find((x) => x.key === innerHover);
+          return sg ? (
+            <div style={{ position: "absolute", top: -6, left: "50%", transform: "translate(-50%, -100%)", zIndex: 7, background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 10, padding: "6px 10px", fontSize: 12.5, whiteSpace: "nowrap", pointerEvents: "none", boxShadow: "0 10px 24px -10px rgba(0,0,0,0.6)" }}>
+              <span style={{ fontWeight: 700, color: sg.color }}>{sg.label}</span>
+              <span style={{ color: "rgba(245,242,228,0.65)", marginLeft: 6 }}>· {sg.v} member{sg.v === 1 ? "" : "s"} · {Math.round((sg.v / total) * 100)}%</span>
+            </div>
+          ) : null;
+        })()}
+        {segHover !== null && (
+          <div style={{ position: "absolute", top: -6, left: "50%", transform: "translate(-50%, -100%)", zIndex: 7, background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 10, padding: "6px 10px", fontSize: 12.5, whiteSpace: "nowrap", pointerEvents: "none", boxShadow: "0 10px 24px -10px rgba(0,0,0,0.6)" }}>
+            <span style={{ fontWeight: 700 }}>{(sessionNames && sessionNames[segHover]) || `Session ${segHover + 1}`}</span>
+            <span style={{ color: "rgba(245,242,228,0.65)", marginLeft: 6 }}>{segHover < conductedCount ? "· conducted" : "· not yet conducted"}</span>
+          </div>
+        )}
         <svg width={NS} height={NS} viewBox={`0 0 ${NS} ${NS}`} role="img" aria-label={`${conductedCount} of ${sessionCount} sessions conducted; ${total} members by attendance status`}>
           <g transform={`translate(${cx} ${cx}) rotate(-90)`}>
             <circle r={82} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth={14} />
-            {conductedCount > 0 && arcs(82, [{ key: "conducted", v: conductedCount, color: "#E5A430" }, ...(sessionCount > conductedCount ? [{ key: "rest", v: sessionCount - conductedCount, color: "transparent" }] : [])], sessionCount, 0)}
+            {sessionCount > 0 && Array.from({ length: sessionCount }, (_, i) => {
+              const c = 2 * Math.PI * 82, len = Math.max(c / sessionCount - (sessionCount > 1 ? 2 : 0), 0.5);
+              const on = i < conductedCount;
+              return (
+                <circle key={"s" + i} r={82} fill="none" stroke={on ? `hsl(${Math.round((i * 360) / Math.max(sessionCount, 1) + 8)} 75% 62%)` : "transparent"} strokeWidth={segHover === i ? 18 : 14} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-(i * c) / sessionCount} style={{ pointerEvents: "stroke", cursor: "pointer", transition: "stroke-width 0.12s ease" }} onMouseEnter={() => setSegHover(i)} onMouseLeave={() => setSegHover((k) => (k === i ? null : k))} onClick={() => setSegHover((k) => (k === i ? null : i))} />
+              );
+            })}
             <circle r={58} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth={14} />
-            {arcs(58, segs, total, 3)}
+            {(() => {
+              const c = 2 * Math.PI * 58;
+              let cum = 0;
+              return segs.map((sg) => {
+                const frac = sg.v / total, len = Math.max(frac * c - (segs.length > 1 ? 3 : 0), 0.5), off = -cum * c;
+                cum += frac;
+                return <circle key={sg.key} r={58} fill="none" stroke={sg.color} strokeWidth={innerHover === sg.key ? 18 : 14} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={off} style={{ pointerEvents: "stroke", cursor: "pointer", transition: "stroke-width 0.12s ease" }} onMouseEnter={() => { setInnerHover(sg.key); setOpenKey(sg.key); }} onMouseLeave={() => { setInnerHover((k) => (k === sg.key ? null : k)); setOpenKey((k) => (k === sg.key ? null : k)); }} onClick={() => { setInnerHover((k) => (k === sg.key ? null : sg.key)); setOpenKey((k) => (k === sg.key ? null : sg.key)); }} />;
+              });
+            })()}
           </g>
           <text x={cx} y={cx - 5} textAnchor="middle" fontSize="26" fontWeight="700" fill="#F5F2E4" fontFamily="Georgia, serif">{conductedCount}/{sessionCount}</text>
           <text x={cx} y={cx + 14} textAnchor="middle" fontSize="11" fill={cream}>sessions</text>
         </svg>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 12.5 }}>
-        <span style={{ width: 10, height: 10, borderRadius: 2, background: "#E5A430", flexShrink: 0 }} />
+        <span style={{ width: 10, height: 10, borderRadius: 2, background: "conic-gradient(hsl(8 75% 62%), hsl(80 75% 62%), hsl(160 75% 62%), hsl(240 75% 62%), hsl(320 75% 62%), hsl(8 75% 62%))", flexShrink: 0 }} />
         <span style={{ flex: 1 }}>Outer: sessions conducted</span>
         <span style={{ fontWeight: 700 }}>{conductedCount} of {sessionCount} · {pctSessions}%</span>
       </div>
@@ -5948,7 +5979,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
 
             <div style={detailLabel}>Member Progress</div>
             {showRings ? (
-              <ClassProgressRings sessionCount={ts.length} conductedCount={conductedCount} rows={memberRows} />
+              <ClassProgressRings sessionCount={ts.length} conductedCount={conductedCount} rows={memberRows} sessionNames={[...ts.filter((t) => t.conducted), ...ts.filter((t) => !t.conducted)].map((t) => t.name)} />
             ) : segments.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 20 }}>No data yet — add sessions and members to see progress.</div>
             ) : (
