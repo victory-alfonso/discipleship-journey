@@ -5277,6 +5277,37 @@ function coverGradientFor(name) {
   return CLASS_COVER_GRADIENTS[h % CLASS_COVER_GRADIENTS.length];
 }
 
+function SidebarLogoBackdrop({ src }) {
+  // Logo at 59% zoom; the sidebar is filled with the logo's own background colour (sampled from its edges)
+  // and the logo edges are feathered so no seam, border or corner shows.
+  const [bg, setBg] = useState("#2A4A80");
+  useEffect(() => {
+    let dead = false;
+    const im = new Image();
+    im.crossOrigin = "anonymous";
+    im.onload = () => {
+      try {
+        const w = 24, h = 24, c = document.createElement("canvas");
+        c.width = w; c.height = h;
+        const x = c.getContext("2d");
+        x.drawImage(im, 0, 0, w, h);
+        const pts = [[0,0],[w-1,0],[0,h-1],[w-1,h-1],[w>>1,0],[w>>1,h-1],[0,h>>1],[w-1,h>>1]];
+        const px = pts.map(([a,b]) => x.getImageData(a,b,1,1).data);
+        const m = (i) => px.map(d => d[i]).sort((a,b)=>a-b)[px.length>>1];
+        if (!dead) setBg("rgb(" + m(0) + "," + m(1) + "," + m(2) + ")");
+      } catch (e) {}
+    };
+    im.src = src;
+    return () => { dead = true; };
+  }, [src]);
+  const feather = "radial-gradient(ellipse 72% 72% at 50% 50%, #000 62%, transparent 100%)";
+  return (
+    <div style={{ position: "absolute", inset: 0, background: bg }}>
+      <img src={src} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", transform: "scale(0.59)", WebkitMaskImage: feather, maskImage: feather }} />
+    </div>
+  );
+}
+
 function ClassCoverImage({ classItem }) {
   if (classItem.photoUrl) {
     return <img src={classItem.photoUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />;
@@ -5805,7 +5836,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                 right side collapses). The photo/logo COVERS the full area edge to edge, zoomed out 2%. */}
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100%", minHeight: 620, background: "linear-gradient(180deg, #3A5A94 0%, #2A4A80 45%, #1F3864 100%)" }}>
               {classItem.photoUrl ? (
-                <img src={classItem.photoUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", transform: "scale(0.98)", opacity: 0.55 }} />
+                <SidebarLogoBackdrop src={classItem.photoUrl} />
               ) : (
                 <ClassCoverImage classItem={classItem} />
               )}
