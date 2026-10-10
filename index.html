@@ -5717,23 +5717,19 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
 
         <div className="dj-classdetail-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
           <div className="dj-classdetail-left" style={{ width: 300, flexShrink: 0, position: "relative", overflow: "hidden", display: "flex", flexDirection: "column", background: "#23211D" }}>
-            {/* Clean solid sidebar: the cover photo is shown as a proper
-                banner card above the title (not ghosted behind the text),
-                so every label and number stays fully readable. */}
-            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, #2C4C84 0%, #243F70 55%, #1F3864 100%)" }} />
-
-            <div className="dj-classdetail-leftscroll" style={{ position: "relative", flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 18px 22px", color: "#F5F2E4" }}>
-            <div style={{ position: "relative", width: "100%", aspectRatio: "16 / 9", borderRadius: 12, overflow: "hidden", marginBottom: 16, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.18)", boxShadow: "0 8px 20px -10px rgba(0,0,0,0.5)" }}>
+            {/* Backdrop fills the entire sidebar (min 620px tall so it doesn't re-zoom when the
+                right side collapses). The photo/logo now COVERS the full area edge to edge. */}
+            <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100%", minHeight: 620, background: "linear-gradient(180deg, #3A5A94 0%, #2A4A80 45%, #1F3864 100%)" }}>
               {classItem.photoUrl ? (
-                <>
-                  {/* soft blurred copy fills any empty space; the real image is shown whole (contain) so nothing is cropped */}
-                  <img src={classItem.photoUrl} alt="" aria-hidden="true" style={{ position: "absolute", inset: -12, width: "calc(100% + 24px)", height: "calc(100% + 24px)", objectFit: "cover", filter: "blur(14px) brightness(0.9)", opacity: 0.85 }} />
-                  <img src={classItem.photoUrl} alt={classItem.name} style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain" }} />
-                </>
+                <img src={classItem.photoUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center", opacity: 0.55 }} />
               ) : (
                 <ClassCoverImage classItem={classItem} />
               )}
             </div>
+            {/* Dark-blue scrim so labels and numbers stay readable over any photo */}
+            <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(24,44,84,0.55) 0%, rgba(24,44,84,0.45) 50%, rgba(24,44,84,0.65) 100%)" }} />
+
+            <div className="dj-classdetail-leftscroll" style={{ position: "relative", flex: 1, minHeight: 0, overflowY: "auto", padding: "20px 18px 22px", color: "#F5F2E4" }}>
             <div className="dj-classdetail-title" style={{ marginBottom: 18 }}>
               <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.15 }}>{classItem.name}</div>
               <div style={{ fontSize: 12, color: "rgba(245,242,228,0.8)", marginTop: 4 }}>
