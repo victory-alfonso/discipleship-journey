@@ -5473,8 +5473,11 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   const [addingBatch, setAddingBatch] = useState(false);
   const [batchMenuOpen, setBatchMenuOpen] = useState(false);
   const [addMemberOpen, setAddMemberOpen] = useState(false);
-  const [membersCollapsed, setMembersCollapsed] = useState(false);
-  const [sessionsCollapsed, setSessionsCollapsed] = useState(false);
+  // On phones the sidebar info (batch, progress, late/absences) stacks above
+  // the lists, so start Sessions and Members collapsed there to keep it in view.
+  const isPhone = typeof window !== "undefined" && window.matchMedia && window.matchMedia("(max-width: 640px)").matches;
+  const [membersCollapsed, setMembersCollapsed] = useState(isPhone);
+  const [sessionsCollapsed, setSessionsCollapsed] = useState(isPhone);
   const [statPop, setStatPop] = useState(null); // "late" | "absent" | null — details popover on the Late & Absences numbers
   const [statDir, setStatDir] = useState("up");
   const [memberPop, setMemberPop] = useState(null); // "<memberId>:late|absent" — details popover on a member row
