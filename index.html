@@ -5592,9 +5592,9 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                 its text nor re-zooms when the right side collapses. */}
             <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "100%", minHeight: 620, background: "linear-gradient(180deg, #3A5A94 0%, #2A4A80 45%, #1F3864 100%)" }}>
               {classItem.photoUrl ? (
-                // multiply blends the logo's white box into the blue backdrop, so
-                // only the artwork itself shows (no visible rectangle).
-                <img src={classItem.photoUrl} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "contain", mixBlendMode: "multiply", opacity: 0.9 }} />
+                // Feathered edges (mask) dissolve the picture's own rectangle into
+                // the blue backdrop, whatever its background colour is.
+                <img src={classItem.photoUrl} alt="" style={{ position: "absolute", left: 0, top: "50%", transform: "translateY(-50%)", width: "100%", height: "auto", maxHeight: "100%", objectFit: "contain", opacity: 0.6, WebkitMaskImage: "radial-gradient(ellipse 70% 70% at 50% 50%, #000 50%, transparent 100%)", maskImage: "radial-gradient(ellipse 70% 70% at 50% 50%, #000 50%, transparent 100%)" }} />
               ) : (
                 <ClassCoverImage classItem={classItem} />
               )}
