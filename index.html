@@ -2078,6 +2078,8 @@ function polarToXY(cx, cy, r, angleDeg) {
 }
 
 function annularSectorPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
+  // A full 360° sweep (a single 100% slice) makes start and end the same point, so the arc collapses and nothing is drawn.
+  if (endAngle - startAngle >= 359.99) endAngle = startAngle + 359.99;
   const large = endAngle - startAngle > 180 ? 1 : 0;
   const p1 = polarToXY(cx, cy, rOuter, startAngle);
   const p2 = polarToXY(cx, cy, rOuter, endAngle);
