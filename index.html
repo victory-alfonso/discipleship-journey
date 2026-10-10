@@ -3054,6 +3054,7 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
   const [view, setView] = useState("quizzes"); // quizzes | gradebook
   const [form, setForm] = useState(null);
   const [openId, setOpenId] = useState(null);
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const classItem = (classes || []).find((c) => c.id === classId) || (classes || [])[0] || null;
   // Surname first ("Santos, Mary Grace"), sorted by surname then first name.
   const classMembers = useMemo(
@@ -3173,12 +3174,62 @@ tr{page-break-inside:avoid}
           <div style={{ display: "flex", gap: 6, marginLeft: "auto" }}>
             <button onClick={exportCsv} style={{ ...inputStyle, cursor: "pointer", fontWeight: 700 }}>Export CSV</button>
             <button onClick={printGradebook} style={{ ...inputStyle, cursor: "pointer", fontWeight: 700 }}>Print</button>
+            <button onClick={() => setSummaryOpen(true)} style={{ ...inputStyle, cursor: "pointer", fontWeight: 700 }}>Summary</button>
           </div>
         )}
         {isLeader && !form && (
           <button style={{ ...styles.primaryBtn, marginLeft: classAssessments.length > 0 && classMembers.length > 0 ? 0 : "auto" }} onClick={() => { setView("quizzes"); setForm({ title: "", type: "Quiz", maxScore: 10, topicId: "", date: "" }); }}>+ Add Quiz / Activity</button>
         )}
       </div>
+
+      {summaryOpen && (
+        <div style={{ ...styles.modalOverlay, paddingTop: "calc(var(--dj-header-h, 180px) + 3vh)", paddingBottom: "3vh" }} onClick={() => setSummaryOpen(false)}>
+          <div
+            style={{ position: "relative", width: "100%", maxWidth: 900, maxHeight: "calc(94vh - var(--dj-header-h, 180px))", display: "flex", flexDirection: "column", background: "linear-gradient(160deg, #FBF8EE 0%, #F1EAD6 100%)", borderRadius: 20, boxShadow: "0 25px 60px -18px rgba(20,18,14,0.5)", overflow: "hidden" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button type="button" onClick={() => setSummaryOpen(false)} aria-label="Close" style={{ position: "absolute", top: 12, right: 12, zIndex: 3, background: "rgba(31,56,100,0.08)", border: "none", borderRadius: "50%", width: 30, height: 30, color: "#1F3864", fontSize: 16, cursor: "pointer", lineHeight: 1 }}>×</button>
+            <div style={{ overflow: "auto", padding: "20px 22px 24px" }}>
+              <h2 style={{ margin: "0 0 2px", fontSize: 20, color: "#1F3864" }}>{classItem.name} — Grade Summary</h2>
+              <div style={{ fontSize: 12.5, opacity: 0.7, marginBottom: 14 }}>{classMembers.length} member{classMembers.length === 1 ? "" : "s"} · {classAssessments.length} quiz/activit{classAssessments.length === 1 ? "y" : "ies"}</div>
+              {classAssessments.length === 0 || classMembers.length === 0 ? (
+                <div style={styles.emptyNote}>Nothing to summarize yet.</div>
+              ) : (
+                <table style={{ borderCollapse: "collapse", fontSize: 13.5, minWidth: "100%" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left", padding: "6px 10px", position: "sticky", left: 0, background: "#F6F0DE" }}>Member</th>
+                      {classAssessments.map((a) => (
+                        <th key={a.id} style={{ padding: "6px 10px", textAlign: "center", whiteSpace: "nowrap" }}>{a.title}<div style={{ fontWeight: 500, fontSize: 11, opacity: 0.6 }}>{a.type} · /{a.maxScore}</div></th>
+                      ))}
+                      <th style={{ padding: "6px 10px", textAlign: "center" }}>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gradebookRows().map((r, i) => (
+                      <tr key={i} style={{ borderTop: "1px solid rgba(31,56,100,0.12)" }}>
+                        <td style={{ padding: "6px 10px", position: "sticky", left: 0, background: "#F6F0DE", whiteSpace: "nowrap" }}>{r.name}</td>
+                        {r.cells.map((c, j) => <td key={j} style={{ padding: "6px 10px", textAlign: "center" }}>{c === "" ? "—" : c}</td>)}
+                        <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>{r.possible ? `${fmtNum(r.got)}/${r.possible} (${r.pct}%)` : "—"}</td>
+                      </tr>
+                    ))}
+                    <tr style={{ borderTop: "2px solid rgba(31,56,100,0.35)", fontWeight: 700 }}>
+                      <td style={{ padding: "6px 10px", position: "sticky", left: 0, background: "#F6F0DE" }}>Class average</td>
+                      {classAssessments.map((a) => {
+                        const sc = classMembers.map((m) => scoreOf(m.id, a.id)).filter((v) => v !== null);
+                        return <td key={a.id} style={{ padding: "6px 10px", textAlign: "center" }}>{sc.length ? fmtNum(sc.reduce((x, y) => x + y, 0) / sc.length) : "—"}</td>;
+                      })}
+                      <td style={{ padding: "6px 10px", textAlign: "center" }}>
+                        {(() => { const pcts = gradebookRows().filter((r) => r.pct !== null).map((r) => r.pct); return pcts.length ? Math.round(pcts.reduce((x, y) => x + y, 0) / pcts.length) + "%" : "—"; })()}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {form && (
         <div style={styles.lightCard}>
