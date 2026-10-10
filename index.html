@@ -1544,8 +1544,8 @@ function topicAttendanceLists(members, attendanceByMember, topicId) {
       notAttended.push(m);
     }
   });
-  attended.sort((a, b) => a.name.localeCompare(b.name));
-  notAttended.sort((a, b) => a.name.localeCompare(b.name));
+  attended.sort((a, b) => compareNames(a.name, b.name));
+  notAttended.sort((a, b) => compareNames(a.name, b.name));
   return { attended, notAttended };
 }
 
@@ -1623,7 +1623,7 @@ function getEnrolledClasses(classes, member) {
 function getClassMembers(members, classId) {
   return (members || [])
     .filter((m) => !Array.isArray(m.classIds) || m.classIds.includes(classId))
-    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), undefined, { sensitivity: "base" }));
+    .sort((a, b) => compareNames(a.name, b.name));
 }
 
 // Same idea as getClassMembers, but for a class's own sessions: when
@@ -1668,6 +1668,16 @@ function splitFullName(fullName) {
   if (parts.length === 0) return { firstName: "", lastName: "" };
   if (parts.length === 1) return { firstName: parts[0], lastName: "" };
   return { firstName: parts.slice(0, -1).join(" "), lastName: parts[parts.length - 1] };
+}
+// Display + sort helpers: people are shown as "Surname, First name" and
+// sorted alphabetically by surname (then first name). The stored "name"
+// field is untouched — only how it is shown/ordered changes.
+function displayName(fullName) {
+  const { firstName, lastName } = splitFullName(fullName);
+  return lastName ? `${lastName}, ${firstName}` : firstName;
+}
+function compareNames(a, b) {
+  return displayName(a).localeCompare(displayName(b), undefined, { sensitivity: "base" });
 }
 
 // Matches only from the start of a word — typing "os" should not
@@ -2417,10 +2427,10 @@ function MemberQrModal({ member, onClose }) {
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
       <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalTitle}>Attendance QR — {member.name}</div>
+        <div style={styles.modalTitle}>Attendance QR — {displayName(member.name)}</div>
         <div className="qr-print-area" style={{ textAlign: "center", padding: "6px 0 14px" }} ref={qrWrapRef}>
           <QrCode text={memberQrText(member.id)} size={220} />
-          <div style={{ marginTop: 10, fontWeight: 700, color: "#23211D" }}>{member.name}</div>
+          <div style={{ marginTop: 10, fontWeight: 700, color: "#23211D" }}>{displayName(member.name)}</div>
         </div>
         <div style={{ ...styles.pairNote, textAlign: "center" }}>
           Since members don't have accounts, send or print this QR code for them — they'll show it to the leader at every class.
@@ -2477,10 +2487,10 @@ function OneOnOneQrModal({ person, onClose, title, intro }) {
   return (
     <div style={styles.modalOverlay} onClick={onClose}>
       <div style={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-        <div style={styles.modalTitle}>{title || `ONE2ONE Attendance QR — ${person.name}`}</div>
+        <div style={styles.modalTitle}>{title || `ONE2ONE Attendance QR — ${displayName(person.name)}`}</div>
         <div className="qr-print-area" style={{ textAlign: "center", padding: "6px 0 14px" }} ref={qrWrapRef}>
           <QrCode text={oneOnOneQrText(person.id)} size={220} />
-          <div style={{ marginTop: 10, fontWeight: 700, color: "#23211D" }}>{person.name}</div>
+          <div style={{ marginTop: 10, fontWeight: 700, color: "#23211D" }}>{displayName(person.name)}</div>
         </div>
         <div style={{ ...styles.pairNote, textAlign: "center" }}>
           {intro || "Send or print this QR code — the leader scans it each session to mark attendance. It works even while approval is still pending."}
@@ -2511,7 +2521,7 @@ function PrintAllQrModal({ members, onClose }) {
           {members.map((m) => (
             <div key={m.id} style={{ textAlign: "center", border: "1px solid #E4DCC6", borderRadius: 10, padding: 10, breakInside: "avoid" }}>
               <QrCode text={memberQrText(m.id)} size={130} />
-              <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 700, color: "#23211D" }}>{m.name}</div>
+              <div style={{ marginTop: 6, fontSize: 12.5, fontWeight: 700, color: "#23211D" }}>{displayName(m.name)}</div>
             </div>
           ))}
         </div>
@@ -3718,7 +3728,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
   // instead of sorting alphabetically.
   const STATUS_SORT_RANK = { "Completed": 0, "In-Progress": 1, "Enrolled": 2, "Incomplete": 3, "Cancelled": 4, "Not Enrolled": 5 };
   const sortAccessor = (m, col) => {
-    if (col === "name") return (m.name || "").toLowerCase();
+    if (col === "name") return displayName(m.name).toLowerCase();
     if (col === "age") return ageFromBirthdate(m.birthdate) ?? -1;
     if (col === "gender") return (m.gender || "").toLowerCase();
     if (col === "lifeStage") return (m.lifeStage || "").toLowerCase();
@@ -3732,7 +3742,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
         let cmp = typeof av === "number" && typeof bv === "number" ? av - bv : String(av).localeCompare(String(bv));
         return sortDir === "asc" ? cmp : -cmp;
       })
-    : filtered;
+    : [...filtered].sort((a, b) => compareNames(a.name, b.name));
   const toggleSort = (col) => {
     if (sortCol === col) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortCol(col); setSortDir("asc"); }
@@ -3940,7 +3950,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
                     <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(31,56,100,0.08)", position: "sticky", left: isLeader ? 34 : 0, zIndex: 1, background: "rgba(246,242,230,0.78)", backdropFilter: "blur(12px) saturate(160%)", WebkitBackdropFilter: "blur(12px) saturate(160%)", boxShadow: "2px 0 4px -3px rgba(31,56,100,0.2)" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                         <Avatar name={m.name} photoUrl={m.photoUrl} size={30} />
-                        <span style={{ fontWeight: 700, color: "#23211D", whiteSpace: "nowrap" }}>{m.name}</span>
+                        <span style={{ fontWeight: 700, color: "#23211D", whiteSpace: "nowrap" }}>{displayName(m.name)}</span>
                       </div>
                     </td>
                     <td style={{ padding: "8px 10px", borderBottom: "1px solid rgba(31,56,100,0.08)", color: "#4A4230", whiteSpace: "nowrap" }}>{mAge || "—"}</td>
@@ -4145,7 +4155,7 @@ function MemberProfile({ member, classes, topics, attendanceByMember, isLeader, 
                 <ClassCoverImage classItem={{ name: member.name, photoUrl: member.photoUrl }} />
                 <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(20,18,14,0) 32%, rgba(20,18,14,0.88) 100%)" }} />
                 <div style={{ position: "absolute", left: 18, right: 18, bottom: 16 }}>
-                  <h2 style={{ ...dj.name, fontSize: 19, color: "#F5F2E4" }}>{member.name}</h2>
+                  <h2 style={{ ...dj.name, fontSize: 19, color: "#F5F2E4" }}>{displayName(member.name)}</h2>
                   <div style={{ ...dj.meta, marginTop: 4, color: "rgba(245,242,228,0.8)" }}>
                     {(() => {
                       const pAge = ageFromBirthdate(member.birthdate);
@@ -4781,7 +4791,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
               <select style={styles.memberModalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
                 <option value="">Add as new person</option>
                 {duplicates.map((d) => (
-                  <option key={d.id} value={d.id}>Merge into existing: {d.name}</option>
+                  <option key={d.id} value={d.id}>Merge into existing: {displayName(d.name)}</option>
                 ))}
               </select>
             </div>
@@ -5518,10 +5528,10 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
         const absent = absentSessions.length;
         return { member: m, done, late, absent, lateSessions: lateSessions.map((t) => t.name), lateDetail: lateSessions.map((t) => `${t.name} · ${fmtTime(att[t.id].dateAttended)}`), absentSessions: absentSessions.map((t) => t.name), total: ts.length, pct: ts.length ? Math.round((done / ts.length) * 100) : 0 };
       })
-      .sort((a, b) => b.pct - a.pct || a.member.name.localeCompare(b.member.name));
+      .sort((a, b) => compareNames(a.member.name, b.member.name));
   }, [classMembers, attendanceByMember, ts]);
   const lateAbsentTotals = useMemo(() => {
-    const byCount = (key) => (a, b) => b[key] - a[key] || a.member.name.localeCompare(b.member.name);
+    const byCount = (key) => (a, b) => b[key] - a[key] || compareNames(a.member.name, b.member.name);
     return {
       late: memberRows.reduce((n, r) => n + r.late, 0),
       absent: memberRows.reduce((n, r) => n + r.absent, 0),
@@ -5736,7 +5746,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                           ) : list.map((r) => (
                             <div key={r.member.id} style={{ padding: "5px 0", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                               <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13, fontWeight: 600 }}>
-                                <span>{r.member.name}</span>
+                                <span>{displayName(r.member.name)}</span>
                                 <span style={{ color }}>{isLate ? r.late : r.absent}</span>
                               </div>
                               <div style={{ fontSize: 11.5, color: "rgba(245,242,228,0.6)" }}>{(isLate ? r.lateSessions : r.absentSessions).join(", ")}</div>
@@ -5867,7 +5877,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
                     <Avatar name={member.name} photoUrl={member.photoUrl} size={38} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <span style={{ fontSize: 14, fontWeight: 600 }}>{member.name}</span>
+                        <span style={{ fontSize: 14, fontWeight: 600 }}>{displayName(member.name)}</span>
                         <TrackStatusCell status={(member.classStatus && member.classStatus[classItem.id]) || "Enrolled"} dark />
                       </div>
                       <div style={{ fontSize: 12, color: "rgba(245,242,228,0.65)", marginTop: 2 }}>
@@ -6061,7 +6071,7 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
         const pct = ts.length ? Math.round((done / ts.length) * 100) : 0;
         return { member: m, done, total: ts.length, pct };
       })
-      .sort((a, b) => b.pct - a.pct || a.member.name.localeCompare(b.member.name));
+      .sort((a, b) => compareNames(a.member.name, b.member.name));
   }, [classMembers, attendanceByMember, ts]);
 
   return (
@@ -6208,7 +6218,7 @@ function ClassOverview({ classItem, topics, members, attendanceByMember, isLeade
                 <Avatar name={member.name} photoUrl={member.photoUrl} size={44} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <div style={styles.rosterName}>{member.name}</div>
+                    <div style={styles.rosterName}>{displayName(member.name)}</div>
                     <TrackStatusCell status={(member.classStatus && member.classStatus[classItem.id]) || "Enrolled"} />
                   </div>
                   <div style={styles.rosterMeta}>{done} of {total} sessions attended</div>
@@ -6269,7 +6279,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
         />
         <div style={styles.sessionNameWrap} onClick={() => onOpenMember(m, track)} title="View member">
           <Avatar name={m.name} photoUrl={m.photoUrl} size={32} done={done} />
-          <span style={styles.sessionName}>{m.name}</span>
+          <span style={styles.sessionName}>{displayName(m.name)}</span>
           {done && <span style={styles.sessionCheckIcon}>✓</span>}
         </div>
         {done && canEdit && (
@@ -6768,7 +6778,7 @@ function OneOnOneCard({ person, sessions, attendanceByMember, showAdder, onOpen,
         </div>
       </div>
       <div style={{ position: "absolute", left: 12, right: 12, bottom: 12 }}>
-        <div style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.2 }}>{person.name}</div>
+        <div style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, color: "#F5F2E4", lineHeight: 1.2 }}>{displayName(person.name)}</div>
         <div style={{ height: 4, borderRadius: 20, background: "rgba(255,255,255,0.25)", marginTop: 9, overflow: "hidden" }}>
           <div style={{ width: `${pct}%`, height: "100%", background: "#E5A430" }} />
         </div>
@@ -7299,7 +7309,7 @@ function OneOnOneDetailModal({ person, sessions, attendanceByMember, hasClass, o
               <ClassCoverImage classItem={{ name: person.name, photoUrl: person.photoUrl }} />
               <div style={{ position: "absolute", inset: 0, background: "linear-gradient(180deg, rgba(20,18,14,0.15) 0%, rgba(31,56,100,0.35) 55%, rgba(31,56,100,0.98) 100%)" }} />
               <div style={{ position: "absolute", left: 20, right: 20, bottom: 14 }}>
-                <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700 }}>{person.name}</div>
+                <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700 }}>{displayName(person.name)}</div>
                 <div style={{ fontSize: 12, color: "rgba(245,242,228,0.8)", marginTop: 4 }}>{done} of {sessions.length} session{sessions.length === 1 ? "" : "s"} done · {pct}%</div>
               </div>
             </div>
@@ -7450,7 +7460,7 @@ function PendingRegistrationRow({ pending, classes, members, onApprove, onReject
     <div style={styles.lightCard}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontWeight: 700, color: "#23211D" }}>{pending.name}</div>
+          <div style={{ fontWeight: 700, color: "#23211D" }}>{displayName(pending.name)}</div>
           <div style={styles.rosterMeta}>
             Wants to join <strong>{className}</strong>
             {(() => {
@@ -7481,7 +7491,7 @@ function PendingRegistrationRow({ pending, classes, members, onApprove, onReject
           <select style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
             <option value="">Add as new person</option>
             {duplicates.map((d) => (
-              <option key={d.id} value={d.id}>Merge into existing: {d.name}</option>
+              <option key={d.id} value={d.id}>Merge into existing: {displayName(d.name)}</option>
             ))}
           </select>
         </div>
@@ -7535,7 +7545,7 @@ function PendingOneOnOneRow({ person, sessions, attendanceByMember, members, onA
     <div style={styles.lightCard}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontWeight: 700, color: "#23211D" }}>{person.name}</div>
+          <div style={{ fontWeight: 700, color: "#23211D" }}>{displayName(person.name)}</div>
           <div style={styles.rosterMeta}>
             {person.selfRegistered ? "Self-registered under" : "Added to ONE2ONE by"} <strong>{person.createdBy || "unknown"}</strong>
             {sessions.length > 0 ? ` · ${done} of ${sessions.length} session${sessions.length === 1 ? "" : "s"} done` : ""}
@@ -7563,7 +7573,7 @@ function PendingOneOnOneRow({ person, sessions, attendanceByMember, members, onA
           <select style={styles.modalInput} value={mergeId} onChange={(e) => setMergeId(e.target.value)}>
             <option value="">Add as new person</option>
             {duplicates.map((d) => (
-              <option key={d.id} value={d.id}>Merge into existing: {d.name}</option>
+              <option key={d.id} value={d.id}>Merge into existing: {displayName(d.name)}</option>
             ))}
           </select>
         </div>
@@ -7912,7 +7922,7 @@ function App() {
   const myOneOnOne = useMemo(
     () => oneOnOneRaw
       .filter((p) => isLeader || p.createdBy === currentEmail)
-      .sort((a, b) => (a.name || "").localeCompare(b.name || "")),
+      .sort((a, b) => compareNames(a.name, b.name)),
     [oneOnOneRaw, currentEmail, isLeader]
   );
   // Newly added ONE2ONE members wait as status "pending" until a
@@ -7922,7 +7932,7 @@ function App() {
   // unfiltered for them); ONE2ONE-only leaders only ever see their own.
   const oneOnOnePendingCount = useMemo(() => myOneOnOne.filter((p) => p.status === "pending").length, [myOneOnOne]);
   const pendingOneOnOnePeople = useMemo(
-    () => oneOnOneRaw.filter((p) => p.status === "pending").sort((a, b) => (a.name || "").localeCompare(b.name || "")),
+    () => oneOnOneRaw.filter((p) => p.status === "pending").sort((a, b) => compareNames(a.name, b.name)),
     [oneOnOneRaw]
   );
   // ONE2ONE leaders are locked to the ONE2ONE tab; anyone with no
