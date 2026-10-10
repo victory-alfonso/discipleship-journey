@@ -1235,6 +1235,96 @@ function FancySelect({ value, onChange, children, style, required, disabled, nam
   );
 }
 
+// Styled replacement for <input type="date"> (the browser's own calendar popup looks out of place).
+// Drop-in: `value` is "YYYY-MM-DD" (or ""), `onChange` is called with { target: { value } }.
+const FD_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+function fdIso(y, m, d) { return `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`; }
+function FancyDate({ value, onChange, style, disabled, placeholder = "Select date", ...rest }) {
+  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
+  const [view, setView] = useState({ y: 0, m: 0 });
+  const btnRef = useRef(null);
+  const popRef = useRef(null);
+  const cur = String(value || "");
+  const parts = /^(\d{4})-(\d{2})-(\d{2})/.exec(cur);
+  const sel = parts ? { y: +parts[1], m: +parts[2] - 1, d: +parts[3] } : null;
+  const now = new Date();
+  const todayIso = fdIso(now.getFullYear(), now.getMonth(), now.getDate());
+  const layout = {}, look = {};
+  Object.keys(style || {}).forEach((k) => { (FANCY_LAYOUT_KEYS.includes(k) ? layout : look)[k] = style[k]; });
+  const label = sel ? new Date(sel.y, sel.m, sel.d).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
+
+  const openMenu = () => {
+    if (disabled || !btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    const W = 280, H = 340;
+    const below = window.innerHeight - r.bottom - 12, above = r.top - 12;
+    const up = below < H && above > below;
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - W - 8));
+    setPos({ left, width: W, top: up ? undefined : r.bottom + 4, bottom: up ? window.innerHeight - r.top + 4 : undefined });
+    setView(sel ? { y: sel.y, m: sel.m } : { y: now.getFullYear(), m: now.getMonth() });
+    setOpen(true);
+  };
+  const close = () => setOpen(false);
+  const pick = (iso) => { setOpen(false); if (iso !== cur && onChange) onChange({ target: { value: iso }, currentTarget: { value: iso } }); if (btnRef.current) btnRef.current.focus(); };
+  useEffect(() => {
+    if (!open) return;
+    const onMove = () => setOpen(false);
+    const onScroll = (e) => { if (popRef.current && e.target && e.target.nodeType === 1 && popRef.current.contains(e.target)) return; setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("resize", onMove); window.removeEventListener("scroll", onScroll, true); window.removeEventListener("keydown", onKey); };
+  }, [open]);
+  const shift = (n) => setView((v) => { const t = v.y * 12 + v.m + n; return { y: Math.floor(t / 12), m: ((t % 12) + 12) % 12 }; });
+  const first = new Date(view.y, view.m, 1).getDay();
+  const days = new Date(view.y, view.m + 1, 0).getDate();
+  const cells = [...Array(first).fill(null), ...Array.from({ length: days }, (_, i) => i + 1)];
+  const navBtn = { width: 30, height: 30, borderRadius: 8, border: "none", background: "transparent", cursor: "pointer", fontSize: 16, color: "#23211D", fontFamily: "inherit" };
+
+  return (
+    <div className="dj-fs" style={{ position: "relative", ...layout }}>
+      <button type="button" ref={btnRef} disabled={disabled} onClick={() => (open ? close() : openMenu())} aria-haspopup="dialog" aria-expanded={open} aria-label={rest["aria-label"]}
+        style={{ ...look, boxSizing: "border-box", width: "100%", marginBottom: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, textAlign: "left", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit", appearance: "none", WebkitAppearance: "none", opacity: disabled ? 0.6 : look.opacity }}>
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", opacity: label ? 1 : 0.55 }}>{label || placeholder}</span>
+        <span aria-hidden="true" style={{ fontSize: 13, opacity: 0.7, flexShrink: 0 }}>📅</span>
+      </button>
+      {open && pos && ReactDOM.createPortal(
+        <>
+          <div style={{ position: "fixed", inset: 0, zIndex: 100000 }} onClick={close} />
+          <div ref={popRef} role="dialog" style={{ position: "fixed", zIndex: 100001, left: pos.left, top: pos.top, bottom: pos.bottom, width: pos.width, boxSizing: "border-box", background: "#FFFDF6", border: "1px solid rgba(35,33,29,0.14)", borderRadius: 14, padding: 12, boxShadow: "0 16px 36px -12px rgba(20,18,14,0.45)", fontFamily: "inherit", color: "#23211D" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <button type="button" style={navBtn} onClick={() => shift(-1)} aria-label="Previous month">‹</button>
+              <div style={{ fontWeight: 700, fontSize: 14 }}>{FD_MONTHS[view.m]} {view.y}</div>
+              <button type="button" style={navBtn} onClick={() => shift(1)} aria-label="Next month">›</button>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 2, textAlign: "center" }}>
+              {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => <div key={i} style={{ fontSize: 11, fontWeight: 700, color: "rgba(35,33,29,0.5)", padding: "4px 0" }}>{d}</div>)}
+              {cells.map((d, i) => {
+                if (!d) return <div key={"e" + i} />;
+                const iso = fdIso(view.y, view.m, d);
+                const isSel = iso === cur.slice(0, 10), isToday = iso === todayIso;
+                return (
+                  <button key={iso} type="button" onClick={() => pick(iso)}
+                    style={{ height: 34, borderRadius: 9, border: isToday && !isSel ? "1px solid #E5A430" : "1px solid transparent", background: isSel ? "#1F3864" : "transparent", color: isSel ? "#fff" : "#23211D", fontWeight: isSel || isToday ? 700 : 500, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}
+                    onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = "#F1EAD6"; }}
+                    onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>{d}</button>
+                );
+              })}
+            </div>
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+              <button type="button" style={{ ...navBtn, width: "auto", padding: "0 10px", fontSize: 12.5, fontWeight: 600, color: "#7A6E4E" }} onClick={() => pick("")}>Clear</button>
+              <button type="button" style={{ ...navBtn, width: "auto", padding: "0 10px", fontSize: 12.5, fontWeight: 700, color: "#1F3864" }} onClick={() => pick(todayIso)}>Today</button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+    </div>
+  );
+}
+
 // Birthdate as Month / Day / Year dropdowns instead of the native
 // <input type="date">, whose calendar-grid picker some mobile browsers
 // render slowly (scrolling year-by-year to reach an older birth year)
@@ -3682,7 +3772,7 @@ tr{page-break-inside:avoid}
               <option value="">Session (optional)</option>
               {classTopics.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </FancySelect>
-            <input type="date" value={form.date || ""} onChange={(e) => setForm({ ...form, date: e.target.value })} style={inputStyle} />
+            <FancyDate value={form.date || ""} onChange={(e) => setForm({ ...form, date: e.target.value })} style={inputStyle} />
             <button style={styles.primaryBtn} onClick={submit}>{form.id ? "Save" : "Add"}</button>
             <button style={{ ...inputStyle, cursor: "pointer" }} onClick={() => setForm(null)}>Cancel</button>
           </div>
@@ -6527,8 +6617,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
         </div>
         {done && canEdit && (
           <span style={styles.topicMeta}>
-            <input
-              type="date"
+            <FancyDate
               value={toDateInputValue(a && a.dateAttended)}
               onChange={(e) => { if (e.target.value) onSetAttendanceDate(m.id, topic.id, e.target.value); }}
               style={styles.sessionDateInput}
