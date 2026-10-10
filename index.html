@@ -2532,6 +2532,9 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
   const streamRef = useRef(null);
   const rafRef = useRef(null);
   const lastScanRef = useRef({ id: null, at: 0 });
+  // Members already checked in during this scan session (local, so a quick re-scan
+  // warns even before the saved attendance data has refreshed).
+  const scannedRef = useRef({});
   const [status, setStatus] = useState({ type: "idle", text: "Point the camera at the member's QR code." });
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
@@ -2680,7 +2683,7 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
     if (!text.startsWith("DJMEMBER:")) return;
     const memberId = text.slice("DJMEMBER:".length);
     const now = Date.now();
-    if (lastScanRef.current.id === memberId && now - lastScanRef.current.at < 3000) return;
+    if (lastScanRef.current.id === memberId && now - lastScanRef.current.at < 2000) return;
     lastScanRef.current = { id: memberId, at: now };
 
     const member = membersById[memberId];
@@ -2690,13 +2693,13 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
     }
     const scannedAt = new Date();
     const rec = (attendanceByMember[memberId] || {})[topic.id] || {};
-    const already = !!rec.attended;
+    const already = !!rec.attended || !!scannedRef.current[memberId];
     // On time = 9:10 AM or earlier, late = 9:11 AM or later. Week 0 has no split.
     const showStatus = !isWeekZeroTopic(topic);
 
     if (already) {
       // Already scanned in: warn, and leave the saved check-in time untouched.
-      const first = rec.dateAttended;
+      const first = rec.dateAttended || scannedRef.current[memberId];
       const wasLate = showStatus && first && isLateAttendance(first);
       const firstStr = first ? fmtTime(first) : "";
       const statusWord = showStatus ? (wasLate ? "Late" : "On time") : "";
@@ -2710,6 +2713,7 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
       return;
     }
 
+    scannedRef.current[memberId] = scannedAt;
     onToggleAttendance(memberId, topic.id, true);
     const isLate = showStatus && isLateAttendance(scannedAt);
     const statusWord = isLate ? "Late" : "On time";
