@@ -3056,6 +3056,7 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
   const [openId, setOpenId] = useState(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [editGrades, setEditGrades] = useState(true); // tick box in the quiz modal: can grades be edited?
+  const [gbEdit, setGbEdit] = useState(false); // tick box in the Gradebook tab
   const classItem = (classes || []).find((c) => c.id === classId) || (classes || [])[0] || null;
   // Surname first ("Santos, Mary Grace"), sorted by surname then first name.
   const classMembers = useMemo(
@@ -3077,6 +3078,13 @@ function QuizTab({ classes, topics, members, assessments, gradeDocs, isLeader, o
   const inputStyle = { padding: "7px 10px", borderRadius: 8, border: "1px solid rgba(31,56,100,0.25)", fontSize: 14, background: "#fff", color: "#23211D" };
   const fmtNum = (n) => Math.round(n * 10) / 10;
   // Score-entry modal: blur first so a focused score box still saves (onBlur) before it unmounts.
+  // Gradebook starts locked if the class already has grades, editable if it is still empty.
+  const classHasScores = (cls) => {
+    if (!cls) return false;
+    const ms = getClassMembers(members, cls.id);
+    const as = (assessments || []).filter((x) => x.class === cls.name);
+    return as.some((x) => ms.some((m) => scoreOf(m.id, x.id) !== null));
+  };
   // Opening a quiz that already has grades starts locked (tick the box to edit); a fresh quiz starts editable.
   const openScores = (a) => {
     setEditGrades(!classMembers.some((m) => scoreOf(m.id, a.id) !== null));
@@ -3286,12 +3294,12 @@ tr{page-break-inside:avoid}
   return (
     <div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", marginBottom: 14 }}>
-        <select value={classItem.id} onChange={(e) => { setClassId(e.target.value); setOpenId(null); setForm(null); }} style={{ ...inputStyle, fontWeight: 700, minWidth: 180 }}>
+        <select value={classItem.id} onChange={(e) => { setClassId(e.target.value); setOpenId(null); setForm(null); setGbEdit(!classHasScores((classes || []).find((c) => c.id === e.target.value))); }} style={{ ...inputStyle, fontWeight: 700, minWidth: 180 }}>
           {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
         </select>
         <div style={{ display: "flex", gap: 6 }}>
           {[["quizzes", "Quizzes"], ["gradebook", "Gradebook"]].map(([k, label]) => (
-            <button key={k} onClick={() => setView(k)} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(31,56,100,0.25)", background: view === k ? "#1F3864" : "transparent", color: view === k ? "#fff" : "#23211D" }}>{label}</button>
+            <button key={k} onClick={() => { setView(k); if (k === "gradebook") setGbEdit(!classHasScores(classItem)); }} style={{ padding: "7px 14px", borderRadius: 8, fontSize: 13.5, fontWeight: 700, cursor: "pointer", border: "1px solid rgba(31,56,100,0.25)", background: view === k ? "#1F3864" : "transparent", color: view === k ? "#fff" : "#23211D" }}>{label}</button>
           ))}
         </div>
         {classAssessments.length > 0 && classMembers.length > 0 && (
@@ -3461,6 +3469,12 @@ tr{page-break-inside:avoid}
           <div style={styles.emptyNote}>{classMembers.length === 0 ? "No members in this class yet." : "Add a quiz or activity to start the gradebook."}</div>
         ) : (
           <div style={{ ...styles.lightCard, overflowX: "auto" }}>
+            {isLeader && (
+              <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5, fontWeight: 600, color: "#23211D", cursor: "pointer", marginBottom: 10 }}>
+                <input type="checkbox" checked={gbEdit} onChange={(e) => setGbEdit(e.target.checked)} />
+                Allow editing grades
+              </label>
+            )}
             <table style={{ borderCollapse: "collapse", fontSize: 13.5, minWidth: "100%" }}>
               <thead>
                 <tr>
@@ -3480,7 +3494,7 @@ tr{page-break-inside:avoid}
                     <tr key={m.id} style={{ borderTop: "1px solid rgba(31,56,100,0.12)" }}>
                       <td style={{ padding: "6px 10px", position: "sticky", left: 0, background: "#F6F0DE", whiteSpace: "nowrap" }}>{m.name}</td>
                       {classAssessments.map((a) => (
-                        <td key={a.id} style={{ padding: "4px 10px", textAlign: "center" }}>{scoreInput(m, a)}</td>
+                        <td key={a.id} style={{ padding: "4px 10px", textAlign: "center" }}>{scoreInput(m, a, !gbEdit)}</td>
                       ))}
                       <td style={{ padding: "6px 10px", textAlign: "center", fontWeight: 700, whiteSpace: "nowrap" }}>
                         {possible ? `${fmtNum(got)}/${possible}` : "—"}
