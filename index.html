@@ -2737,12 +2737,12 @@ function OneOnOneQrModal({ person, onClose, title, intro }) {
 // Printable sheet of every member's QR code, for leaders who
 // want to hand out physical ID cards in one go.
 function PrintAllQrModal({ members, onClose }) {
-  return (
-    <div className="qr-print-overlay" style={{ ...styles.modalOverlay, backdropFilter: "none", WebkitBackdropFilter: "none" }} onClick={onClose}>
-      {/* no blur here, 20+ QR canvases + backdrop-filter made the modal render half-painted */}
+  // portal to body, the toolbar has backdrop-filter so a fixed overlay stays inside it
+  return ReactDOM.createPortal(
+    <div className="qr-print-overlay" style={styles.modalOverlay} onClick={onClose}>
       <div
         className="qr-print-card"
-        style={{ ...styles.modalCard, backdropFilter: "none", WebkitBackdropFilter: "none", background: "#FFFFFF", animation: "none", maxWidth: 720, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column" }}
+        style={{ ...styles.modalCard, maxWidth: 720, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column" }}
         onClick={(e) => e.stopPropagation()}
       >
         <div style={styles.modalTitle} className="no-print">Print QR ID Cards ({members.length})</div>
@@ -2762,7 +2762,8 @@ function PrintAllQrModal({ members, onClose }) {
           <button style={styles.modalConfirmBtn} onClick={onClose}>Close</button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
