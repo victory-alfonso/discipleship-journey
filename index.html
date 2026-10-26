@@ -1869,6 +1869,11 @@ const ON_TIME_CUTOFF_MINUTES = 9 * 60 + 10;
 function isWeekZeroTopic(topic) {
   return /^\s*week\s*0+(?!\d)/i.test((topic && topic.name) || "");
 }
+// ONE2ONE sessions can be conducted at any time, so they don't use the
+// on-time/late split either.
+function isNoLateSplitTopic(topic) {
+  return isWeekZeroTopic(topic) || isOneOnOneClassName(topic && topic.class);
+}
 function isLateAttendance(dateAttended) {
   if (!dateAttended) return false;
   const dt = dateAttended.toDate ? dateAttended.toDate() : new Date(dateAttended);
@@ -3047,7 +3052,7 @@ function ScanAttendanceModal({ topic, members, attendanceByMember, onToggleAtten
     const already = !!((attendanceByMember[memberId] || {})[topic.id] || {}).attended;
     onToggleAttendance(memberId, topic.id, true);
     // Week 0 sessions don't use the on-time/late split (see isWeekZeroTopic).
-    const isLate = !isWeekZeroTopic(topic) && isLateAttendance(scannedAt);
+    const isLate = !isNoLateSplitTopic(topic) && isLateAttendance(scannedAt);
     const lateTag = isLate ? " (late)" : "";
     setStatus({
       type: isLate ? "late" : "ok",
@@ -6041,7 +6046,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
         // Late / absent only count from Week 1 onwards (Week 0 is just orientation).
         // Absent = a conducted session the member didn't attend.
         const counted = ts.filter((t) => !isWeekZeroTopic(t));
-        const lateSessions = counted.filter((t) => att[t.id] && att[t.id].attended && isLateAttendance(att[t.id].dateAttended));
+        const lateEligible = counted.filter((t) => !isNoLateSplitTopic(t));
+        const lateSessions = lateEligible.filter((t) => att[t.id] && att[t.id].attended && isLateAttendance(att[t.id].dateAttended));
         const absentSessions = counted.filter((t) => t.conducted && !(att[t.id] && att[t.id].attended));
         const late = lateSessions.length;
         const absent = absentSessions.length;
@@ -6726,7 +6732,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
     () => topicAttendanceLists(classMembers, attendanceByMember, topic.id),
     [classMembers, attendanceByMember, topic.id]
   );
-  const weekZero = isWeekZeroTopic(topic);
+  const weekZero = isNoLateSplitTopic(topic);
   const { onTime, late } = useMemo(() => {
     if (weekZero) return { onTime: attended, late: [] };
     const o = [], l = [];
