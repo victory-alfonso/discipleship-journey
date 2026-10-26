@@ -584,6 +584,95 @@ function SessionPickerHost() {
 }
 
 // ============================================================
+// BATCH PICKER — shown when a track is set to "Completed", asks
+// which batch or year they finished it in. Usage:
+//   const batch = await askBatchPicker({ title, message, batches, defaultBatch, confirmLabel });
+//   if (batch) { ... }
+// <BatchPickerHost /> is mounted once at the root.
+// ============================================================
+let batchPickerListener = null;
+function askBatchPicker(opts) {
+  return new Promise((resolve) => {
+    if (!batchPickerListener) { resolve(null); return; }
+    batchPickerListener({ ...opts, resolve });
+  });
+}
+
+const BATCH_PICKER_OTHER = "__other__";
+
+function BatchPickerHost() {
+  const [req, setReq] = useState(null);
+  const [selected, setSelected] = useState("");
+  const [customValue, setCustomValue] = useState("");
+
+  useEffect(() => {
+    batchPickerListener = (r) => {
+      const list = [...(r.batches || [])];
+      if (r.defaultBatch && !list.includes(r.defaultBatch)) list.push(r.defaultBatch);
+      setReq({ ...r, batches: list });
+      setSelected(r.defaultBatch || list[0] || BATCH_PICKER_OTHER);
+      setCustomValue("");
+    };
+    return () => { batchPickerListener = null; };
+  }, []);
+
+  const close = (result) => {
+    if (req) req.resolve(result);
+    setReq(null);
+  };
+
+  useEffect(() => {
+    if (!req) return;
+    const onKey = (e) => { if (e.key === "Escape") close(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [req]);
+
+  if (!req) return null;
+  const picked = selected === BATCH_PICKER_OTHER ? customValue.trim() : selected;
+  return (
+    <div style={{ ...styles.modalOverlay, zIndex: 10001 }} onClick={() => close(null)}>
+      <div role="dialog" aria-modal="true" style={{ ...styles.modalCard, maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>{req.title || "Select batch"}</div>
+        {req.message && (
+          <div style={{ fontSize: 14, color: "#4A4230", lineHeight: 1.5, marginBottom: 14 }}>{req.message}</div>
+        )}
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#7A6E4E", marginBottom: 6 }}>Batch / Year completed</div>
+        <select
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+          style={{ width: "100%", padding: "9px 10px", fontSize: 14, borderRadius: 10, border: "1px solid #D8CFB0", background: "#FFFFFF", color: "#23211D", marginBottom: 10 }}
+        >
+          {req.batches.map((b) => <option key={b} value={b}>{b}</option>)}
+          <option value={BATCH_PICKER_OTHER}>Other (type a batch or year)…</option>
+        </select>
+        {selected === BATCH_PICKER_OTHER && (
+          <input
+            type="text"
+            autoFocus
+            value={customValue}
+            placeholder="e.g. 2025 or Batch 3"
+            onChange={(e) => setCustomValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter" && picked) close(picked); }}
+            style={{ width: "100%", padding: "9px 10px", fontSize: 14, borderRadius: 10, border: "1px solid #D8CFB0", background: "#FFFFFF", color: "#23211D", marginBottom: 10 }}
+          />
+        )}
+        <div style={styles.modalActions}>
+          <button style={styles.modalCancelBtn} onClick={() => close(null)}>Cancel</button>
+          <button
+            style={{ ...styles.modalConfirmBtn, ...(picked ? {} : { opacity: 0.5, cursor: "not-allowed" }) }}
+            disabled={!picked}
+            onClick={() => close(picked)}
+          >
+            {req.confirmLabel || "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // NOTICES (toast) — replaces native showError() so errors don't
 // block the UI. Call showError("...") / showNotice("...") from
 // anywhere; <ToastHost /> (mounted once at the root) renders them.
@@ -4764,7 +4853,10 @@ function DiscipleshipTrackFields({ trackStatus, trackBatch, onChange, onBatchCha
           // enrollment once nothing is open.
           const noOpenBatch = !!matchingClass && batchOptions.length === 0;
           const statusOptions = noOpenBatch && status === "Not Enrolled" ? ["Not Enrolled"] : TRACK_STATUSES;
-          const effectiveBatchOptions = batchOptions.length ? batchOptions : [currentBatch];
+          const baseBatchOptions = batchOptions.length ? batchOptions : [currentBatch];
+          // keep a saved batch (finished batch or typed year) visible in the dropdown
+          const savedBatch = trackBatch && trackBatch[track];
+          const effectiveBatchOptions = savedBatch && !baseBatchOptions.includes(savedBatch) ? [...baseBatchOptions, savedBatch] : baseBatchOptions;
           // Same "currently running" batch the class card/detail view
           // shows by default — used below only as a display fallback;
           // onChange (in the parent's setTrack) is what actually seeds
@@ -4898,14 +4990,26 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
   const duplicates = useMemo(() => findPossibleDuplicates(members || [], name), [members, name]);
   const [mergeId, setMergeId] = useState("");
 
-  const setTrack = (track, value) => {
+  const setTrack = async (track, value) => {
+    let pickedBatch = null;
+    if (value === "Completed" && trackStatus[track] !== "Completed") {
+      const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === track);
+      const className = matchingClass ? matchingClass.name : track;
+      pickedBatch = await askBatchPicker({
+        title: "Mark as completed?",
+        message: `Which batch or year did ${(name || "").trim() || "this member"} complete ${className}?`,
+        batches: matchingClass ? getBatchesForClass(matchingClass, topics || []) : ["Batch 1"],
+        defaultBatch: trackBatch[track] || defaultOpenBatchForTrack(classes, topics, track),
+        confirmLabel: "Confirm",
+      });
+      if (!pickedBatch) return;
+    }
     setTrackStatus((prev) => ({ ...prev, [track]: value }));
-    // Freshly enrolling (no batch chosen for this track yet) — land in
-    // the same "currently running" batch the class card/detail view
-    // shows by default, so this saves to match what the dropdown
-    // displays instead of silently falling back to "Batch 1".
-    if (value !== "Not Enrolled" && !trackBatch[track]) {
-      setTrackBatch((prev) => ({ ...prev, [track]: defaultOpenBatchForTrack(classes, topics, track) }));
+    if (pickedBatch) {
+      setTrackBatch((prev) => ({ ...prev, [track]: pickedBatch }));
+    } else if (value !== "Not Enrolled") {
+      // fresh enrollment, use the same running batch the class card shows
+      setTrackBatch((prev) => (prev[track] ? prev : { ...prev, [track]: defaultOpenBatchForTrack(classes, topics, track) }));
     }
   };
   const setBatch = (track, value) => {
@@ -5115,13 +5219,16 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
     if (value === "Completed" && prevValue !== "Completed") {
       const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === track);
       const className = matchingClass ? matchingClass.name : track;
-      const ok = await askConfirm({
+      const pickedBatch = await askBatchPicker({
         title: "Mark as completed?",
-        message: `Do you want to tag ${member.name} as completed in ${className}? If yes, all of their sessions in ${className} will be marked as attended.`,
+        message: `Do you want to tag ${member.name} as completed in ${className}? Pick the batch or year they completed it in. All of their sessions in that batch will be marked as attended.`,
+        batches: matchingClass ? getBatchesForClass(matchingClass, topics || []) : ["Batch 1"],
+        defaultBatch: trackBatch[track] || defaultOpenBatchForTrack(classes, topics, track),
         confirmLabel: "Yes, complete all",
       });
-      if (!ok) return;
-      setAutoCompleteTracks((prev) => ({ ...prev, [track]: matchingClass ? { classId: matchingClass.id, batch: trackBatch[track] || "Batch 1" } : null }));
+      if (!pickedBatch) return;
+      setTrackBatch((prev) => ({ ...prev, [track]: pickedBatch }));
+      setAutoCompleteTracks((prev) => ({ ...prev, [track]: matchingClass ? { classId: matchingClass.id, batch: pickedBatch } : null }));
       setSessionOverrides((prev) => {
         if (!(track in prev)) return prev;
         const next = { ...prev };
@@ -5169,7 +5276,7 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
     // shows by default, so this saves to match what the dropdown
     // displays instead of silently falling back to "Batch 1".
     if ((prevValue === "Not Enrolled" || !prevValue) && value !== "Not Enrolled" && !trackBatch[track]) {
-      setTrackBatch((prev) => ({ ...prev, [track]: defaultOpenBatchForTrack(classes, topics, track) }));
+      setTrackBatch((prev) => (prev[track] ? prev : { ...prev, [track]: defaultOpenBatchForTrack(classes, topics, track) }));
     }
   };
   const setBatch = (track, value) => {
@@ -9998,6 +10105,7 @@ root.render(
     <ToastHost />
     <ConfirmHost />
     <SessionPickerHost />
+    <BatchPickerHost />
     <LogoSparkHost />
     <SplashScreen />
   </>
