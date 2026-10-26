@@ -5882,45 +5882,66 @@ function memberRingStatus(r, sessionCount) {
   if (r.done === 0) return "notStarted";
   return "onTrack";
 }
-function ClassProgressRings({ sessionCount, conductedCount, rows, sessionNames }) {
+function sessionShortName(name) {
+  const m = /^\s*(week\s*\d+)/i.exec(name || "");
+  return m ? m[1].replace(/\s+/, " ").replace(/^./, (c) => c.toUpperCase()) : (name || "Session");
+}
+function ClassProgressRings({ sessionCount, conductedCount, rows, sessionNames, sessionStats }) {
   const [openKey, setOpenKey] = useState(null);
   const [innerHover, setInnerHover] = useState(null); // status key of the inner-ring slice under the pointer
   const [segHover, setSegHover] = useState(null); // index of the outer-ring session under the pointer
+  const lastStatRef = useRef(null); // keeps the last hovered session's numbers so the rings can animate back out smoothly
   const buckets = {};
   RING_STATUS.forEach((st) => { buckets[st.key] = []; });
   rows.forEach((r) => { buckets[memberRingStatus(r, sessionCount)].push(r); });
   const segs = RING_STATUS.map((st) => ({ ...st, list: buckets[st.key], v: buckets[st.key].length })).filter((x) => x.v > 0);
   const total = rows.length;
   const NS = 190, cx = NS / 2;
-  const arcs = (r, items, sum, gap) => {
-    const c = 2 * Math.PI * r;
-    let cum = 0;
-    return items.map((it) => {
-      const frac = it.v / sum;
-      const len = Math.max(frac * c - (items.length > 1 ? gap : 0), 0.5);
-      const el = <circle key={it.key} r={r} fill="none" stroke={it.color} strokeWidth={14} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-cum * c} />;
-      cum += frac;
-      return el;
-    });
-  };
+  // Details of the conducted session under the pointer (null for the overall view / upcoming sessions).
+  const hs = segHover !== null && segHover < conductedCount && sessionStats && sessionStats[segHover] ? sessionStats[segHover] : null;
+  if (hs) lastStatRef.current = hs;
+  const shown = hs || lastStatRef.current; // geometry for the session ring while it fades in/out
+  const sessionItems = (st) => st ? [
+    { key: "sp", label: st.noLate ? "Present" : "On time", color: "#7BD18F", v: st.onTime },
+    { key: "sl", label: "Late", color: "#E5C77A", v: st.late },
+    { key: "sa", label: "Absent", color: "#FF9E7A", v: st.absent },
+  ] : [];
   const pctSessions = sessionCount ? Math.round((conductedCount / sessionCount) * 100) : 0;
   const cream = "rgba(245,242,228,0.75)";
+  const tipBox = { position: "absolute", top: -6, left: "50%", transform: "translate(-50%, -100%)", zIndex: 7, background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 10, padding: "6px 10px", fontSize: 12.5, pointerEvents: "none", boxShadow: "0 10px 24px -10px rgba(0,0,0,0.6)", animation: "cprFade 0.18s ease both" };
+  const tr = "stroke-dasharray 0.45s ease, stroke-dashoffset 0.45s ease, opacity 0.25s ease, stroke-width 0.15s ease";
   return (
     <div style={{ marginBottom: 22 }}>
+      <style>{"@keyframes cprFade{from{opacity:0;transform:translate(-50%,-100%) translateY(4px)}to{opacity:1;transform:translate(-50%,-100%)}} @keyframes cprFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}"}</style>
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 14, position: "relative" }}>
         {segHover === null && innerHover !== null && (() => {
           const sg = segs.find((x) => x.key === innerHover);
           return sg ? (
-            <div style={{ position: "absolute", top: -6, left: "50%", transform: "translate(-50%, -100%)", zIndex: 7, background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 10, padding: "6px 10px", fontSize: 12.5, whiteSpace: "nowrap", pointerEvents: "none", boxShadow: "0 10px 24px -10px rgba(0,0,0,0.6)" }}>
+            <div style={{ ...tipBox, whiteSpace: "nowrap" }}>
               <span style={{ fontWeight: 700, color: sg.color }}>{sg.label}</span>
               <span style={{ color: "rgba(245,242,228,0.65)", marginLeft: 6 }}>· {sg.v} member{sg.v === 1 ? "" : "s"} · {Math.round((sg.v / total) * 100)}%</span>
             </div>
           ) : null;
         })()}
-        {segHover !== null && (
-          <div style={{ position: "absolute", top: -6, left: "50%", transform: "translate(-50%, -100%)", zIndex: 7, background: "rgba(18,26,50,0.98)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 10, padding: "6px 10px", fontSize: 12.5, whiteSpace: "nowrap", pointerEvents: "none", boxShadow: "0 10px 24px -10px rgba(0,0,0,0.6)" }}>
+        {segHover !== null && !hs && (
+          <div style={{ ...tipBox, whiteSpace: "nowrap" }}>
             <span style={{ fontWeight: 700 }}>{(sessionNames && sessionNames[segHover]) || `Session ${segHover + 1}`}</span>
-            <span style={{ color: "rgba(245,242,228,0.65)", marginLeft: 6 }}>{segHover < conductedCount ? "· conducted" : "· not yet conducted"}</span>
+            <span style={{ color: "rgba(245,242,228,0.65)", marginLeft: 6 }}>· not yet conducted</span>
+          </div>
+        )}
+        {hs && (
+          <div key={segHover} style={{ ...tipBox, width: "max-content", maxWidth: 210, padding: "8px 11px" }}>
+            <div style={{ fontWeight: 700, lineHeight: 1.25 }}>{hs.name}</div>
+            <div style={{ color: "rgba(245,242,228,0.65)", fontSize: 11.5, marginTop: 1 }}>Conducted{hs.date ? ` · ${hs.date}` : ""}</div>
+            <div style={{ display: "flex", gap: 10, marginTop: 6, fontSize: 12 }}>
+              {sessionItems(hs).filter((it) => !(hs.noLate && it.key === "sl")).map((it) => (
+                <span key={it.key} style={{ display: "inline-flex", alignItems: "center", gap: 4, whiteSpace: "nowrap" }}>
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: it.color }} />
+                  <b>{it.v}</b> <span style={{ color: "rgba(245,242,228,0.65)" }}>{it.label.toLowerCase()}</span>
+                </span>
+              ))}
+            </div>
+            <div style={{ color: "rgba(245,242,228,0.65)", fontSize: 11.5, marginTop: 4 }}>{hs.present} of {hs.total} attended · {hs.total ? Math.round((hs.present / hs.total) * 100) : 0}%</div>
           </div>
         )}
         <svg width={NS} height={NS} viewBox={`0 0 ${NS} ${NS}`} role="img" aria-label={`${conductedCount} of ${sessionCount} sessions conducted; ${total} members by attendance status`}>
@@ -5929,23 +5950,53 @@ function ClassProgressRings({ sessionCount, conductedCount, rows, sessionNames }
             {sessionCount > 0 && Array.from({ length: sessionCount }, (_, i) => {
               const c = 2 * Math.PI * 82, len = Math.max(c / sessionCount - (sessionCount > 1 ? 2 : 0), 0.5);
               const on = i < conductedCount;
+              const col = `hsl(${Math.round((i * 360) / Math.max(sessionCount, 1) + 8)} 75% 62%)`;
+              const active = segHover === i;
+              const dim = on && hs && !active;
               return (
-                <circle key={"s" + i} r={82} fill="none" stroke={on ? `hsl(${Math.round((i * 360) / Math.max(sessionCount, 1) + 8)} 75% 62%)` : "transparent"} strokeWidth={segHover === i ? 18 : 14} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-(i * c) / sessionCount} style={{ pointerEvents: "stroke", cursor: "pointer", transition: "stroke-width 0.12s ease" }} onMouseEnter={() => setSegHover(i)} onMouseLeave={() => setSegHover((k) => (k === i ? null : k))} onClick={() => setSegHover((k) => (k === i ? null : i))} />
+                <circle key={"s" + i} r={82} fill="none" stroke={on ? col : "transparent"} strokeWidth={active ? 20 : 14} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={-(i * c) / sessionCount} style={{ pointerEvents: "stroke", cursor: "pointer", transition: "stroke-width 0.15s ease, opacity 0.2s ease, filter 0.2s ease", opacity: dim ? 0.3 : 1, filter: active && on ? `brightness(1.2) drop-shadow(0 0 5px ${col})` : "none" }} onMouseEnter={() => setSegHover(i)} onMouseLeave={() => setSegHover((k) => (k === i ? null : k))} onClick={() => setSegHover((k) => (k === i ? null : i))} />
               );
             })}
             <circle r={58} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth={14} />
-            {(() => {
-              const c = 2 * Math.PI * 58;
-              let cum = 0;
-              return segs.map((sg) => {
-                const frac = sg.v / total, len = Math.max(frac * c - (segs.length > 1 ? 3 : 0), 0.5), off = -cum * c;
-                cum += frac;
-                return <circle key={sg.key} r={58} fill="none" stroke={sg.color} strokeWidth={innerHover === sg.key ? 18 : 14} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={off} style={{ pointerEvents: "stroke", cursor: "pointer", transition: "stroke-width 0.12s ease" }} onMouseEnter={() => { setInnerHover(sg.key); setOpenKey(sg.key); }} onMouseLeave={() => { setInnerHover((k) => (k === sg.key ? null : k)); setOpenKey((k) => (k === sg.key ? null : k)); }} onClick={() => { setInnerHover((k) => (k === sg.key ? null : sg.key)); setOpenKey((k) => (k === sg.key ? null : sg.key)); }} />;
-              });
-            })()}
+            {/* Overall member status ring (fades out while a session is hovered) */}
+            <g style={{ opacity: hs ? 0.08 : 1, transition: "opacity 0.3s ease" }}>
+              {(() => {
+                const c = 2 * Math.PI * 58;
+                let cum = 0;
+                return segs.map((sg) => {
+                  const frac = sg.v / total, len = Math.max(frac * c - (segs.length > 1 ? 3 : 0), 0.5), off = -cum * c;
+                  cum += frac;
+                  return <circle key={sg.key} r={58} fill="none" stroke={sg.color} strokeWidth={innerHover === sg.key ? 18 : 14} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={off} style={{ pointerEvents: hs ? "none" : "stroke", cursor: "pointer", transition: "stroke-width 0.12s ease" }} onMouseEnter={() => { setInnerHover(sg.key); setOpenKey(sg.key); }} onMouseLeave={() => { setInnerHover((k) => (k === sg.key ? null : k)); setOpenKey((k) => (k === sg.key ? null : k)); }} onClick={() => { setInnerHover((k) => (k === sg.key ? null : sg.key)); setOpenKey((k) => (k === sg.key ? null : sg.key)); }} />;
+                });
+              })()}
+            </g>
+            {/* Hovered session's attendance ring (morphs between sessions, fades in/out) */}
+            <g style={{ opacity: hs ? 1 : 0, transition: "opacity 0.3s ease", pointerEvents: "none" }}>
+              {(() => {
+                const items = sessionItems(shown);
+                if (!shown || !items.length) return null;
+                const c = 2 * Math.PI * 58, sum = shown.total || 1, nz = items.filter((x) => x.v > 0).length;
+                let cum = 0;
+                return items.map((it) => {
+                  const frac = it.v / sum;
+                  const len = it.v > 0 ? Math.max(frac * c - (nz > 1 ? 3 : 0), 0.5) : 0;
+                  const off = -cum * c;
+                  cum += frac;
+                  return <circle key={it.key} r={58} fill="none" stroke={it.color} strokeWidth={14} strokeDasharray={`${len} ${c - len}`} strokeDashoffset={off} style={{ transition: tr }} />;
+                });
+              })()}
+            </g>
           </g>
-          <text x={cx} y={cx - 5} textAnchor="middle" fontSize="26" fontWeight="700" fill="#F5F2E4" fontFamily="Georgia, serif">{conductedCount}/{sessionCount}</text>
-          <text x={cx} y={cx + 14} textAnchor="middle" fontSize="11" fill={cream}>sessions</text>
+          {/* Centre text: overall sessions <-> hovered session (crossfade) */}
+          <g style={{ opacity: hs ? 0 : 1, transition: "opacity 0.25s ease" }}>
+            <text x={cx} y={cx - 5} textAnchor="middle" fontSize="26" fontWeight="700" fill="#F5F2E4" fontFamily="Georgia, serif">{conductedCount}/{sessionCount}</text>
+            <text x={cx} y={cx + 14} textAnchor="middle" fontSize="11" fill={cream}>sessions</text>
+          </g>
+          <g style={{ opacity: hs ? 1 : 0, transition: "opacity 0.25s ease" }}>
+            <text x={cx} y={cx - 20} textAnchor="middle" fontSize="10.5" fontWeight="700" fill={cream}>{shown ? sessionShortName(shown.name) : ""}</text>
+            <text x={cx} y={cx + 6} textAnchor="middle" fontSize="24" fontWeight="700" fill="#F5F2E4" fontFamily="Georgia, serif">{shown ? `${shown.present}/${shown.total}` : ""}</text>
+            <text x={cx} y={cx + 21} textAnchor="middle" fontSize="11" fill={cream}>present</text>
+          </g>
         </svg>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, fontSize: 12.5 }}>
@@ -5953,7 +6004,20 @@ function ClassProgressRings({ sessionCount, conductedCount, rows, sessionNames }
         <span style={{ flex: 1 }}>Outer: sessions conducted</span>
         <span style={{ fontWeight: 700 }}>{conductedCount} of {sessionCount} · {pctSessions}%</span>
       </div>
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.15)", paddingTop: 10, fontSize: 11.5, color: cream, marginBottom: 8 }}>Inner: members by status</div>
+      <div style={{ borderTop: "1px solid rgba(255,255,255,0.15)", paddingTop: 10, fontSize: 11.5, color: cream, marginBottom: 8 }}>{hs ? `Inner: ${sessionShortName(hs.name)} attendance` : "Inner: members by status"}</div>
+      {hs ? (
+        <div key={"hs" + segHover} style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px", animation: "cprFadeIn 0.2s ease both" }}>
+          {sessionItems(hs).filter((it) => !(hs.noLate && it.key === "sl")).map((it) => (
+            <div key={it.key} style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+              <span style={{ width: 10, height: 10, borderRadius: "50%", background: it.color, flexShrink: 0, marginTop: 4 }} />
+              <span style={{ minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 12.5, lineHeight: 1.2 }}>{it.label}</span>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 700 }}>{it.v} <span style={{ fontWeight: 400, color: "rgba(245,242,228,0.65)", fontSize: 12 }}>· {hs.total ? Math.round((it.v / hs.total) * 100) : 0}%</span></span>
+              </span>
+            </div>
+          ))}
+        </div>
+      ) : (
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px 12px" }}>
         {segs.map((sg, idx) => (
           <div key={sg.key} style={{ position: "relative", zIndex: openKey === sg.key ? 6 : 1 }} onMouseEnter={() => setOpenKey(sg.key)} onMouseLeave={() => setOpenKey((k) => (k === sg.key ? null : k))}>
@@ -5984,6 +6048,7 @@ function ClassProgressRings({ sessionCount, conductedCount, rows, sessionNames }
           </div>
         ))}
       </div>
+      )}
     </div>
   );
 }
@@ -6066,6 +6131,25 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
   }, [memberRows]);
   const showRings = !isOneOnOne && ts.length > 0 && classMembers.length > 0;
   const conductedCount = ts.filter((t) => t.conducted).length;
+  // Per-session details for the hover card on the sidebar donut (conducted sessions first, same order as the outer ring).
+  const sessionStats = useMemo(() => {
+    return ts.filter((t) => t.conducted).map((t) => {
+      const noLate = isNoLateSplitTopic(t);
+      let present = 0, late = 0, first = null;
+      classMembers.forEach((m) => {
+        const a = (attendanceByMember[m.id] || {})[t.id];
+        if (!(a && a.attended)) return;
+        present++;
+        if (!noLate && isLateAttendance(a.dateAttended)) late++;
+        if (a.dateAttended) {
+          const dt = a.dateAttended.toDate ? a.dateAttended.toDate() : new Date(a.dateAttended);
+          if (!isNaN(dt.getTime()) && (!first || dt < first)) first = dt;
+        }
+      });
+      const total = classMembers.length;
+      return { name: t.name, date: first ? fmtDate(first) : "", noLate, present, onTime: present - late, late, absent: total - present, total };
+    });
+  }, [ts, classMembers, attendanceByMember]);
   const openMemberStat = (key, el) => {
     const r = el.getBoundingClientRect();
     setMemberPopDir(r.top > 230 ? "up" : "down");
@@ -6218,7 +6302,7 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
 
             <div style={detailLabel}>Member Progress</div>
             {showRings ? (
-              <ClassProgressRings sessionCount={ts.length} conductedCount={conductedCount} rows={memberRows} sessionNames={[...ts.filter((t) => t.conducted), ...ts.filter((t) => !t.conducted)].map((t) => t.name)} />
+              <ClassProgressRings sessionCount={ts.length} conductedCount={conductedCount} rows={memberRows} sessionNames={[...ts.filter((t) => t.conducted), ...ts.filter((t) => !t.conducted)].map((t) => t.name)} sessionStats={sessionStats} />
             ) : segments.length === 0 ? (
               <div style={{ fontSize: 13, color: "rgba(245,242,228,0.7)", marginBottom: 20 }}>No data yet — add sessions and members to see progress.</div>
             ) : (
