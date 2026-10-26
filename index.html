@@ -5290,6 +5290,14 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
   };
   const setBatch = (track, value) => {
     setTrackBatch((prev) => ({ ...prev, [track]: value }));
+    // Switching the batch of a track that's Completed: mark every session
+    // in the newly picked batch attended too, so it matches the status.
+    if (trackStatus[track] === "Completed") {
+      const matchingClass = (classes || []).find((c) => trackNameForClass(c.name) === track);
+      if (matchingClass) {
+        setAutoCompleteTracks((prev) => ({ ...prev, [track]: { classId: matchingClass.id, batch: value } }));
+      }
+    }
   };
 
   function validate() {
