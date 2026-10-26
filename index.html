@@ -4948,7 +4948,7 @@ function MemberReviewFields({ name, photoUrl, birthdate, gender, category, lifeS
   );
 }
 
-function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrack, initialBatch, title }) {
+function AddMemberModal({ classes, topics, members, onClose, onSave, onEnsureBatch, initialTrack, initialBatch, title }) {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const name = joinName(firstName, lastName);
@@ -4990,6 +4990,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
   const duplicates = useMemo(() => findPossibleDuplicates(members || [], name), [members, name]);
   const [mergeId, setMergeId] = useState("");
 
+  const [completedClassByTrack, setCompletedClassByTrack] = useState({});
   const setTrack = async (track, value) => {
     let pickedBatch = null;
     if (value === "Completed" && trackStatus[track] !== "Completed") {
@@ -5003,6 +5004,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
         confirmLabel: "Confirm",
       });
       if (!pickedBatch) return;
+      setCompletedClassByTrack((prev) => ({ ...prev, [track]: matchingClass ? matchingClass.id : null }));
     }
     setTrackStatus((prev) => ({ ...prev, [track]: value }));
     if (pickedBatch) {
@@ -5038,6 +5040,13 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
     const classIds = Object.keys(classStatus).filter((id) => classStatus[id] && classStatus[id] !== "Not Enrolled");
     setBusy(true);
     try {
+      const completions = [];
+      for (const [track, classId] of Object.entries(completedClassByTrack)) {
+        if (classId && trackStatus[track] === "Completed" && trackBatch[track]) {
+          const extraTopicIds = onEnsureBatch ? await onEnsureBatch(classId, trackBatch[track]) : [];
+          completions.push({ track, classId, batch: trackBatch[track], extraTopicIds });
+        }
+      }
       await onSave({
         name: name.trim(),
         photoUrl: photoUrl || null,
@@ -5053,7 +5062,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
         trackStatus,
         trackBatch,
         dateAdded: new Date(),
-      }, mergeId || null);
+      }, mergeId || null, completions);
     } catch (err) {
       // A save failure already shows a toast (from the parent's
       // addMember handler) — just stop treating the form as busy so
@@ -5187,7 +5196,7 @@ function AddMemberModal({ classes, topics, members, onClose, onSave, initialTrac
 // EDIT MEMBER MODAL
 // ============================================================
 
-function EditMemberModal({ member, classes, topics, attendanceByMember, onClose, onSave, onCompleteAllSessions, onUpdateSessionAttendance, initialTrack }) {
+function EditMemberModal({ member, classes, topics, attendanceByMember, onClose, onSave, onCompleteAllSessions, onUpdateSessionAttendance, onEnsureBatch, initialTrack }) {
   const [firstName, setFirstName] = useState(() => splitFullName(member.name).firstName);
   const [lastName, setLastName] = useState(() => splitFullName(member.name).lastName);
   const name = joinName(firstName, lastName);
@@ -5303,6 +5312,11 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
     const classIds = Object.keys(classStatus).filter((id) => classStatus[id] && classStatus[id] !== "Not Enrolled");
     setBusy(true);
     try {
+      // A batch/year typed via "Other" that the class doesn't have yet
+      // is added to the class automatically.
+      if (onEnsureBatch) {
+        for (const c of Object.values(autoCompleteTracks).filter(Boolean)) c.extraTopicIds = await onEnsureBatch(c.classId, c.batch);
+      }
       await onSave({
         name: name.trim(),
         photoUrl: photoUrl || null,
@@ -5320,7 +5334,7 @@ function EditMemberModal({ member, classes, topics, attendanceByMember, onClose,
       });
       const classIdsToComplete = Object.values(autoCompleteTracks).filter(Boolean);
       if (classIdsToComplete.length > 0 && onCompleteAllSessions) {
-        await Promise.all(classIdsToComplete.map((c) => onCompleteAllSessions(member.id, c.classId, c.batch)));
+        await Promise.all(classIdsToComplete.map((c) => onCompleteAllSessions(member.id, c.classId, c.batch, c.extraTopicIds)));
       }
       const overridesToApply = Object.values(sessionOverrides);
       if (overridesToApply.length > 0 && onUpdateSessionAttendance) {
@@ -5961,7 +5975,7 @@ function ClassProgressRings({ sessionCount, conductedCount, rows, sessionNames }
   );
 }
 
-function ClassDetailModal({ classItem, classes, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember, onReorderTopics }) {
+function ClassDetailModal({ classItem, classes, topics, members, attendanceByMember, isLeader, onClose, onEditClass, onOpenSession, onOpenClass, onAddTopic, onEditTopic, onDeleteTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember, onEnsureBatch, onReorderTopics }) {
   const [newTopic, setNewTopic] = useState("");
   const [newBatchName, setNewBatchName] = useState("");
   const [addingBatch, setAddingBatch] = useState(false);
@@ -6383,7 +6397,8 @@ function ClassDetailModal({ classItem, classes, topics, members, attendanceByMem
           initialTrack={track}
           initialBatch={activeBatch}
           onClose={() => setAddMemberOpen(false)}
-          onSave={(data, mergeId) => onAddMember(data, mergeId).then(() => setAddMemberOpen(false))}
+          onEnsureBatch={onEnsureBatch}
+          onSave={(data, mergeId, completions) => onAddMember(data, mergeId, completions).then(() => setAddMemberOpen(false))}
         />
       )}
     </div>
@@ -6910,7 +6925,7 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   );
 }
 
-function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember, onReorderTopics }) {
+function Classes({ classes, topics, members, attendanceByMember, isLeader, onAddClass, onDeleteClass, onEditClass, onMoveClass, onSeedDefaults, onOpenSession, onOpenClass, onAddTopic, onDeleteTopic, onEditTopic, onOpenMember, onAddBatch, onRenameBatch, onDeleteBatch, onToggleConducted, onAddMember, onEnsureBatch, onReorderTopics }) {
   const [query, setQuery] = useState("");
   const [detailId, setDetailId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -6992,6 +7007,7 @@ function Classes({ classes, topics, members, attendanceByMember, isLeader, onAdd
           onDeleteBatch={onDeleteBatch}
           onToggleConducted={onToggleConducted}
           onAddMember={onAddMember}
+          onEnsureBatch={onEnsureBatch}
           onReorderTopics={onReorderTopics}
         />
       )}
@@ -8511,7 +8527,12 @@ function App() {
   // form's classes/track info into that record instead of creating a
   // second one. Never downgrades a track status the existing member
   // already has, and unions class enrollments rather than replacing them.
-  const addMember = (data, mergeIntoMemberId) => {
+  const addMember = async (data, mergeIntoMemberId, completions) => {
+    // Tracks set to Completed get every session in that batch marked attended,
+    // same as Edit Member.
+    const markCompleted = async (memberId, list) => {
+      for (const c of list || []) await completeAllSessionsForClass(memberId, c.classId, c.batch, c.extraTopicIds);
+    };
     if (mergeIntoMemberId) {
       const existing = members.find((m) => m.id === mergeIntoMemberId) || {};
       const nextClassIds = Array.from(new Set([...(existing.classIds || []), ...(data.classIds || [])]));
@@ -8540,10 +8561,12 @@ function App() {
         trackBatch: nextTrackBatch,
       };
       return db.collection("members").doc(mergeIntoMemberId).update(merged)
+        .then(() => markCompleted(mergeIntoMemberId, (completions || []).filter((c) => !existing.trackStatus || !existing.trackStatus[c.track] || existing.trackStatus[c.track] === "Not Enrolled")))
         .then(() => { setAddOpen(false); showNotice("Merged into existing Disciples record."); })
         .catch((err) => { showError("Could not merge into the existing member. Error: " + err.message); throw err; });
     }
     return db.collection("members").add(data)
+      .then((ref) => markCompleted(ref.id, completions))
       .then(() => { setAddOpen(false); showNotice("Member saved."); })
       .catch((err) => { showError("Could not save the member. Error: " + err.message); throw err; });
   };
@@ -8709,17 +8732,18 @@ function App() {
   // that class as attended so the attendance records actually back up
   // the status shown, instead of leaving it saying "Completed" while
   // sessions still show 0 attended.
-  const completeAllSessionsForClass = async (memberId, classId, batchLabel) => {
+  const completeAllSessionsForClass = async (memberId, classId, batchLabel, extraTopicIds) => {
     const classInfo = classes.find((c) => c.id === classId);
     if (!classInfo) return;
     const classTopics = batchLabel
       ? topicsForClass(topics, classInfo.name).filter((t) => topicBatch(t) === batchLabel)
       : topicsForClass(topics, classInfo.name);
-    if (classTopics.length === 0) return;
+    const topicIds = Array.from(new Set([...classTopics.map((t) => t.id), ...(extraTopicIds || [])]));
+    if (topicIds.length === 0) return;
     const batch = db.batch();
-    classTopics.forEach((t) => {
-      const docId = `${memberId}_${t.id}`;
-      batch.set(db.collection("attendance").doc(docId), { memberId, topicId: t.id, attended: true, dateAttended: new Date() }, { merge: true });
+    topicIds.forEach((topicId) => {
+      const docId = `${memberId}_${topicId}`;
+      batch.set(db.collection("attendance").doc(docId), { memberId, topicId, attended: true, dateAttended: new Date() }, { merge: true });
     });
     try {
       await batch.commit();
@@ -9113,6 +9137,38 @@ function App() {
     batch.commit()
       .then(() => showNotice(sourceTopics.length ? `Batch added with ${sourceTopics.length} session${sourceTopics.length === 1 ? "" : "s"} copied.` : "Batch added."))
       .catch((err) => showError("Could not add the batch. Error: " + err.message));
+  };
+  // Used by the "Mark as completed?" confirmation (Edit/Add Member): when a
+  // leader types a batch/year via "Other" that the class doesn't have yet,
+  // it is added to the class's batch list automatically, with the sessions
+  // copied from the class's current batch (same as addBatch). Returns the
+  // ids of the sessions created so the caller can mark them attended
+  // (the topics state isn't refreshed yet at that point).
+  const ensureBatchExists = async (classId, batchName) => {
+    const name = (batchName || "").trim();
+    if (!name) return [];
+    const classItem = classes.find((c) => c.id === classId);
+    if (!classItem) return [];
+    const existing = getBatchesForClass(classItem, topics);
+    if (existing.includes(name)) return [];
+    const sourceBatch = latestOngoingBatch(classItem, topics);
+    const sourceTopics = sortTopicsForDisplay(topicsForClass(topics, classItem.name).filter((t) => topicBatch(t) === sourceBatch));
+    const batch = db.batch();
+    batch.update(db.collection("classes").doc(classId), { batches: [...existing, name] });
+    const newIds = [];
+    sourceTopics.forEach((t, i) => {
+      const ref = db.collection("topics").doc();
+      newIds.push(ref.id);
+      batch.set(ref, { class: classItem.name, name: t.name, order: i + 1, batch: name });
+    });
+    try {
+      await batch.commit();
+      showNotice(`"${name}" was added to ${classItem.name} batches` + (newIds.length ? ` with ${newIds.length} session${newIds.length === 1 ? "" : "s"} copied.` : "."));
+      return newIds;
+    } catch (err) {
+      showError("Could not add the new batch. Error: " + err.message);
+      return [];
+    }
   };
   // Renaming a batch has to cascade like a class rename does: every
   // session in that batch gets the new batch label, and — for classes
@@ -9616,6 +9672,7 @@ function App() {
             onDeleteBatch={deleteBatch}
             onToggleConducted={toggleTopicConducted}
             onAddMember={addMember}
+            onEnsureBatch={ensureBatchExists}
             onReorderTopics={reorderTopics}
           />
         )}
@@ -9765,7 +9822,7 @@ function App() {
           onEdit={() => setEditingMember(liveOpenMember)}
         />
       )}
-      {addOpen && <AddMemberModal classes={classes} topics={topics} members={members} onClose={() => setAddOpen(false)} onSave={addMember} />}
+      {addOpen && <AddMemberModal classes={classes} topics={topics} members={members} onClose={() => setAddOpen(false)} onSave={addMember} onEnsureBatch={ensureBatchExists} />}
       {liveOpenOneOnOne && (
         <OneOnOneDetailModal
           person={liveOpenOneOnOne}
@@ -9838,6 +9895,7 @@ function App() {
           onSave={(data) => updateMember(editingMember.id, data)}
           onCompleteAllSessions={completeAllSessionsForClass}
           onUpdateSessionAttendance={updateSessionAttendanceForClass}
+          onEnsureBatch={ensureBatchExists}
           initialTrack={openMemberTrack}
         />
       )}
