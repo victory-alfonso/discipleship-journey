@@ -353,6 +353,9 @@
     .qr-print-area, .qr-print-area * { visibility: visible; }
     .qr-print-area { position: absolute; top: 0; left: 0; width: 100%; }
     .no-print { display: none !important; }
+    /* let all the QR cards flow onto the next pages */
+    .qr-print-overlay, .qr-print-card { position: static !important; overflow: visible !important; max-height: none !important; padding: 0 !important; box-shadow: none !important; border: 0 !important; }
+    .qr-print-area { overflow: visible !important; }
   }
 
   body.dj-scanning .dj-watermark { display: none !important; }
@@ -2735,12 +2738,17 @@ function OneOnOneQrModal({ person, onClose, title, intro }) {
 // want to hand out physical ID cards in one go.
 function PrintAllQrModal({ members, onClose }) {
   return (
-    <div style={styles.modalOverlay} onClick={onClose}>
-      <div style={{ ...styles.modalCard, maxWidth: 720, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", overflowY: "auto" }} onClick={(e) => e.stopPropagation()}>
+    <div className="qr-print-overlay" style={{ ...styles.modalOverlay, backdropFilter: "none", WebkitBackdropFilter: "none" }} onClick={onClose}>
+      {/* no blur here, 20+ QR canvases + backdrop-filter made the modal render half-painted */}
+      <div
+        className="qr-print-card"
+        style={{ ...styles.modalCard, backdropFilter: "none", WebkitBackdropFilter: "none", background: "#FFFFFF", animation: "none", maxWidth: 720, maxHeight: "calc(100vh - var(--dj-header-h, 180px) - 40px)", display: "flex", flexDirection: "column" }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div style={styles.modalTitle} className="no-print">Print QR ID Cards ({members.length})</div>
         <div
           className="qr-print-area"
-          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 16 }}
+          style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 16, flex: 1, minHeight: 0, overflowY: "auto" }}
         >
           {members.map((m) => (
             <div key={m.id} style={{ textAlign: "center", border: "1px solid #E4DCC6", borderRadius: 10, padding: 10, breakInside: "avoid" }}>
