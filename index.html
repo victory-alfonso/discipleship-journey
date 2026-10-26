@@ -8315,7 +8315,18 @@ function App() {
   // desktop. Dropping the animation class once it finishes restores
   // a real "none" transform and fixes that for good.
   const [introDone, setIntroDone] = useState(false);
-  const [tab, setTab] = useState("classes");
+  // The open tab is remembered across refreshes (per browser).
+  const VALID_TABS = ["classes", "roster", "quiz", "one2one", "registrations", "settings"];
+  const [tab, setTabState] = useState(() => {
+    try {
+      const saved = localStorage.getItem("dj_active_tab");
+      return VALID_TABS.includes(saved) ? saved : "classes";
+    } catch (e) { return "classes"; }
+  });
+  const setTab = (t) => {
+    setTabState(t);
+    try { localStorage.setItem("dj_active_tab", t); } catch (e) {}
+  };
   const [openMember, setOpenMember] = useState(null);
   // Which discipleship track (if any) the currently open member was
   // reached through — set when opened from inside a specific class
@@ -8450,7 +8461,7 @@ function App() {
   );
   // ONE2ONE leaders are locked to the ONE2ONE tab; anyone with no
   // ONE2ONE access can't land on it either.
-  const activeTab = isOneOnly ? "one2one" : (!canUseOneOnOne && tab === "one2one" ? "roster" : tab);
+  const activeTab = isOneOnly ? "one2one" : (!canUseOneOnOne && tab === "one2one" ? "roster" : (!isLeader && (tab === "registrations" || tab === "settings") ? "classes" : tab));
 
   // Measures the sticky header bar's real rendered height (it differs
   // between desktop and mobile, and can change when text wraps) and
