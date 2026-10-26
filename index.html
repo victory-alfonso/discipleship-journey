@@ -9304,7 +9304,16 @@ function App() {
   // individual member attendance — this is a simple leader-set flag
   // for "did this session actually happen yet", which is what lets a
   // batch's completeness be read off of its sessions.
-  const toggleTopicConducted = (id, conducted) => {
+  const toggleTopicConducted = async (id, conducted) => {
+    const t = topics.find((x) => x.id === id);
+    const ok = await askConfirm({
+      title: conducted ? "Mark as conducted?" : "Mark as not conducted?",
+      message: conducted
+        ? `Mark ${t ? `"${t.name}"` : "this session"} as conducted? Members who didn't attend will count as absent.`
+        : `Mark ${t ? `"${t.name}"` : "this session"} as not conducted?`,
+      confirmLabel: conducted ? "Yes, mark conducted" : "Yes, mark not conducted",
+    });
+    if (!ok) return;
     db.collection("topics").doc(id).update({ conducted })
       .then(() => showNotice(conducted ? "Session marked as conducted." : "Session marked as not conducted."))
       .catch((err) => showError("Could not update the session. Error: " + err.message));
