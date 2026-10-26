@@ -4014,7 +4014,7 @@ function Roster({ members, classes, topics, attendanceByMember, isLeader, onOpen
         <input style={{ ...styles.toolbarInput, background: "rgba(255,255,255,0.7)" }} placeholder="Search name, contact number, or address…" value={query} onChange={(e) => setQuery(e.target.value)} />
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {isLeader && members.length > 0 && <button style={{ ...styles.ghostBtn, flex: 1 }} onClick={() => setPrintAllOpen(true)}>Print QR IDs</button>}
-          {isLeader && members.length > 0 && <button style={{ ...styles.ghostBtn, flex: 1 }} onClick={exportCsv}>Export CSV</button>}
+          {isLeader && members.length > 0 && <button style={{ ...styles.ghostBtn, flex: 1 }} onClick={() => exportCsv()}>Export CSV</button>}
           {isLeader && (
             <>
               <input ref={csvFileInputRef} type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={handleCsvFile} />
