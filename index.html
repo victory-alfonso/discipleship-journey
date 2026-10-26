@@ -6724,10 +6724,21 @@ function SessionDetail({ topic, classes, members, attendanceByMember, isLeader, 
   const [lateCollapsed, setLateCollapsed] = useState(false);
   const [notAttendedCollapsed, setNotAttendedCollapsed] = useState(false);
   const classForTopic = useMemo(() => (classes || []).find((c) => c.name === topic.class), [classes, topic.class]);
-  const classMembers = useMemo(
-    () => (classForTopic ? getClassMembers(members, classForTopic.id) : members),
-    [members, classForTopic]
-  );
+  // Only members in this session's own batch (e.g. 2026) are listed — a
+  // member parked in another batch isn't part of this session. Anyone who
+  // already has attendance recorded for it stays visible regardless.
+  const sessionTrack = trackNameForClass(topic.class);
+  const sessionBatch = topicBatch(topic);
+  const classMembers = useMemo(() => {
+    const all = classForTopic ? getClassMembers(members, classForTopic.id) : members;
+    if (!sessionTrack) return all;
+    return all.filter((m) => {
+      const memberBatch = (m.trackBatch && m.trackBatch[sessionTrack]) || "Batch 1";
+      if (memberBatch === sessionBatch) return true;
+      const rec = (attendanceByMember[m.id] || {})[topic.id];
+      return !!(rec && rec.attended);
+    });
+  }, [members, classForTopic, sessionTrack, sessionBatch, attendanceByMember, topic.id]);
   const { attended, notAttended } = useMemo(
     () => topicAttendanceLists(classMembers, attendanceByMember, topic.id),
     [classMembers, attendanceByMember, topic.id]
